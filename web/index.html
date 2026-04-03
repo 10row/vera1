@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vera</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0F0F0F; color: #fff; }
+    #root { height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React + Babel -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Vera app (defines App component) -->
+  <script type="text/babel" src="vera.jsx"></script>
+
+  <!-- Mount -->
+  <script type="text/babel">
+    const T_SANS = "'Inter', sans-serif";
+    const T_SERIF = "'Lora', Georgia, serif";
+
+    function ApiKeyGate({ onReady }) {
+      const [key, setKey] = React.useState(localStorage.getItem('vera_api_key') || '');
+      const [error, setError] = React.useState('');
+
+      const submit = () => {
+        const val = key.trim();
+        if (!val.startsWith('sk-')) { setError('Key must start with sk-'); return; }
+        localStorage.setItem('vera_api_key', val);
+        window.ANTHROPIC_API_KEY = val;
+        onReady();
+      };
+
+      return (
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',background:'#0F0F0F',gap:16,padding:32}}>
+          <div style={{fontFamily:T_SERIF,fontStyle:'italic',fontSize:30,color:'#fff'}}>vera</div>
+          <p style={{fontFamily:T_SANS,fontSize:13,color:'#888',textAlign:'center',maxWidth:300}}>
+            Enter your Anthropic API key. Stored locally in your browser only.
+          </p>
+          <input
+            type="password"
+            placeholder="sk-ant-..."
+            value={key}
+            onChange={e => { setKey(e.target.value); setError(''); }}
+            onKeyDown={e => e.key === 'Enter' && submit()}
+            style={{width:'100%',maxWidth:340,padding:'11px 14px',background:'#1a1a1a',border:'1px solid #333',borderRadius:8,color:'#fff',fontSize:13,fontFamily:'monospace',outline:'none'}}
+          />
+          {error && <div style={{color:'#ff6b6b',fontSize:12,fontFamily:T_SANS}}>{error}</div>}
+          <button
+            onClick={submit}
+            style={{padding:'10px 28px',background:'#fff',color:'#000',border:'none',borderRadius:8,fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:T_SANS}}
+          >
+            Continue
+          </button>
+          <div style={{fontSize:11,color:'#444',fontFamily:T_SANS,textAlign:'center',maxWidth:300}}>
+            Need a key? <a href="https://console.anthropic.com" target="_blank" style={{color:'#666'}}>console.anthropic.com</a>
+          </div>
+        </div>
+      );
+    }
+
+    function Root() {
+      const stored = localStorage.getItem('vera_api_key');
+      const [ready, setReady] = React.useState(!!stored);
+
+      React.useEffect(() => {
+        if (stored) window.ANTHROPIC_API_KEY = stored;
+      }, []);
+
+      if (!ready) return <ApiKeyGate onReady={() => setReady(true)} />;
+      return <App />;
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<Root />);
+  </script>
+</body>
+</html>

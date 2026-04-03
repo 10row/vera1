@@ -1,0 +1,31 @@
+{
+  "name": "vera",
+  "version": "1.0.0",
+  "description": "Vera — Financial clarity for nomadic professionals",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "node --watch server/index.js",
+    "start": "node server/index.js",
+    "test": "node --test server/tests/",
+    "postinstall": "prisma generate && prisma db push",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@prisma/client": "^5.0.0",
+    "dotenv": "^17.4.0",
+    "express": "^4.18.0",
+    "grammy": "^1.21.0",
+    "node-cron": "^3.0.3",
+    "openai": "^4.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,132 @@
+// Vera — Prisma Schema
+// Direct mapping from state shape in VERA_ARCHITECTURE.md
+// Primary keys on CommittedItem and Envelope use (userId, nameKey)
+// which enforces the name-keyed upsert principle at the DB level.
+// Duplicate committed items or envelopes are impossible by construction.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  telegramId   String        @unique
+  createdAt    DateTime      @default(now())
+  ledger       LedgerEntry[]
+  committed    CommittedItem[]
+  envelopes    Envelope[]
+  cycle        UserCycle?
+  location     UserLocation?
+  customSubs   CustomSub[]
+}
+
+// Ledger — append only, never update or delete rows
+// Balance is always recomputed from ledger, never stored
+model LedgerEntry {
+  id            String   @id @default(cuid())
+  userId        String
+  type          String   // setup | income | transaction | correction
+  date          String   // YYYY-MM-DD
+  ts            DateTime @default(now())
+  amountUsd     Float?
+  description   String?
+  localAmount   Float?
+  localCurrency String?
+  parentId      String?  // taxonomy parentId
+  subId         String?  // taxonomy subId
+  note          String?
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, date])
+  @@index([userId, type])
+}
+
+// CommittedItem — bills that definitely leave on a specific date
+// Keyed by (userId, nameKey) — nameKey = name.toLowerCase()
+// set_committed always upserts — impossible to create duplicates
+model CommittedItem {
+  userId             String
+  nameKey            String   // lowercase name — the upsert key
+  name               String   // display name (original casing)
+  amountUsd          Float
+  frequency          String   // once | monthly | weekly | annual
+  nextDate           String   // YYYY-MM-DD
+  autoPay            Boolean  @default(false)
+  paidThisCycle      Boolean  @default(false)
+  active             Boolean  @default(true)
+  parkedForNextCycle Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id])
+
+  @@id([userId, nameKey])
+  @@index([userId, active])
+}
+
+// Envelope — spending intentions (daily allowances + planned spending)
+// type:"daily" → reserveFromPool:false (daily math handles it)
+// type:"monthly"|"project" → reserveFromPool:true (reduces free pool)
+// Keyed by (userId, nameKey) — impossible to create duplicates
+model Envelope {
+  userId          String
+  nameKey         String   // lowercase name — the upsert key
+  name            String   // display name
+  type            String   // daily | monthly | project
+  allocatedUsd    Float
+  dailyAmountUsd  Float?   // stored for cycle resets (daily type only)
+  linkedParentId  String?  // taxonomy parentId
+  linkedSubIds    String?  // JSON array of taxonomy subIds
+  reserveFromPool Boolean  @default(true)
+  rollover        Boolean  @default(false)
+  resetOnIncome   Boolean  @default(true)
+  active          Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@id([userId, nameKey])
+  @@index([userId, active])
+}
+
+// UserCycle — current pay cycle, one row per user
+model UserCycle {
+  userId            String   @id
+  startDate         String   // YYYY-MM-DD
+  payday            String   // YYYY-MM-DD
+  expectedIncomeUsd Float
+  savingRate        Float    @default(0.10)
+  savingsUsd        Float    @default(0)
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id])
+}
+
+// UserLocation — current location and display rate, one row per user
+model UserLocation {
+  userId        String   @id
+  spendCurrency String   @default("USD")
+  symbol        String   @default("$")
+  localRate     Float    @default(1)
+  name          String   @default("")
+  flag          String   @default("")
+  rateUpdated   String?  // YYYY-MM-DD
+  lastDiff      String?  // what changed last action — shown to Vera next turn
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id])
+}
+
+// CustomSub — user-defined taxonomy subcategories (Tier 3)
+model CustomSub {
+  id         String   @id @default(cuid())
+  userId     String
+  parentId   String   // must match a TAXONOMY parentId key
+  label      String
+  keywords   String   // JSON array of keyword strings
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, active])
+}
