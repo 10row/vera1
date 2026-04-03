@@ -24,6 +24,10 @@ const pendingSetups = new Map();
 // Stored after photo scan, cleared on confirm or skip.
 const pendingReceipts = new Map();
 
+// In-memory setup conversation history keyed by user.id.
+// Allows multi-turn setup without losing context. Cleared on confirm/cancel.
+const setupConversations = new Map();
+
 // ── UTILS ─────────────────────────────────────────────────────────────────────
 const daysUntil = (ds) => {
   if (!ds) return 99;
@@ -511,15 +515,22 @@ async function processMessage(ctx, telegramId, text) {
   const user  = await getOrCreateUser(prisma, telegramId);
   const state = await getState(prisma, user.id);
 
-  // Not set up yet — go straight to full Vera
+  // Not set up yet — go straight to full Vera with conversation history
   if (!state.setup) {
-    const r = await callVera([{ role: "user", content: text }], state);
+    const history = setupConversations.get(user.id) || [];
+    history.push({ role: "user", content: text });
+
+    const r = await callVera(history, state);
+
+    // Append assistant reply to history for next turn
+    if (r.message) history.push({ role: "assistant", content: r.message });
+    setupConversations.set(user.id, history.slice(-10)); // keep last 10 messages
 
     const setupAction = r.actions?.find(a => a.type === "propose_setup");
     if (setupAction) {
       await enrichActionWithRate(setupAction);
-      // Store in memory — not persisted until user confirms
       pendingSetups.set(user.id, setupAction.data);
+      setupConversations.delete(user.id); // clear history once setup proposed
       const daysLeft = setupAction.data?.payday
         ? Math.max(1, Math.ceil((new Date(setupAction.data.payday + "T00:00:00") - new Date()) / 86400000))
         : 13;
@@ -861,6 +872,7 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
 
     if (data === "cancel_setup") {
       pendingSetups.delete(user.id);
+      setupConversations.delete(user.id);
       await ctx.editMessageText("What would you like to change? Tell me your situation again.");
       return;
     }
