@@ -5,9 +5,9 @@
   "main": "server/index.js",
   "scripts": {
     "dev": "node --watch server/index.js",
-    "start": "node server/index.js",
+    "start": "prisma db push && node server/index.js",
     "test": "node --test server/tests/",
-    "postinstall": "prisma generate && prisma db push",
+    "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
