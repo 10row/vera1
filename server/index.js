@@ -208,7 +208,7 @@ async function start() {
     process.exit(1);
   }
 
-  app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     console.log(`✓ Vera server running on port ${PORT}`);
     console.log(`  Health:   http://localhost:${PORT}/health`);
     console.log(`  Web App:  http://localhost:${PORT}/app`);
@@ -219,4 +219,23 @@ async function start() {
   startCrons();
 }
 
+let server;
 start();
+
+// ── GRACEFUL SHUTDOWN ─────────────────────────────────────────────────────────
+function shutdown(signal) {
+  console.log(`\n[shutdown] Received ${signal} — shutting down gracefully…`);
+  server.close(async () => {
+    console.log("[shutdown] HTTP server closed");
+    try {
+      await prisma.$disconnect();
+      console.log("[shutdown] Database disconnected");
+    } catch (err) {
+      console.error("[shutdown] Error disconnecting database:", err.message);
+    }
+    process.exit(0);
+  });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT",  () => shutdown("SIGINT"));
