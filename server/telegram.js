@@ -255,7 +255,7 @@ const mainKeyboard = () => {
     .text("📌 Coming up", "quick_coming")
     .row()
     .text("📊 My Picture", "show_picture");
-  if (process.env.MINIAPP_URL) kb.webApp("Open Vera ↗", process.env.MINIAPP_URL);
+  if (process.env.MINIAPP_URL) kb.webApp("Open Spend Kitty ↗", process.env.MINIAPP_URL);
   return kb;
 };
 
@@ -634,6 +634,10 @@ if (bot) bot.on("message:text", async (ctx) => {
 
 // ── VOICE MESSAGE HANDLER ─────────────────────────────────────────────────────
 if (bot) bot.on("message:voice", async (ctx) => {
+  if (!process.env.OPENAI_API_KEY) {
+    await ctx.reply("Voice messages aren't enabled yet. Type it instead.");
+    return;
+  }
   try {
     await ctx.reply("_transcribing…_", { parse_mode: "Markdown" });
     const file    = await ctx.getFile();
@@ -781,7 +785,7 @@ if (bot) bot.command("start", async (ctx) => {
       const pic = computePicture(state);
       await ctx.reply(formatPicture(pic, state), { parse_mode: "Markdown", reply_markup: mainKeyboard() });
     } else {
-      await ctx.reply("Hey, I'm Vera. Tell me your situation — balance, when you get paid, what's coming out. And where are you based?");
+      await ctx.reply("Hey, I'm Kitty. Tell me your situation — balance, when you get paid, what's coming out. And where are you based?");
     }
   } catch (err) {
     console.error("Start error:", err);
