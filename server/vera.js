@@ -99,15 +99,8 @@ function applyAction(state, action) {
     }
 
     case "complete_setup": {
-      // Advance payday to future if Claude gave a past date (happens with year confusion)
-      let setupPayday = d.payday;
-      if (setupPayday) {
-        const pd  = new Date(setupPayday + "T00:00:00");
-        const tod = new Date(TODAY() + "T00:00:00");
-        if (pd <= tod) pd.setFullYear(tod.getFullYear() + (pd.getMonth() < tod.getMonth() || (pd.getMonth() === tod.getMonth() && pd.getDate() <= tod.getDate()) ? 1 : 0));
-        if (pd <= tod) pd.setMonth(pd.getMonth() + 1); // safety net
-        setupPayday = pd.toISOString().split("T")[0];
-      }
+      // Advance payday to future — reuse advanceDate with "monthly" to keep rolling forward
+      const setupPayday = d.payday ? advanceDate(d.payday, "monthly") : d.payday;
       const sd = setupPayday ? { ...d, payday: setupPayday } : d; // sd = resolved setup data
       const daysLeft = sd.payday ? Math.max(1, daysUntil(sd.payday)) : 30;
 
@@ -256,7 +249,7 @@ function applyAction(state, action) {
           s.committed[key] = { ...c, parkedForNextCycle: false, active: true };
           continue;
         }
-        if (c.frequency === "once" && c.nextDate <= TODAY()) {
+        if (c.frequency === "once" && c.nextDate && c.nextDate <= TODAY()) {
           s.committed[key] = { ...c, active: false };
           continue;
         }
@@ -466,6 +459,7 @@ function computePicture(state) {
   const upcomingCommitted = committedList.filter((c) => {
     if (!c.nextDate || c.paidThisCycle) return false;
     if (c.frequency === "once" && c.nextDate < today) return false;
+    // Include bills due today through payday (or all future if no payday)
     return c.nextDate >= today && (!payday || c.nextDate <= payday);
   });
   const bucket1 = upcomingCommitted.reduce((s, c) => s + (c.amountUSD || 0), 0);
@@ -500,13 +494,15 @@ function computePicture(state) {
 
     // Daily settlement — target set at start of day, corrects tomorrow
     let dailyLeft = null;
-    if (env.type === "daily" && daysLeft > 0) {
-      const remainingBeforeToday = Math.max(
-        0,
-        (env.allocatedUSD || 0) - spentBeforeToday
-      );
-      const dailyTarget = remainingBeforeToday / daysLeft;
-      dailyLeft = Math.max(0, dailyTarget - spentToday);
+    if (env.type === "daily") {
+      if (daysLeft > 0) {
+        const remainingBeforeToday = Math.max(0, (env.allocatedUSD || 0) - spentBeforeToday);
+        const dailyTarget = remainingBeforeToday / daysLeft;
+        dailyLeft = Math.max(0, dailyTarget - spentToday);
+      } else {
+        // Payday is today — show what's left of today's budget
+        dailyLeft = Math.max(0, (env.allocatedUSD || 0) - spentBeforeToday - spentToday);
+      }
     }
 
     return { ...env, spentUSD: spentTotal, spentToday, remainingUSD: remaining, dailyLeft };

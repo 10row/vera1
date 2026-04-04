@@ -338,11 +338,11 @@ function formatPicture(pic, state) {
     "```",
     `Balance     ${f(pic.confirmedBalance)}${fl(pic.confirmedBalance)}`,
     `────────────────────────────────`,
-    `Bills due − ${f(pic.bucket1)}${fl(pic.bucket1)}`,
-    `Planned   − ${f(pic.bucket2)}${fl(pic.bucket2)}`,
+    `Bills     − ${f(pic.bucket1)}${fl(pic.bucket1)}`,
+    `Stash     − ${f(pic.bucket2)}${fl(pic.bucket2)}`,
     `Daily     − ${f(pic.bucket3)}${fl(pic.bucket3)}`,
     `────────────────────────────────`,
-    `Truly free  ${f(pic.trulyFree)}${fl(pic.trulyFree)}`,
+    `Free        ${f(pic.trulyFree)}${fl(pic.trulyFree)}`,
     `Free today  ${f(pic.freeToday)}${fl(pic.freeToday)}`,
     foodEnv ? `Food today  ${f(foodEnv.dailyLeft)}${fl(foodEnv.dailyLeft)} left` : null,
     `────────────────────────────────`,
@@ -352,8 +352,8 @@ function formatPicture(pic, state) {
 }
 
 function formatMorningBriefing(pic, state) {
-  const rate = state.location?.localRate || 1;
-  const sym  = state.location?.symbol || "$";
+  const rate     = state.location?.localRate || 1;
+  const sym      = state.location?.symbol || "$";
   const hasLocal = rate !== 1;
   const foodEnv  = pic.computedEnvelopes?.find((e) => e.type === "daily");
 
@@ -362,23 +362,41 @@ function formatMorningBriefing(pic, state) {
     return `${fmt(usd)}${localStr}`;
   };
 
-  const lines = [
-    "Good morning.",
-    "",
-    "```",
-    `Free today    ${fmtBoth(pic.freeToday)}`,
-    foodEnv ? `Food today    ${fmtBoth(foodEnv.dailyLeft)}` : null,
-    `Payday        ${pic.daysLeft} days`,
-    "```",
-  ].filter(Boolean);
-
   const urgent = (pic.imminentBills || []).filter((c) => !c.paidThisCycle);
+  const isPayday = pic.daysLeft === 0;
+  const isTight  = pic.freeToday < 5 && pic.trulyFree >= 0;
+  const isNegative = pic.trulyFree < 0;
+
+  const lines = [];
+
+  // Opening — only say something if there's something to say
+  if (isPayday) {
+    lines.push("Payday. Check your balance and let me know what landed.");
+  } else if (isNegative) {
+    lines.push("Morning. Bills exceed your balance — something needs attention.");
+  } else if (isTight) {
+    lines.push(`Morning. Tight day — ${fmtBoth(pic.freeToday)} free.`);
+  } else if (urgent.length) {
+    lines.push("Morning.");
+  } else {
+    lines.push("Morning.");
+  }
+
+  // Numbers — always show the core
+  lines.push("");
+  lines.push("```");
+  lines.push(`Free today    ${fmtBoth(pic.freeToday)}`);
+  if (foodEnv) lines.push(`Food today    ${fmtBoth(foodEnv.dailyLeft)}`);
+  lines.push(`Payday        ${pic.daysLeft === 0 ? "today" : `${pic.daysLeft} days`}`);
+  lines.push("```");
+
+  // Urgent bills — only what's due today or tomorrow
   if (urgent.length) {
     lines.push("");
     for (const bill of urgent) {
       const days = daysUntil(bill.nextDate);
       const when = days <= 0 ? "today" : "tomorrow";
-      lines.push(`⚠ *${bill.name}* due ${when} — ${fmt(bill.amountUSD)}`);
+      lines.push(`⚠ *${bill.name}* due ${when} — ${fmtBoth(bill.amountUSD)}`);
     }
   }
 
@@ -796,7 +814,7 @@ if (bot) bot.command("start", async (ctx) => {
       const pic = computePicture(state);
       await ctx.reply(formatPicture(pic, state), { parse_mode: "Markdown", reply_markup: mainKeyboard() });
     } else {
-      await ctx.reply("Hey, I'm Kitty. Tell me your situation — balance, when you get paid, what's coming out. And where are you based?");
+      await ctx.reply("Hey, I'm Kitty. Two things to start: what's your balance right now, and when do you next get paid?");
     }
   } catch (err) {
     console.error("Start error:", err);
@@ -862,11 +880,18 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
       pendingSetups.delete(user.id);
       const newPic  = computePicture(newState);
       const foodEnv = newPic.computedEnvelopes?.find((e) => e.type === "daily");
-      const locStr  = newState.location?.name ? ` · ${newState.location.flag || ""} ${newState.location.name}` : "";
+      const locStr  = newState.location?.name ? `  ${newState.location.flag || ""} ${newState.location.name}` : "";
       await ctx.editMessageText(
-        `You're set.\n\n\`\`\`\nFree today    ${fmt(newPic.freeToday)}\n${foodEnv ? `Food today    ${fmt(foodEnv.dailyLeft)}\n` : ""}Payday        ${newPic.daysLeft} days\`\`\`${locStr}`,
+        `You're set.${locStr}\n\n\`\`\`\nFree today    ${fmt(newPic.freeToday)}\n${foodEnv ? `Food today    ${fmt(foodEnv.dailyLeft)}\n` : ""}Payday        ${newPic.daysLeft} days\`\`\``,
         { parse_mode: "Markdown", reply_markup: mainKeyboard() }
       );
+      // Second message — warm onboarding, invite brain dump
+      setTimeout(async () => {
+        await ctx.reply(
+          "Now — any regular bills I should know about? Rent, subscriptions, gym, anything that comes out automatically.\n\nJust tell me in plain English. Or say skip and we're done.",
+          { parse_mode: "Markdown" }
+        );
+      }, 800);
       return;
     }
 

@@ -137,7 +137,7 @@ function PicturePanel({ pic, state, loading, onRefresh }) {
       <div style={{ ...S.scroll, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
         <div style={{ fontSize: 32 }}>💬</div>
         <div style={{ color: C.sub, textAlign: "center" }}>
-          Say hi to Vera in the Chat tab to get started
+          Say hi to Kitty in the Chat tab to get started
         </div>
       </div>
     );
@@ -178,19 +178,19 @@ function PicturePanel({ pic, state, loading, onRefresh }) {
         <div style={{ ...S.label, marginBottom: 8 }}>Your Picture</div>
 
         <div style={S.bucket}>
-          <span style={S.bucketLabel}>Bills due this cycle (B1)</span>
+          <span style={S.bucketLabel}>Bills</span>
           <span style={{ ...S.bucketValue, color: C.red }}>{f(pic.bucket1)}</span>
         </div>
         <div style={S.bucket}>
-          <span style={S.bucketLabel}>Planned spending (B2)</span>
+          <span style={S.bucketLabel}>Stash</span>
           <span style={{ ...S.bucketValue, color: C.amber }}>{f(pic.bucket2)}</span>
         </div>
         <div style={S.bucket}>
-          <span style={S.bucketLabel}>Daily envelopes (B3)</span>
+          <span style={S.bucketLabel}>Daily</span>
           <span style={{ ...S.bucketValue }}>{f(pic.bucket3)}</span>
         </div>
         <div style={{ ...S.bucket, borderBottom: "none" }}>
-          <span style={S.bucketLabel}>Truly free (B4)</span>
+          <span style={S.bucketLabel}>Free</span>
           <span style={{ ...S.bucketValue, color: freeColour }}>{f(pic.trulyFree)}</span>
         </div>
 
@@ -211,7 +211,7 @@ function PicturePanel({ pic, state, loading, onRefresh }) {
       {/* Envelopes */}
       {pic.computedEnvelopes?.filter(e => e.active).length > 0 && (
         <div style={S.card}>
-          <div style={{ ...S.label, marginBottom: 8 }}>Envelopes</div>
+          <div style={{ ...S.label, marginBottom: 8 }}>Stash & Daily</div>
           {pic.computedEnvelopes.filter(e => e.active).map((env, i, arr) => {
             const remaining = env.type === "daily" ? (env.dailyLeft ?? env.remainingUSD) : env.remainingUSD;
             const ratio = remaining > 0 && env.allocatedUSD > 0 ? remaining / env.allocatedUSD : 0;
@@ -292,7 +292,7 @@ function PicturePanel({ pic, state, loading, onRefresh }) {
 // ── CHAT PANEL ────────────────────────────────────────────────────────────────
 function ChatPanel({ telegramId, onPicUpdate }) {
   const [msgs, setMsgs] = useState([
-    { role: "assistant", text: "Hi! I'm Vera. Tell me what you spent, earned, or ask me anything about your finances." }
+    { role: "assistant", text: "Hi! I'm Kitty. Tell me what you spent, earned, or ask me anything." }
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -372,7 +372,7 @@ function ChatPanel({ telegramId, onPicUpdate }) {
         ))}
         {sending && (
           <div style={{ ...S.bubble(false), color: C.sub }}>
-            <span>Vera is thinking</span>
+            <span>Kitty is thinking</span>
             <span style={{ animation: "blink 1s step-end infinite" }}> …</span>
           </div>
         )}
@@ -385,7 +385,7 @@ function ChatPanel({ telegramId, onPicUpdate }) {
           value={input}
           onChange={onInput}
           onKeyDown={onKey}
-          placeholder="Message Vera…"
+          placeholder="Message Kitty…"
           rows={1}
           style={S.input}
           disabled={sending}
