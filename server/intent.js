@@ -149,6 +149,68 @@ async function extractIntent(message, state) {
   }
 }
 
+// ── BILL NAME → CATEGORY ─────────────────────────────────────────────────────
+// Maps a committed bill name to the most likely taxonomy category.
+// e.g. "Gym" → health_body/gym, "Netflix" → entertainment/streaming
+const BILL_CATEGORY_MAP = {
+  // health_body
+  gym: { parentId: "health_body", subId: "gym" },
+  fitness: { parentId: "health_body", subId: "gym" },
+  crossfit: { parentId: "health_body", subId: "gym" },
+  yoga: { parentId: "health_body", subId: "gym" },
+  pilates: { parentId: "health_body", subId: "gym" },
+  muay: { parentId: "health_body", subId: "gym" },
+  boxing: { parentId: "health_body", subId: "gym" },
+  supplements: { parentId: "health_body", subId: "supplements" },
+  protein: { parentId: "health_body", subId: "supplements" },
+  medical: { parentId: "health_body", subId: "medical" },
+  dentist: { parentId: "health_body", subId: "medical" },
+  insurance: { parentId: "health_body", subId: "medical" },
+  // home
+  rent: { parentId: "home", subId: "rent" },
+  electric: { parentId: "home", subId: "utilities" },
+  electricity: { parentId: "home", subId: "utilities" },
+  water: { parentId: "home", subId: "utilities" },
+  internet: { parentId: "home", subId: "utilities" },
+  wifi: { parentId: "home", subId: "utilities" },
+  phone: { parentId: "home", subId: "utilities" },
+  mobile: { parentId: "home", subId: "utilities" },
+  // entertainment
+  netflix: { parentId: "entertainment", subId: "streaming" },
+  spotify: { parentId: "entertainment", subId: "streaming" },
+  youtube: { parentId: "entertainment", subId: "streaming" },
+  disney: { parentId: "entertainment", subId: "streaming" },
+  hbo: { parentId: "entertainment", subId: "streaming" },
+  apple: { parentId: "entertainment", subId: "streaming" },
+  // work_business
+  cursor: { parentId: "work_business", subId: "software" },
+  github: { parentId: "work_business", subId: "software" },
+  notion: { parentId: "work_business", subId: "software" },
+  figma: { parentId: "work_business", subId: "software" },
+  slack: { parentId: "work_business", subId: "software" },
+  claude: { parentId: "work_business", subId: "software" },
+  anthropic: { parentId: "work_business", subId: "software" },
+  openai: { parentId: "work_business", subId: "software" },
+  chatgpt: { parentId: "work_business", subId: "software" },
+  coworking: { parentId: "work_business", subId: "coworking" },
+  // education
+  udemy: { parentId: "education", subId: "courses" },
+  coursera: { parentId: "education", subId: "courses" },
+  // transport
+  grab: { parentId: "transport", subId: "rideshare" },
+};
+
+function guessBillCategory(billName) {
+  const lower = (billName || "").toLowerCase();
+  // Direct match first
+  if (BILL_CATEGORY_MAP[lower]) return BILL_CATEGORY_MAP[lower];
+  // Partial match — check if any key is contained in the bill name
+  for (const [keyword, cat] of Object.entries(BILL_CATEGORY_MAP)) {
+    if (lower.includes(keyword)) return cat;
+  }
+  return { parentId: "financial", subId: "fees" };
+}
+
 // ── INTENT → ACTIONS ──────────────────────────────────────────────────────────
 // Some intents expand to multiple actions (e.g. confirm_payment = transaction + mark paid).
 function intentToActions(intent, state) {
@@ -160,8 +222,9 @@ function intentToActions(intent, state) {
     const name = intent.data?.name;
     const committed = state.committed?.[name?.toLowerCase()];
     if (committed) {
-      const rate     = state.location?.localRate || 1;
-      const currency = state.location?.spendCurrency || "USD";
+      const rate     = state.location?.localRate ?? 1;
+      const currency = state.location?.spendCurrency ?? "USD";
+      const cat      = guessBillCategory(committed.name || name);
       return [
         {
           type: "transaction",
@@ -170,8 +233,8 @@ function intentToActions(intent, state) {
             amountUSD: committed.amountUSD,
             localAmount: rate !== 1 ? Math.round(committed.amountUSD * rate) : null,
             localCurrency: rate !== 1 ? currency : null,
-            parentId: "financial",
-            subId: "fees",
+            parentId: cat.parentId,
+            subId: cat.subId,
             date: new Date().toISOString().split("T")[0],
           },
         },

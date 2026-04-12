@@ -38,7 +38,7 @@ app.get("/app", (req, res) => {
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script>window.ANTHROPIC_API_KEY = ${JSON.stringify(process.env.ANTHROPIC_API_KEY)};</script>
+  <script>/* API key is server-side only — web app uses /api/ endpoints */</script>
   <script type="text/babel">
 ${jsx}
 const root = ReactDOM.createRoot(document.getElementById("root"));
@@ -66,6 +66,21 @@ app.post("/telegram/webhook", async (req, res) => {
   }
 });
 
+// ── INPUT VALIDATION ─────────────────────────────────────────────────────────
+// Basic telegramId validation — must be a numeric string
+function validateTelegramId(telegramId) {
+  if (!telegramId || !/^\d+$/.test(String(telegramId))) return false;
+  return true;
+}
+
+// Action type whitelist — only allow known action types from the API
+const ALLOWED_ACTION_TYPES = new Set([
+  "transaction", "income", "correction", "set_committed", "remove_committed",
+  "confirm_payment", "set_envelope", "remove_envelope", "set_location",
+  "set_saving_rate", "propose_setup", "confirm_setup", "cancel_setup",
+  "complete_setup", "create_custom_sub", "none",
+]);
+
 // ── MINI APP API ──────────────────────────────────────────────────────────────
 // Used by the Mini App (vera-tg.jsx) to read state and apply actions.
 
@@ -73,13 +88,14 @@ app.post("/telegram/webhook", async (req, res) => {
 app.get("/api/picture/:telegramId", async (req, res) => {
   try {
     const { telegramId } = req.params;
+    if (!validateTelegramId(telegramId)) return res.status(400).json({ error: "invalid telegramId" });
     const user = await getOrCreateUser(prisma, telegramId);
     const state = await getState(prisma, user.id);
     const pic = computePicture(state);
     res.json({ pic, state: sanitiseState(state) });
   } catch (err) {
     console.error("Picture API error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -87,8 +103,12 @@ app.get("/api/picture/:telegramId", async (req, res) => {
 app.post("/api/action/:telegramId", async (req, res) => {
   try {
     const { telegramId } = req.params;
+    if (!validateTelegramId(telegramId)) return res.status(400).json({ error: "invalid telegramId" });
     const { action } = req.body;
     if (!action) return res.status(400).json({ error: "action required" });
+    if (!action.type || !ALLOWED_ACTION_TYPES.has(action.type)) {
+      return res.status(400).json({ error: "invalid action type" });
+    }
 
     const user = await getOrCreateUser(prisma, telegramId);
     const newState = await saveAction(prisma, user.id, action);
@@ -96,7 +116,7 @@ app.post("/api/action/:telegramId", async (req, res) => {
     res.json({ pic, state: sanitiseState(newState), lastDiff: newState.lastDiff });
   } catch (err) {
     console.error("Action API error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -104,6 +124,7 @@ app.post("/api/action/:telegramId", async (req, res) => {
 app.post("/api/vera/:telegramId", async (req, res) => {
   try {
     const { telegramId } = req.params;
+    if (!validateTelegramId(telegramId)) return res.status(400).json({ error: "invalid telegramId" });
     const { messages } = req.body;
     if (!messages?.length) return res.status(400).json({ error: "messages required" });
 
@@ -129,7 +150,7 @@ app.post("/api/vera/:telegramId", async (req, res) => {
     res.json({ message: r.message, followup: r.followup, pic, state: sanitiseState(newState) });
   } catch (err) {
     console.error("Vera API error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

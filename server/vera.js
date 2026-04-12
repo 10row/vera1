@@ -23,7 +23,7 @@ const daysUntil = (ds) => {
   ));
 };
 
-const uid = () => crypto.randomBytes(4).toString("hex");
+const uid = () => crypto.randomBytes(12).toString("hex");
 
 // ── DATE ADVANCE ──────────────────────────────────────────────────────────────
 // Auto-advance past-due recurring dates to next future occurrence.
@@ -45,10 +45,11 @@ const advanceDate = (dateStr, frequency) => {
 // Always recomputed from ledger. Never stored. Ledger is the source of truth.
 const confirmedBalanceFromLedger = (ledger) =>
   ledger.reduce((sum, e) => {
-    if (e.type === "setup") return e.amountUsd || e.amountUSD || 0;
-    if (e.type === "income") return sum + (e.amountUsd || e.amountUSD || 0);
-    if (e.type === "transaction") return sum - (e.amountUsd || e.amountUSD || 0);
-    if (e.type === "correction") return e.amountUsd || e.amountUSD || 0;
+    const amt = e.amountUsd ?? e.amountUSD ?? 0;
+    if (e.type === "setup") return amt;
+    if (e.type === "income") return sum + amt;
+    if (e.type === "transaction") return sum - amt;
+    if (e.type === "correction") return amt;
     return sum;
   }, 0);
 
@@ -107,66 +108,81 @@ function applyAction(state, action) {
       // Location
       if (sd.localRate) {
         s.location = {
-          spendCurrency: sd.spendCurrency || s.location?.spendCurrency || "USD",
-          symbol: sd.spendSymbol || s.location?.symbol || "$",
-          localRate: sd.localRate || s.location?.localRate || 1,
-          name: sd.location || s.location?.name || "",
-          flag: sd.locationFlag || s.location?.flag || "",
+          spendCurrency: sd.spendCurrency ?? s.location?.spendCurrency ?? "USD",
+          symbol: sd.spendSymbol ?? s.location?.symbol ?? "$",
+          localRate: sd.localRate ?? s.location?.localRate ?? 1,
+          name: sd.location ?? s.location?.name ?? "",
+          flag: sd.locationFlag ?? s.location?.flag ?? "",
           rateUpdated: TODAY(),
         };
       }
 
       // Ledger
       const setupEntry = mkEntry("setup", {
-        amountUSD: sd.balanceUSD || 0,
+        amountUSD: sd.balanceUSD ?? 0,
         note: "Initial setup",
       });
-      const txEntries = (sd.transactions || []).map((t) =>
+      const txEntries = (sd.transactions ?? []).map((t) =>
         mkEntry("transaction", {
           description: t.description,
           amountUSD: t.amountUSD,
-          localAmount: t.localAmount || null,
-          localCurrency: t.localCurrency || null,
-          parentId: t.parentId || "other",
-          subId: t.subId || "uncategorised",
-          date: t.date || TODAY(),
+          localAmount: t.localAmount ?? null,
+          localCurrency: t.localCurrency ?? null,
+          parentId: t.parentId ?? "other",
+          subId: t.subId ?? "uncategorised",
+          date: t.date ?? TODAY(),
         })
       );
       s.ledger = [setupEntry, ...txEntries];
 
       // Committed — upsert by lowercase name
       s.committed = {};
-      for (const c of sd.committed || []) {
+      for (const c of sd.committed ?? []) {
         const key = c.name.toLowerCase();
-        const freq = c.frequency || "monthly";
+        const freq = c.frequency ?? "monthly";
         s.committed[key] = {
           name: c.name,
-          amountUSD: c.amountUSD || 0,
+          amountUSD: c.amountUSD ?? 0,
           frequency: freq,
           nextDate: advanceDate(c.nextDate, freq),
-          autoPay: c.autoPay || false,
+          autoPay: c.autoPay ?? false,
           paidThisCycle: false,
           active: true,
           parkedForNextCycle: false,
         };
       }
 
-      // Envelopes — upsert by lowercase name
+      // Envelopes — upsert by lowercase name, auto-link to taxonomy
       s.envelopes = {};
-      for (const e of sd.envelopes || []) {
+      for (const e of sd.envelopes ?? []) {
         const key = e.name.toLowerCase();
         const allocatedUSD =
           e.type === "daily" && e.dailyAmountUSD
             ? e.dailyAmountUSD * daysLeft
-            : e.allocatedUSD || 0;
+            : e.allocatedUSD ?? 0;
+        // Auto-link: if no linkedParentId provided, infer from envelope name
+        let linkedParentId = e.linkedParentId ?? null;
+        let linkedSubIds = e.linkedSubIds ?? null;
+        if (!linkedParentId && e.type === "daily") {
+          // Daily envelopes named "food", "coffee", etc → link to food_drink
+          const lower = key;
+          if (lower.includes("food") || lower.includes("eat") || lower.includes("meal") || lower.includes("lunch") || lower.includes("dinner")) {
+            linkedParentId = "food_drink";
+          } else if (lower.includes("coffee") || lower.includes("cafe")) {
+            linkedParentId = "food_drink";
+            linkedSubIds = ["cafes"];
+          } else if (lower.includes("transport") || lower.includes("ride") || lower.includes("grab")) {
+            linkedParentId = "transport";
+          }
+        }
         s.envelopes[key] = {
           name: e.name,
-          type: e.type || "monthly",
+          type: e.type ?? "monthly",
           allocatedUSD,
           dailyAmountUSD:
-            e.type === "daily" ? e.dailyAmountUSD || e.allocatedUSD : null,
-          linkedParentId: e.linkedParentId || null,
-          linkedSubIds: e.linkedSubIds || null,
+            e.type === "daily" ? e.dailyAmountUSD ?? e.allocatedUSD : null,
+          linkedParentId,
+          linkedSubIds,
           reserveFromPool: e.type === "daily" ? false : true,
           rollover: false,
           resetOnIncome: true,
@@ -177,12 +193,12 @@ function applyAction(state, action) {
       s.cycle = {
         start: TODAY(),
         payday: sd.payday,
-        expectedIncomeUSD: sd.expectedIncomeUSD || 0,
-        savingRate: sd.savingRate || 0.10,
+        expectedIncomeUSD: sd.expectedIncomeUSD ?? 0,
+        savingRate: sd.savingRate ?? 0.10,
       };
       s.savings = 0;
       s.setup = true;
-      s.lastDiff = `Setup complete. Balance $${(sd.balanceUSD || 0).toFixed(2)}, payday ${sd.payday}.`;
+      s.lastDiff = `Setup complete. Balance $${(sd.balanceUSD ?? 0).toFixed(2)}, payday ${sd.payday}.`;
       break;
     }
 
@@ -193,32 +209,32 @@ function applyAction(state, action) {
         mkEntry("transaction", {
           description: d.description,
           amountUSD: d.amountUSD,
-          localAmount: d.localAmount || null,
-          localCurrency: d.localCurrency || null,
-          parentId: d.parentId || "other",
-          subId: d.subId || "uncategorised",
-          date: d.date || TODAY(),
+          localAmount: d.localAmount ?? null,
+          localCurrency: d.localCurrency ?? null,
+          parentId: d.parentId ?? "other",
+          subId: d.subId ?? "uncategorised",
+          date: d.date ?? TODAY(),
         }),
       ];
-      s.lastDiff = `Transaction: ${d.description} $${(d.amountUSD || 0).toFixed(2)}${d.localAmount ? ` (${d.localCurrency || ""}${d.localAmount})` : ""}`;
+      s.lastDiff = `Transaction: ${d.description} $${(d.amountUSD ?? 0).toFixed(2)}${d.localAmount ? ` (${d.localCurrency ?? ""}${d.localAmount})` : ""}`;
       break;
     }
 
     // ── INCOME — advance cycle, reset envelopes ──────────────────────────────
     case "income": {
-      const savingUSD = (d.amountUSD || 0) * (s.cycle?.savingRate || 0.10);
-      const net = (d.amountUSD || 0) - savingUSD;
-      s.savings = (s.savings || 0) + savingUSD;
+      const savingUSD = (d.amountUSD ?? 0) * (s.cycle?.savingRate ?? 0.10);
+      const net = (d.amountUSD ?? 0) - savingUSD;
+      s.savings = (s.savings ?? 0) + savingUSD;
 
-      const cycleStart = s.cycle?.start || TODAY();
+      const cycleStart = s.cycle?.start ?? TODAY();
 
       // Last cycle spend for summary
       const lastCycleSpend = {};
       s.ledger
         .filter((e) => e.type === "transaction" && e.date >= cycleStart)
         .forEach((e) => {
-          const pid = e.parentId || "other";
-          lastCycleSpend[pid] = (lastCycleSpend[pid] || 0) + (e.amountUSD || 0);
+          const pid = e.parentId ?? "other";
+          lastCycleSpend[pid] = (lastCycleSpend[pid] ?? 0) + (e.amountUSD ?? 0);
         });
 
       s.ledger = [
@@ -227,18 +243,18 @@ function applyAction(state, action) {
           amountUSD: net,
           grossAmountUSD: d.amountUSD,
           savingUSD,
-          description: d.description || "Income",
-          date: d.date || TODAY(),
+          description: d.description ?? "Income",
+          date: d.date ?? TODAY(),
         }),
       ];
 
-      const newPayday = d.nextPayday || s.cycle?.payday;
+      const newPayday = d.nextPayday ?? s.cycle?.payday;
       const newDaysLeft = newPayday ? Math.max(1, daysUntil(newPayday)) : 30;
       s.cycle = {
         start: TODAY(),
         payday: newPayday,
-        expectedIncomeUSD: d.expectedIncomeUSD || s.cycle?.expectedIncomeUSD,
-        savingRate: s.cycle?.savingRate || 0.10,
+        expectedIncomeUSD: d.expectedIncomeUSD ?? s.cycle?.expectedIncomeUSD,
+        savingRate: s.cycle?.savingRate ?? 0.10,
       };
 
       // Advance committed dates
@@ -272,13 +288,13 @@ function applyAction(state, action) {
             if (env.linkedParentId) return e.parentId === env.linkedParentId;
             return false;
           })
-          .reduce((sum, e) => sum + (e.amountUSD || 0), 0);
-        const unused = Math.max(0, (env.allocatedUSD || 0) - spent);
+          .reduce((sum, e) => sum + (e.amountUSD ?? 0), 0);
+        const unused = Math.max(0, (env.allocatedUSD ?? 0) - spent);
         const rolledOver = env.rollover ? unused : 0;
         const newAllocated =
           env.type === "daily" && env.dailyAmountUSD
             ? env.dailyAmountUSD * newDaysLeft
-            : env.allocatedUSD || 0;
+            : env.allocatedUSD ?? 0;
         s.envelopes[key] = { ...env, allocatedUSD: newAllocated + rolledOver };
       }
 
@@ -296,22 +312,22 @@ function applyAction(state, action) {
           note: d.note || "Balance correction",
         }),
       ];
-      s.lastDiff = `Balance corrected to $${(d.amountUSD || 0).toFixed(2)}.`;
+      s.lastDiff = `Balance corrected to $${(d.amountUSD ?? 0).toFixed(2)}.`;
       break;
     }
 
     // ── SET_COMMITTED — upsert by name ────────────────────────────────────────
     case "set_committed": {
-      const key = (d.name || "").toLowerCase();
+      const key = (d.name ?? "").toLowerCase();
       if (!key) break;
       const existing = s.committed[key];
-      const freq = d.frequency || existing?.frequency || "monthly";
+      const freq = d.frequency ?? existing?.frequency ?? "monthly";
       const nextDate = d.nextDate
         ? advanceDate(d.nextDate, freq)
-        : existing?.nextDate || TODAY();
+        : existing?.nextDate ?? TODAY();
       const prev = existing ? `$${existing.amountUSD}` : "new";
       s.committed[key] = {
-        name: d.name || existing?.name,
+        name: d.name ?? existing?.name,
         amountUSD: d.amountUSD ?? existing?.amountUSD ?? 0,
         frequency: freq,
         nextDate,
@@ -321,13 +337,13 @@ function applyAction(state, action) {
         parkedForNextCycle: d.parkedForNextCycle ?? existing?.parkedForNextCycle ?? false,
       };
       s.lastDiff = existing
-        ? `Updated ${d.name}: ${prev} → $${(d.amountUSD || existing.amountUSD).toFixed(2)}`
-        : `Added ${d.name}: $${(d.amountUSD || 0).toFixed(2)} ${freq}`;
+        ? `Updated ${d.name}: ${prev} → $${(d.amountUSD ?? existing.amountUSD).toFixed(2)}`
+        : `Added ${d.name}: $${(d.amountUSD ?? 0).toFixed(2)} ${freq}`;
       break;
     }
 
     case "remove_committed": {
-      const key = (d.name || "").toLowerCase();
+      const key = (d.name ?? "").toLowerCase();
       if (s.committed[key]) {
         s.committed[key] = { ...s.committed[key], active: false };
         s.lastDiff = `Removed ${d.name}.`;
@@ -336,7 +352,7 @@ function applyAction(state, action) {
     }
 
     case "confirm_payment": {
-      const key = (d.name || "").toLowerCase();
+      const key = (d.name ?? "").toLowerCase();
       if (s.committed[key]) {
         s.committed[key] = { ...s.committed[key], paidThisCycle: true };
         s.lastDiff = `${d.name} marked as paid this cycle.`;
@@ -346,26 +362,46 @@ function applyAction(state, action) {
 
     // ── SET_ENVELOPE — upsert by name ─────────────────────────────────────────
     case "set_envelope": {
-      const key = (d.name || "").toLowerCase();
+      const key = (d.name ?? "").toLowerCase();
       if (!key) break;
       const existing = s.envelopes[key];
-      const type = d.type || existing?.type || "monthly";
+      const type = d.type ?? existing?.type ?? "monthly";
       const daysLeft = s.cycle?.payday ? Math.max(1, daysUntil(s.cycle.payday)) : 30;
       const allocatedUSD =
         type === "daily" && d.dailyAmountUSD
           ? d.dailyAmountUSD * daysLeft
           : d.allocatedUSD ?? existing?.allocatedUSD ?? 0;
       const prev = existing ? `$${existing.allocatedUSD?.toFixed(2)}` : "new";
+      // Auto-link: if no linkedParentId, infer from envelope name
+      let linkedParentId = d.linkedParentId ?? existing?.linkedParentId ?? null;
+      let linkedSubIds = d.linkedSubIds ?? existing?.linkedSubIds ?? null;
+      if (!linkedParentId) {
+        const lower = key;
+        if (lower.includes("food") || lower.includes("eat") || lower.includes("meal") || lower.includes("lunch") || lower.includes("dinner")) {
+          linkedParentId = "food_drink";
+        } else if (lower.includes("coffee") || lower.includes("cafe")) {
+          linkedParentId = "food_drink";
+          linkedSubIds = linkedSubIds ?? ["cafes"];
+        } else if (lower.includes("transport") || lower.includes("ride") || lower.includes("grab")) {
+          linkedParentId = "transport";
+        } else if (lower.includes("health") || lower.includes("gym") || lower.includes("supplement")) {
+          linkedParentId = "health_body";
+        } else if (lower.includes("entertainment") || lower.includes("fun")) {
+          linkedParentId = "entertainment";
+        } else if (lower.includes("cloth") || lower.includes("shopping")) {
+          linkedParentId = "clothing";
+        }
+      }
       s.envelopes[key] = {
-        name: d.name || existing?.name,
+        name: d.name ?? existing?.name,
         type,
         allocatedUSD,
         dailyAmountUSD:
           type === "daily"
-            ? d.dailyAmountUSD || existing?.dailyAmountUSD || null
+            ? d.dailyAmountUSD ?? existing?.dailyAmountUSD ?? null
             : null,
-        linkedParentId: d.linkedParentId ?? existing?.linkedParentId ?? null,
-        linkedSubIds: d.linkedSubIds ?? existing?.linkedSubIds ?? null,
+        linkedParentId,
+        linkedSubIds,
         reserveFromPool:
           type === "daily"
             ? false
@@ -381,7 +417,7 @@ function applyAction(state, action) {
     }
 
     case "remove_envelope": {
-      const key = (d.name || "").toLowerCase();
+      const key = (d.name ?? "").toLowerCase();
       if (s.envelopes[key]) {
         s.envelopes[key] = { ...s.envelopes[key], active: false };
         s.lastDiff = `Removed ${d.name} envelope.`;
@@ -393,11 +429,11 @@ function applyAction(state, action) {
     case "set_location": {
       const prev = s.location?.localRate;
       s.location = {
-        spendCurrency: d.spendCurrency || s.location?.spendCurrency || "USD",
-        symbol: d.spendSymbol || s.location?.symbol || "$",
-        localRate: d.localRate || s.location?.localRate || 1,
-        name: d.location || s.location?.name || "",
-        flag: d.locationFlag || s.location?.flag || "",
+        spendCurrency: d.spendCurrency ?? s.location?.spendCurrency ?? "USD",
+        symbol: d.spendSymbol ?? s.location?.symbol ?? "$",
+        localRate: d.localRate ?? s.location?.localRate ?? 1,
+        name: d.location ?? s.location?.name ?? "",
+        flag: d.locationFlag ?? s.location?.flag ?? "",
         rateUpdated: TODAY(),
       };
       s.lastDiff =
@@ -409,7 +445,7 @@ function applyAction(state, action) {
 
     case "set_saving_rate": {
       if (s.cycle) s.cycle = { ...s.cycle, savingRate: d.rate };
-      s.lastDiff = `Saving rate set to ${((d.rate || 0.1) * 100).toFixed(0)}%`;
+      s.lastDiff = `Saving rate set to ${((d.rate ?? 0.1) * 100).toFixed(0)}%`;
       break;
     }
 
@@ -420,7 +456,7 @@ function applyAction(state, action) {
           id: uid(),
           parentId: d.parentId,
           label: d.label,
-          keywords: d.keywords || [],
+          keywords: d.keywords ?? [],
           active: true,
         },
       ];
@@ -442,10 +478,10 @@ function applyAction(state, action) {
 function computePicture(state) {
   const today = TODAY();
   const { ledger = [], committed = {}, envelopes = {}, cycle, location, savings = 0 } = state;
-  const rate = location?.localRate || 1;
-  const symbol = location?.symbol || "$";
+  const rate = location?.localRate ?? 1;
+  const symbol = location?.symbol ?? "$";
   const payday = cycle?.payday;
-  const cycleStart = cycle?.start || today;
+  const cycleStart = cycle?.start ?? today;
   const daysLeft = payday ? daysUntil(payday) : 30;
 
   // ── BALANCE ────────────────────────────────────────────────────────────────
@@ -462,7 +498,7 @@ function computePicture(state) {
     // Include bills due today through payday (or all future if no payday)
     return c.nextDate >= today && (!payday || c.nextDate <= payday);
   });
-  const bucket1 = upcomingCommitted.reduce((s, c) => s + (c.amountUSD || 0), 0);
+  const bucket1 = upcomingCommitted.reduce((s, c) => s + (c.amountUSD ?? 0), 0);
 
   const staleCommitted = committedList.filter(
     (c) => !c.autoPay && !c.paidThisCycle && c.nextDate && c.nextDate < today
@@ -483,25 +519,25 @@ function computePicture(state) {
       return false;
     };
     const allTx = ledger.filter(matchesTx);
-    const spentTotal = allTx.reduce((s, e) => s + (e.amountUSD || 0), 0);
+    const spentTotal = allTx.reduce((s, e) => s + (e.amountUSD ?? 0), 0);
     const spentBeforeToday = ledger
       .filter((e) => matchesTx(e) && e.date < today)
-      .reduce((s, e) => s + (e.amountUSD || 0), 0);
+      .reduce((s, e) => s + (e.amountUSD ?? 0), 0);
     const spentToday = ledger
       .filter((e) => matchesTx(e) && e.date === today)
-      .reduce((s, e) => s + (e.amountUSD || 0), 0);
-    const remaining = Math.max(0, (env.allocatedUSD || 0) - spentTotal);
+      .reduce((s, e) => s + (e.amountUSD ?? 0), 0);
+    const remaining = Math.max(0, (env.allocatedUSD ?? 0) - spentTotal);
 
     // Daily settlement — target set at start of day, corrects tomorrow
     let dailyLeft = null;
     if (env.type === "daily") {
       if (daysLeft > 0) {
-        const remainingBeforeToday = Math.max(0, (env.allocatedUSD || 0) - spentBeforeToday);
+        const remainingBeforeToday = Math.max(0, (env.allocatedUSD ?? 0) - spentBeforeToday);
         const dailyTarget = remainingBeforeToday / daysLeft;
         dailyLeft = Math.max(0, dailyTarget - spentToday);
       } else {
         // Payday is today — show what's left of today's budget
-        dailyLeft = Math.max(0, (env.allocatedUSD || 0) - spentBeforeToday - spentToday);
+        dailyLeft = Math.max(0, (env.allocatedUSD ?? 0) - spentBeforeToday - spentToday);
       }
     }
 
@@ -511,7 +547,7 @@ function computePicture(state) {
   // ── BUCKET 2: Planned spending ────────────────────────────────────────────
   const bucket2 = computedEnvelopes
     .filter((e) => e.reserveFromPool && e.type !== "daily")
-    .reduce((s, env) => s + Math.max(0, (env.allocatedUSD || 0) - (env.spentUSD || 0)), 0);
+    .reduce((s, env) => s + Math.max(0, (env.allocatedUSD ?? 0) - (env.spentUSD ?? 0)), 0);
 
   // ── BUCKET 3: Daily allowances ────────────────────────────────────────────
   const bucket3 = computedEnvelopes
@@ -529,7 +565,7 @@ function computePicture(state) {
       if (env.linkedParentId) return e.parentId === env.linkedParentId;
       return false;
     })
-  ).reduce((s, e) => s + (e.amountUSD || 0), 0);
+  ).reduce((s, e) => s + (e.amountUSD ?? 0), 0);
   // Mirror food envelope logic: (start-of-day trulyFree / daysLeft) - spent today from free pool
   const freeTodayTarget = daysLeft > 0 ? Math.max(0, trulyFree + freeSpentToday) / daysLeft : 0;
   const freeToday = Math.max(0, freeTodayTarget - freeSpentToday);
@@ -543,9 +579,9 @@ function computePicture(state) {
     .forEach((e) => {
       const pid = e.parentId || "other";
       const sid = e.subId || "uncategorised";
-      categorySpend[pid] = (categorySpend[pid] || 0) + (e.amountUSD || 0);
+      categorySpend[pid] = (categorySpend[pid] || 0) + (e.amountUSD ?? 0);
       if (!subSpend[pid]) subSpend[pid] = {};
-      subSpend[pid][sid] = (subSpend[pid][sid] || 0) + (e.amountUSD || 0);
+      subSpend[pid][sid] = (subSpend[pid][sid] || 0) + (e.amountUSD ?? 0);
     });
 
   // ── CASHFLOW TIMELINE ─────────────────────────────────────────────────────
@@ -585,15 +621,15 @@ function computePicture(state) {
   if (incomeEvents.length >= 2) {
     const prevCycleStart = incomeEvents[incomeEvents.length - 2].date;
     const prevTx = ledger.filter(e => e.type === "transaction" && e.date >= prevCycleStart && e.date < cycleStart);
-    const prevTotal = prevTx.reduce((s, e) => s + (e.amountUSD || 0), 0);
+    const prevTotal = prevTx.reduce((s, e) => s + (e.amountUSD ?? 0), 0);
     const prevByCategory = {};
-    prevTx.forEach(e => { const pid = e.parentId || "other"; prevByCategory[pid] = (prevByCategory[pid] || 0) + (e.amountUSD || 0); });
+    prevTx.forEach(e => { const pid = e.parentId || "other"; prevByCategory[pid] = (prevByCategory[pid] || 0) + (e.amountUSD ?? 0); });
     prevCycleSpend = { total: prevTotal, byCategory: prevByCategory };
   }
 
   // ── CURRENT CYCLE TOTAL SPEND ─────────────────────────────────────────────
   const cycleTx = ledger.filter(e => e.type === "transaction" && e.date >= cycleStart);
-  const cycleTotal = cycleTx.reduce((s, e) => s + (e.amountUSD || 0), 0);
+  const cycleTotal = cycleTx.reduce((s, e) => s + (e.amountUSD ?? 0), 0);
 
   return {
     today,

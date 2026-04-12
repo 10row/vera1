@@ -114,8 +114,20 @@ async function saveAction(prisma, userId, action) {
 
   // Persist in a transaction
   await prisma.$transaction(async (tx) => {
-    // Ledger — only append new entries
-    const newEntries = newState.ledger.slice(state.ledger.length);
+    // Ledger — detect new entries by collecting existing IDs
+    // This handles both append (normal) and replace (complete_setup) cases.
+    const existingIds = new Set(state.ledger.map(e => e.id));
+    const isReplacement = action.type === "complete_setup";
+
+    // If complete_setup replaced the ledger, delete old entries first
+    if (isReplacement && state.ledger.length > 0) {
+      await tx.ledgerEntry.deleteMany({ where: { userId } });
+    }
+
+    const newEntries = isReplacement
+      ? newState.ledger // all entries are new after a replacement
+      : newState.ledger.filter(e => !existingIds.has(e.id)); // only truly new entries
+
     for (const e of newEntries) {
       await tx.ledgerEntry.create({
         data: {
