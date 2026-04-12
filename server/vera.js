@@ -552,7 +552,7 @@ function computePicture(state) {
   // ── BUCKET 3: Daily allowances ────────────────────────────────────────────
   const bucket3 = computedEnvelopes
     .filter((e) => e.type === "daily")
-    .reduce((s, e) => s + (e.remainingUSD || 0), 0);
+    .reduce((s, e) => s + (e.remainingUSD ?? 0), 0);
 
   // ── BUCKET 4: Truly free ──────────────────────────────────────────────────
   const trulyFree = confirmedBalance - bucket1 - bucket2 - bucket3;
