@@ -95,7 +95,7 @@ function countOccurrences(nextDate, intervalDays, endDate) {
   return Math.max(count, 0);
 }
 function createFreshState() {
-  return { setup: false, balanceCents: 0, incomeCents: 0, savingsCents: 0, savingRateBps: 0, payday: null, cycleStart: null, currency: "USD", currencySymbol: "$", localRate: 100, drains: {}, pools: {}, plannedPurchases: {}, transactions: [], conversationHistory: [], monthlySummaries: {}, cycleHistory: [] };
+  return { setup: false, balanceCents: 0, incomeCents: 0, savingsCents: 0, savingRateBps: 0, payday: null, cycleStart: null, currency: "USD", currencySymbol: "$", localRate: 100, language: "en", drains: {}, pools: {}, plannedPurchases: {}, transactions: [], conversationHistory: [], monthlySummaries: {}, cycleHistory: [] };
 }
 function updateMonthly(s, dateStr, poolKey, amountCents, type) {
   const mk = monthKey(dateStr); if (!mk) return;
@@ -338,10 +338,10 @@ function computePicture(state) {
     billsReserved += reserved;
     const daysTo = d.nextDate ? daysUntil(d.nextDate) : null;
     drainList.push({
-      name: d.name, amountUSD: toUSDShort(d.amountCents),
+      name: d.name, amountCents: d.amountCents, amountUSD: toUSDShort(d.amountCents),
       nextDate: d.nextDate, daysUntilNext: daysTo, isDue: d.isDue || false,
       intervalDays: d.intervalDays || 30,
-      occurrences: occ, reservedUSD: toUSDShort(reserved),
+      occurrences: occ, reservedCents: reserved, reservedUSD: toUSDShort(reserved),
     });
   }
 
