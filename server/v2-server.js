@@ -221,6 +221,7 @@ app.listen(PORT, async () => {
     if (process.env.WEBHOOK_URL) {
       const webhookUrl = process.env.WEBHOOK_URL.replace(/\/$/, "") + "/telegram/webhook";
       try {
+        await bot.init();
         await bot.api.setWebhook(webhookUrl);
         console.log("  Telegram webhook: " + webhookUrl);
       } catch (err) {
