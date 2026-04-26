@@ -168,6 +168,7 @@ async function getUserAndState(telegramId) {
 // -- PROCESS MESSAGE
 async function processMessage(ctx, telegramId, text) {
   const { user } = await getUserAndState(telegramId);
+  await ctx.replyWithChatAction("typing");
   await db.withUserLock(user.id, async () => {
     const state = await db.loadState(prisma, user.id);
     const { text: rawText, parsed } = await callSpendYes(state, text);
@@ -216,6 +217,7 @@ if (bot) bot.on("message:voice", async (ctx) => {
     return;
   }
   try {
+    await ctx.replyWithChatAction("typing");
     await ctx.reply("_transcribing…_", { parse_mode: "Markdown" });
     const file = await ctx.getFile();
     const fileUrl = "https://api.telegram.org/file/bot" + process.env.BOT_TOKEN + "/" + file.file_path;
@@ -240,6 +242,7 @@ if (bot) bot.on("message:photo", async (ctx) => {
   try {
     const { user, state } = await getUserAndState(ctx.from.id);
     if (!state.setup) { await ctx.reply("Set yourself up first. Send me your balance and payday."); return; }
+    await ctx.replyWithChatAction("typing");
     await ctx.reply("_reading receipt…_", { parse_mode: "Markdown" });
     const photos = ctx.message.photo;
     const largest = photos[photos.length - 1];
