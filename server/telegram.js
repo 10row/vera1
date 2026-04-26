@@ -69,6 +69,8 @@ const S = {
     daysWord: "days",
     paidConfirm: "\xe2\x9c\x93 *NAME* paid.",
     skippedConfirm: "Skipped *NAME* \xe2\x80\x94 next date advanced.",
+    resetConfirm: "Everything wiped. Let's start fresh.\n\nTell me your bank balance and when you next get paid.",
+    resetFail: "Couldn't reset. Try again.",
   },
   ru: {
     spent: "\xf0\x9f\x92\xb8 \xd0\xa0\xd0\xb0\xd1\x81\xd1\x85\xd0\xbe\xd0\xb4",
@@ -109,6 +111,8 @@ const S = {
     daysWord: "\xd0\xb4\xd0\xbd.",
     paidConfirm: "\xe2\x9c\x93 *NAME* \xd0\xbe\xd0\xbf\xd0\xbb\xd0\xb0\xd1\x87\xd0\xb5\xd0\xbd\xd0\xbe.",
     skippedConfirm: "*NAME* \xd0\xbf\xd1\x80\xd0\xbe\xd0\xbf\xd1\x83\xd1\x89\xd0\xb5\xd0\xbd\xd0\xbe \xe2\x80\x94 \xd0\xb4\xd0\xb0\xd1\x82\xd0\xb0 \xd1\x81\xd0\xb4\xd0\xb2\xd0\xb8\xd0\xbd\xd1\x83\xd1\x82\xd0\xb0.",
+    resetConfirm: "\xd0\x92\xd1\x81\xd1\x91 \xd1\x81\xd0\xb1\xd1\x80\xd0\xbe\xd1\x88\xd0\xb5\xd0\xbd\xd0\xbe. \xd0\x9d\xd0\xb0\xd1\x87\xd0\xbd\xd1\x91\xd0\xbc \xd0\xb7\xd0\xb0\xd0\xbd\xd0\xbe\xd0\xb2\xd0\xbe.\n\n\xd0\xa1\xd0\xba\xd0\xb0\xd0\xb6\xd0\xb8\xd1\x82\xd0\xb5 \xd0\xb1\xd0\xb0\xd0\xbb\xd0\xb0\xd0\xbd\xd1\x81 \xd0\xb8 \xd0\xba\xd0\xbe\xd0\xb3\xd0\xb4\xd0\xb0 \xd1\x81\xd0\xbb\xd0\xb5\xd0\xb4\xd1\x83\xd1\x8e\xd1\x89\xd0\xb0\xd1\x8f \xd0\xb7\xd0\xb0\xd1\x80\xd0\xbf\xd0\xbb\xd0\xb0\xd1\x82\xd0\xb0.",
+    resetFail: "\xd0\x9d\xd0\xb5 \xd1\x83\xd0\xb4\xd0\xb0\xd0\xbb\xd0\xbe\xd1\x81\xd1\x8c \xd1\x81\xd0\xb1\xd1\x80\xd0\xbe\xd1\x81\xd0\xb8\xd1\x82\xd1\x8c. \xd0\x9f\xd0\xbe\xd0\xbf\xd1\x80\xd0\xbe\xd0\xb1\xd1\x83\xd0\xb9\xd1\x82\xd0\xb5 \xd0\xb5\xd1\x89\xd1\x91.",
   }
 };
 
@@ -329,10 +333,35 @@ async function processMessage(ctx, telegramId, text) {
     state.conversationHistory.push({ role: "assistant", content: rawText });
     if (state.conversationHistory.length > 40) state.conversationHistory = state.conversationHistory.slice(-30);
     let newState = state;
-    for (const action of (parsed.actions || [])) {
-      newState = v2.applyAction(newState, action);
+    const hasReset = (parsed.actions || []).some(a => a.type === "reset");
+    if (hasReset) {
+      // Full DB wipe for AI-triggered reset
+      await prisma.$transaction([
+        prisma.transaction.deleteMany({ where: { userId: user.id } }),
+        prisma.drain.deleteMany({ where: { userId: user.id } }),
+        prisma.pool.deleteMany({ where: { userId: user.id } }),
+        prisma.plannedPurchase.deleteMany({ where: { userId: user.id } }),
+        prisma.monthlySummary.deleteMany({ where: { userId: user.id } }),
+        prisma.cycleSummary.deleteMany({ where: { userId: user.id } }),
+        prisma.message.deleteMany({ where: { userId: user.id } }),
+        prisma.user.update({
+          where: { id: user.id },
+          data: {
+            setup: false, balanceCents: 0, incomeCents: 0,
+            savingsCents: 0, savingRateBps: 0,
+            payday: null, cycleStart: null,
+            recurring: true, localRate: 100, language: lang,
+          },
+        }),
+      ]);
+      newState = v2.createFreshState();
+      newState.language = lang;
+    } else {
+      for (const action of (parsed.actions || [])) {
+        newState = v2.applyAction(newState, action);
+      }
+      await db.saveState(prisma, user.id, newState);
     }
-    await db.saveState(prisma, user.id, newState);
     const pic = v2.computePicture(newState);
     const hasSetup = parsed.actions?.some(a => a.type === "setup");
     const hasTx = parsed.actions?.some(a => a.type === "transaction" || a.type === "income" || a.type === "confirm_payment" || a.type === "confirm_planned");
@@ -475,6 +504,42 @@ if (bot) bot.command("start", async (ctx) => {
   }
 });
 
+// -- /reset COMMAND
+if (bot) bot.command("reset", async (ctx) => {
+  try {
+    const telegramId = String(ctx.from.id);
+    const user = await prisma.user.findUnique({ where: { telegramId } });
+    if (!user) {
+      const lang = detectLang(ctx);
+      await ctx.reply(t(lang, "resetConfirm"));
+      return;
+    }
+    const lang = (await db.loadState(prisma, user.id)).language || detectLang(ctx);
+    await prisma.$transaction([
+      prisma.transaction.deleteMany({ where: { userId: user.id } }),
+      prisma.drain.deleteMany({ where: { userId: user.id } }),
+      prisma.pool.deleteMany({ where: { userId: user.id } }),
+      prisma.plannedPurchase.deleteMany({ where: { userId: user.id } }),
+      prisma.monthlySummary.deleteMany({ where: { userId: user.id } }),
+      prisma.cycleSummary.deleteMany({ where: { userId: user.id } }),
+      prisma.message.deleteMany({ where: { userId: user.id } }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: {
+          setup: false, balanceCents: 0, incomeCents: 0,
+          savingsCents: 0, savingRateBps: 0,
+          payday: null, cycleStart: null,
+          recurring: true, localRate: 100, language: lang,
+        },
+      }),
+    ]);
+    await ctx.reply(t(lang, "resetConfirm"));
+  } catch (err) {
+    console.error("Reset error:", err);
+    await ctx.reply(t(detectLang(ctx), "resetFail"));
+  }
+});
+
 // -- CALLBACK QUERIES
 if (bot) bot.on("callback_query:data", async (ctx) => {
   const data = ctx.callbackQuery.data;
@@ -515,90 +580,4 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
           type: "transaction", data: { description: receipt.description, amountUSD: receipt.amountUSD }
         });
         await db.saveState(prisma, user.id, newState);
-        const pic = v2.computePicture(newState);
-        const nudge = maybeNudge(newState.transactions.length, lang);
-        const msg = t(lang, "receiptLogged")
-          .replace("DESC", receipt.description)
-          .replace("AMT", fmt(v2.toCents(receipt.amountUSD)));
-        await ctx.editMessageText(msg + "\n\n" + formatActionReply(pic, lang) + nudge, {
-          parse_mode: "Markdown", reply_markup: mainKeyboard(lang)
-        });
-      });
-      return;
-    }
-    if (data === "receipt_edit") {
-      pendingReceipts.delete(String(ctx.from.id));
-      await ctx.editMessageText(t(lang, "receiptEdit"), { parse_mode: "Markdown" });
-      return;
-    }
-    if (data === "receipt_cancel") {
-      pendingReceipts.delete(String(ctx.from.id));
-      await ctx.editMessageText(t(lang, "receiptCancelled"), { parse_mode: "Markdown" });
-      return;
-    }
-
-    // -- Bill paid/skip
-    if (data.startsWith("paid:")) {
-      const billName = data.slice(5);
-      await db.withUserLock(user.id, async () => {
-        const freshState = await db.loadState(prisma, user.id);
-        let newState = v2.applyAction(freshState, { type: "confirm_payment", data: { name: billName } });
-        await db.saveState(prisma, user.id, newState);
-        const newPic = v2.computePicture(newState);
-        await ctx.editMessageText(
-          t(lang, "paidConfirm").replace("NAME", billName) + "\n\n" + formatActionReply(newPic, lang),
-          { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) }
-        );
-      });
-      return;
-    }
-    if (data.startsWith("skip:")) {
-      const billName = data.slice(5);
-      await db.withUserLock(user.id, async () => {
-        const freshState = await db.loadState(prisma, user.id);
-        let newState = v2.applyAction(freshState, { type: "skip_payment", data: { name: billName } });
-        await db.saveState(prisma, user.id, newState);
-        const newPic = v2.computePicture(newState);
-        await ctx.editMessageText(
-          t(lang, "skippedConfirm").replace("NAME", billName) + "\n\n" + formatActionReply(newPic, lang),
-          { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) }
-        );
-      });
-      return;
-    }
-  } catch (err) {
-    console.error("Callback handler error:", err);
-  }
-});
-
-// -- PROACTIVE
-async function sendMorningBriefing(telegramId) {
-  if (!bot) return;
-  try {
-    const { state } = await getUserAndState(telegramId);
-    if (!state.setup) return;
-    const lang = state.language || "en";
-    const pic = v2.computePicture(state);
-    await bot.api.sendMessage(telegramId, formatMorningBriefing(pic, lang), {
-      parse_mode: "Markdown", reply_markup: mainKeyboard(lang),
-    });
-  } catch (err) { console.error("Morning briefing error:", err); }
-}
-
-async function sendBillAlert(telegramId, billName) {
-  if (!bot) return;
-  try {
-    const { state } = await getUserAndState(telegramId);
-    if (!state.setup) return;
-    const lang = state.language || "en";
-    const key = billName.toLowerCase().trim();
-    const drain = state.drains[key];
-    if (!drain) return;
-    const pic = v2.computePicture(state);
-    await bot.api.sendMessage(telegramId, formatBillAlert(drain, pic, lang), {
-      parse_mode: "Markdown", reply_markup: billActionKeyboard(lang, billName),
-    });
-  } catch (err) { console.error("Bill alert error:", err); }
-}
-
-module.exports = { bot, sendMorningBriefing, sendBillAlert };
+    
