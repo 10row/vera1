@@ -25,9 +25,7 @@ const anthropic = new Anthropic({
 });
 
 // ── Session helper: webToken -> userId ───────────────────────────────
-// The "sessionId" from the client is a webToken. We look up or create
-// a User row for it, then load/save state from Postgres.
-const tokenCache = {}; // webToken -> userId (avoid repeated lookups)
+const tokenCache = {};
 
 async function resolveUser(webToken) {
   if (tokenCache[webToken]) return tokenCache[webToken];
@@ -69,7 +67,6 @@ app.get("/api/v2/picture/:sessionId", async (req, res) => {
 app.post("/api/v2/action/:sessionId", async (req, res) => {
   const { action } = req.body;
   if (!action || !action.type) return res.status(400).json({ error: "action required" });
-
   try {
     const { userId, state } = await getState(req.params.sessionId);
     const newState = v2.applyAction(state, action);
@@ -86,11 +83,8 @@ app.post("/api/v2/action/:sessionId", async (req, res) => {
 app.post("/api/v2/chat/:sessionId", async (req, res) => {
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: "message required" });
-
   try {
     let { userId, state } = await getState(req.params.sessionId);
-
-    // Build messages for Claude
     const history = state.conversationHistory.slice(-20);
     history.push({ role: "user", content: message });
 
@@ -102,39 +96,30 @@ app.post("/api/v2/chat/:sessionId", async (req, res) => {
     });
 
     const text = response.content?.[0]?.text ?? "";
-
-    // Parse JSON block from response
     let parsed;
     const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
     if (jsonMatch) {
       parsed = JSON.parse(jsonMatch[1]);
     } else {
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = { message: text, actions: [{ type: "none" }] };
-      }
+      try { parsed = JSON.parse(text); }
+      catch { parsed = { message: text, actions: [{ type: "none" }] }; }
     }
 
-    // Save conversation history
     state.conversationHistory.push({ role: "user", content: message });
     state.conversationHistory.push({ role: "assistant", content: text });
     if (state.conversationHistory.length > 40) {
       state.conversationHistory = state.conversationHistory.slice(-30);
     }
 
-    // Apply actions
     for (const action of (parsed.actions || [])) {
       state = v2.applyAction(state, action);
     }
 
-    // Process queries
     const queryResults = {};
     for (const query of (parsed.queries || [])) {
       queryResults[query.type] = v2.runQuery(state, query);
     }
 
-    // Persist everything
     await persist(userId, state);
     await db.saveMessages(prisma, userId, state.conversationHistory);
 
@@ -147,7 +132,6 @@ app.post("/api/v2/chat/:sessionId", async (req, res) => {
       pic,
       state: sanitise(state),
     });
-
   } catch (err) {
     console.error("Chat error:", err.message);
     res.status(500).json({ error: "AI error: " + err.message });
@@ -172,8 +156,6 @@ app.post("/api/v2/query/:sessionId", async (req, res) => {
 app.post("/api/v2/reset/:sessionId", async (req, res) => {
   try {
     const userId = await resolveUser(req.params.sessionId);
-    const fresh = v2.createFreshState();
-    // Delete all user data and reset
     await prisma.$transaction([
       prisma.transaction.deleteMany({ where: { userId } }),
       prisma.drain.deleteMany({ where: { userId } }),
@@ -183,15 +165,7 @@ app.post("/api/v2/reset/:sessionId", async (req, res) => {
       prisma.message.deleteMany({ where: { userId } }),
       prisma.user.update({
         where: { id: userId },
-        data: {
-          setup: false,
-          balanceCents: 0,
-          incomeCents: 0,
-          savingsCents: 0,
-          savingRateBps: 0,
-          payday: null,
-          cycleStart: null,
-        },
+        data: { setup: false, balanceCents: 0, incomeCents: 0, savingsCents: 0, savingRateBps: 0, payday: null, cycleStart: null },
       }),
     ]);
     res.json({ ok: true });
@@ -217,10 +191,36 @@ function sanitise(state) {
   return { ...rest, transactionCount: transactions.length };
 }
 
+// ── Telegram Bot ─────────────────────────────────────────────────────
+const { bot } = require("./telegram");
+
+if (bot && process.env.BOT_TOKEN) {
+  if (process.env.WEBHOOK_URL) {
+    const webhookPath = "/telegram/webhook";
+    app.post(webhookPath, (req, res) => {
+      bot.handleUpdate(req.body).catch(err => console.error("Bot update error:", err));
+      res.sendStatus(200);
+    });
+  }
+}
+
 // ── START ─────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log("SpendYes v2 running on http://localhost:" + PORT);
   if (!process.env.ANTHROPIC_API_KEY) {
-    console.log("  WARNING: No ANTHROPIC_API_KEY set — chat will fail");
+    console.log("  WARNING: No ANTHROPIC_API_KEY set");
+  }
+  if (bot && process.env.BOT_TOKEN) {
+    if (process.env.WEBHOOK_URL) {
+      const webhookUrl = process.env.WEBHOOK_URL.replace(/\/$/, "") + "/telegram/webhook";
+      try {
+        await bot.api.setWebhook(webhookUrl);
+        console.log("  Telegram webhook: " + webhookUrl);
+      } catch (err) {
+        console.error("  Telegram webhook error:", err.message);
+      }
+    } else {
+      bot.start({ onStart: () => console.log("  Telegram bot polling...") });
+    }
   }
 });
