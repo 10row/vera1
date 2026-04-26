@@ -1,15 +1,13 @@
 {
-  "name": "vera",
-  "version": "1.0.0",
-  "description": "Vera — Financial clarity for nomadic professionals",
-  "main": "server/index.js",
+  "name": "spendyes",
+  "version": "2.0.0",
+  "description": "SpendYes - Spending Confidence Engine",
+  "main": "server/v2-server.js",
   "scripts": {
-    "dev": "node --watch server/index.js",
-    "start": "prisma db push && node server/index.js",
-    "test": "node --test server/tests/",
+    "start": "prisma db push && node server/v2-server.js",
+    "dev": "node --watch server/v2-server.js",
+    "test": "node web/vera-v2-tests.js && node web/vera-v2-edge-tests.js && node web/vera-v2-planned-tests.js && node web/vera-v2-graph-tests.js",
     "postinstall": "prisma generate",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:studio": "prisma studio"
   },
@@ -17,10 +15,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@prisma/client": "5.22.0",
     "dotenv": "^17.4.0",
-    "express": "^4.18.0",
-    "grammy": "^1.21.0",
-    "node-cron": "^3.0.3",
-    "openai": "^4.0.0"
+    "express": "^4.18.0"
   },
   "devDependencies": {
     "prisma": "5.22.0"

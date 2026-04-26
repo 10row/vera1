@@ -1,8 +1,5 @@
-// Vera — Prisma Schema
-// Direct mapping from state shape in VERA_ARCHITECTURE.md
-// Primary keys on CommittedItem and Envelope use (userId, nameKey)
-// which enforces the name-keyed upsert principle at the DB level.
-// Duplicate committed items or envelopes are impossible by construction.
+// Vera v2 — Database Schema
+// All monetary values in INTEGER CENTS. No floating point anywhere.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,120 +10,140 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// -- User --
 model User {
-  id           String        @id @default(cuid())
-  telegramId   String        @unique
-  createdAt    DateTime      @default(now())
-  ledger       LedgerEntry[]
-  committed    CommittedItem[]
-  envelopes    Envelope[]
-  cycle        UserCycle?
-  location     UserLocation?
-  customSubs   CustomSub[]
+  id         String   @id @default(cuid())
+  telegramId String?  @unique
+  webToken   String?  @unique @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Core state (the "balance sheet")
+  setup          Boolean @default(false)
+  balanceCents   Int     @default(0)
+  incomeCents    Int     @default(0)
+  savingsCents   Int     @default(0)
+  savingRateBps  Int     @default(0)
+  payday         String?
+  cycleStart     String?
+  currency       String  @default("USD")
+  currencySymbol String  @default("$")
+
+  // Relations
+  drains       Drain[]
+  pools        Pool[]
+  transactions Transaction[]
+  monthlies    MonthlySummary[]
+  cycles       CycleSummary[]
+  messages     Message[]
+
+  @@index([telegramId])
+  @@index([webToken])
 }
 
-// Ledger — append only, never update or delete rows
-// Balance is always recomputed from ledger, never stored
-model LedgerEntry {
-  id            String   @id @default(cuid())
+// -- Drain (recurring bill / obligation) --
+model Drain {
+  id            String  @id @default(cuid())
   userId        String
-  type          String   // setup | income | transaction | correction
-  date          String   // YYYY-MM-DD
-  ts            DateTime @default(now())
-  amountUsd     Float?
-  description   String?
-  localAmount   Float?
-  localCurrency String?
-  parentId      String?  // taxonomy parentId
-  subId         String?  // taxonomy subId
-  note          String?
-  user          User     @relation(fields: [userId], references: [id])
+  key           String
+  name          String
+  amountCents   Int
+  intervalDays  Int     @default(30)
+  nextDate      String?
+  active        Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
+}
+
+// -- Pool (spending category with budget) --
+model Pool {
+  id             String   @id @default(cuid())
+  userId         String
+  key            String
+  name           String
+  type           String   @default("daily")
+  dailyCents     Int      @default(0)
+  allocatedCents Int      @default(0)
+  keywords       String[]
+  spentCents     Int      @default(0)
+  active         Boolean  @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
+}
+
+// -- Transaction --
+model Transaction {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String
+  amountCents Int
+  description String   @default("")
+  node        String?
+  date        String
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, date])
+  @@index([userId, node])
   @@index([userId, type])
 }
 
-// CommittedItem — bills that definitely leave on a specific date
-// Keyed by (userId, nameKey) — nameKey = name.toLowerCase()
-// set_committed always upserts — impossible to create duplicates
-model CommittedItem {
-  userId             String
-  nameKey            String   // lowercase name — the upsert key
-  name               String   // display name (original casing)
-  amountUsd          Float
-  frequency          String   // once | monthly | weekly | annual
-  nextDate           String   // YYYY-MM-DD
-  autoPay            Boolean  @default(false)
-  paidThisCycle      Boolean  @default(false)
-  active             Boolean  @default(true)
-  parkedForNextCycle Boolean  @default(false)
-  updatedAt          DateTime @updatedAt
-  user               User     @relation(fields: [userId], references: [id])
+// -- Monthly Summary (graph node: one per user per month per pool) --
+// Pre-computed aggregates. Updated on every transaction.
+model MonthlySummary {
+  id          String @id @default(cuid())
+  userId      String
+  month       String // "2026-04"
+  poolKey     String // pool key, "_total", or "_free"
+  spentCents  Int    @default(0)
+  earnedCents Int    @default(0)
+  txCount     Int    @default(0)
 
-  @@id([userId, nameKey])
-  @@index([userId, active])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, poolKey])
+  @@index([userId, month])
+  @@index([userId, poolKey])
 }
 
-// Envelope — spending intentions (daily allowances + planned spending)
-// type:"daily" → reserveFromPool:false (daily math handles it)
-// type:"monthly"|"project" → reserveFromPool:true (reduces free pool)
-// Keyed by (userId, nameKey) — impossible to create duplicates
-model Envelope {
+// -- Cycle Summary (archived snapshot when pay cycle ends) --
+model CycleSummary {
+  id              String   @id @default(cuid())
   userId          String
-  nameKey         String   // lowercase name — the upsert key
-  name            String   // display name
-  type            String   // daily | monthly | project
-  allocatedUsd    Float
-  dailyAmountUsd  Float?   // stored for cycle resets (daily type only)
-  linkedParentId  String?  // taxonomy parentId
-  linkedSubIds    String?  // JSON array of taxonomy subIds
-  reserveFromPool Boolean  @default(true)
-  rollover        Boolean  @default(false)
-  resetOnIncome   Boolean  @default(true)
-  active          Boolean  @default(true)
-  updatedAt       DateTime @updatedAt
-  user            User     @relation(fields: [userId], references: [id])
+  cycleStart      String
+  cycleEnd        String
+  incomeCents     Int
+  totalSpentCents Int
+  savedCents      Int
+  poolSpend       Json     // { "food": 45000, "transport": 12000 }
+  drainsPaid      Json     // { "rent": 123700, "gym": 5500 }
+  txCount         Int
+  daysInCycle     Int
+  avgDailySpend   Int
+  createdAt       DateTime @default(now())
 
-  @@id([userId, nameKey])
-  @@index([userId, active])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, cycleStart])
 }
 
-// UserCycle — current pay cycle, one row per user
-model UserCycle {
-  userId            String   @id
-  startDate         String   // YYYY-MM-DD
-  payday            String   // YYYY-MM-DD
-  expectedIncomeUsd Float
-  savingRate        Float    @default(0.10)
-  savingsUsd        Float    @default(0)
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id])
-}
+// -- Message (conversation history) --
+model Message {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
 
-// UserLocation — current location and display rate, one row per user
-model UserLocation {
-  userId        String   @id
-  spendCurrency String   @default("USD")
-  symbol        String   @default("$")
-  localRate     Float    @default(1)
-  name          String   @default("")
-  flag          String   @default("")
-  rateUpdated   String?  // YYYY-MM-DD
-  lastDiff      String?  // what changed last action — shown to Vera next turn
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id])
-}
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-// CustomSub — user-defined taxonomy subcategories (Tier 3)
-model CustomSub {
-  id         String   @id @default(cuid())
-  userId     String
-  parentId   String   // must match a TAXONOMY parentId key
-  label      String
-  keywords   String   // JSON array of keyword strings
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
-
-  @@index([userId, active])
+  @@index([userId, createdAt])
 }
