@@ -580,4 +580,90 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
           type: "transaction", data: { description: receipt.description, amountUSD: receipt.amountUSD }
         });
         await db.saveState(prisma, user.id, newState);
-    
+        const pic = v2.computePicture(newState);
+        const nudge = maybeNudge(newState.transactions.length, lang);
+        const msg = t(lang, "receiptLogged")
+          .replace("DESC", receipt.description)
+          .replace("AMT", fmt(v2.toCents(receipt.amountUSD)));
+        await ctx.editMessageText(msg + "\n\n" + formatActionReply(pic, lang) + nudge, {
+          parse_mode: "Markdown", reply_markup: mainKeyboard(lang)
+        });
+      });
+      return;
+    }
+    if (data === "receipt_edit") {
+      pendingReceipts.delete(String(ctx.from.id));
+      await ctx.editMessageText(t(lang, "receiptEdit"), { parse_mode: "Markdown" });
+      return;
+    }
+    if (data === "receipt_cancel") {
+      pendingReceipts.delete(String(ctx.from.id));
+      await ctx.editMessageText(t(lang, "receiptCancelled"), { parse_mode: "Markdown" });
+      return;
+    }
+
+    // -- Bill paid/skip
+    if (data.startsWith("paid:")) {
+      const billName = data.slice(5);
+      await db.withUserLock(user.id, async () => {
+        const freshState = await db.loadState(prisma, user.id);
+        let newState = v2.applyAction(freshState, { type: "confirm_payment", data: { name: billName } });
+        await db.saveState(prisma, user.id, newState);
+        const newPic = v2.computePicture(newState);
+        await ctx.editMessageText(
+          t(lang, "paidConfirm").replace("NAME", billName) + "\n\n" + formatActionReply(newPic, lang),
+          { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) }
+        );
+      });
+      return;
+    }
+    if (data.startsWith("skip:")) {
+      const billName = data.slice(5);
+      await db.withUserLock(user.id, async () => {
+        const freshState = await db.loadState(prisma, user.id);
+        let newState = v2.applyAction(freshState, { type: "skip_payment", data: { name: billName } });
+        await db.saveState(prisma, user.id, newState);
+        const newPic = v2.computePicture(newState);
+        await ctx.editMessageText(
+          t(lang, "skippedConfirm").replace("NAME", billName) + "\n\n" + formatActionReply(newPic, lang),
+          { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) }
+        );
+      });
+      return;
+    }
+  } catch (err) {
+    console.error("Callback handler error:", err);
+  }
+});
+
+// -- PROACTIVE
+async function sendMorningBriefing(telegramId) {
+  if (!bot) return;
+  try {
+    const { state } = await getUserAndState(telegramId);
+    if (!state.setup) return;
+    const lang = state.language || "en";
+    const pic = v2.computePicture(state);
+    await bot.api.sendMessage(telegramId, formatMorningBriefing(pic, lang), {
+      parse_mode: "Markdown", reply_markup: mainKeyboard(lang),
+    });
+  } catch (err) { console.error("Morning briefing error:", err); }
+}
+
+async function sendBillAlert(telegramId, billName) {
+  if (!bot) return;
+  try {
+    const { state } = await getUserAndState(telegramId);
+    if (!state.setup) return;
+    const lang = state.language || "en";
+    const key = billName.toLowerCase().trim();
+    const drain = state.drains[key];
+    if (!drain) return;
+    const pic = v2.computePicture(state);
+    await bot.api.sendMessage(telegramId, formatBillAlert(drain, pic, lang), {
+      parse_mode: "Markdown", reply_markup: billActionKeyboard(lang, billName),
+    });
+  } catch (err) { console.error("Bill alert error:", err); }
+}
+
+module.exports = { bot, sendMorningBriefing, sendBillAlert };
