@@ -90,7 +90,7 @@ async function loadState(prisma, userId) {
     setup: user.setup, balanceCents: user.balanceCents, incomeCents: user.incomeCents,
     savingsCents: user.savingsCents, savingRateBps: user.savingRateBps,
     payday: user.payday, cycleStart: user.cycleStart,
-    currency: user.currency, currencySymbol: user.currencySymbol, localRate: user.localRate,
+    currency: user.currency, currencySymbol: user.currencySymbol, localRate: user.localRate, language: user.language || "en",
     drains, pools, plannedPurchases, transactions,
     conversationHistory, monthlySummaries, cycleHistory,
   };
@@ -107,7 +107,7 @@ async function saveState(prisma, userId, state) {
         incomeCents: state.incomeCents, savingsCents: state.savingsCents,
         savingRateBps: state.savingRateBps, payday: state.payday,
         cycleStart: state.cycleStart, currency: state.currency,
-        currencySymbol: state.currencySymbol, localRate: state.localRate || 100,
+        currencySymbol: state.currencySymbol, localRate: state.localRate || 100, language: state.language || "en",
       },
     });
 
