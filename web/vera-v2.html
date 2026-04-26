@@ -518,4 +518,88 @@ function renderDash(){
 
   let col="green";
   if(pic.freeTodayCents<0)col="red";else if(pic.freeTodayCents<1000)col="amber";
-  
+  let h='';
+
+  // Headline: Free remaining today
+  h+='<div class="free-card"><div class="free-label">Free Remaining Today</div>';
+  h+='<div class="free-amt '+col+'">'+toUSD(pic.freeTodayCents)+'</div>';
+  h+='<div class="free-sub">Daily pace: '+toUSD(pic.dailyPaceCents)+' · Spent today: '+toUSD(pic.todaySpentCents)+'</div>';
+  h+='<div class="free-sub">Total free: '+toUSD(pic.trulyFreeCents)+' · '+pic.daysLeft+' days left</div></div>';
+
+  h+='<div class="info-bar">';
+  h+='<div><div class="ib-v">'+pic.daysLeft+'</div><div class="ib-l">Days to payday</div></div>';
+  h+='<div><div class="ib-v">'+toS(pic.balanceCents)+'</div><div class="ib-l">Balance</div></div>';
+  h+='<div><div class="ib-v">'+pic.dayOfCycle+'/'+pic.daysInCycle+'</div><div class="ib-l">Day of cycle</div></div></div>';
+
+  if(STATE.savingsCents>0||STATE.savingRateBps>0){
+    h+='<div class="sav-card"><div class="sav-row"><span class="sav-lbl">Savings</span>';
+    h+='<span class="sav-val">'+toUSD(STATE.savingsCents)+'</span></div>';
+    h+='<div class="sav-rate">'+(STATE.savingRateBps/100).toFixed(0)+'% from each income</div></div>';
+  }
+
+  h+='<div class="sec">Money Flow</div><div class="wf">';
+  h+=wr("💰","ib","Balance","",toUSD(pic.balanceCents),"pos");
+
+  if(pic.drains.length){h+='<div class="ws"></div>';
+    for(const dr of pic.drains){
+      let sub="";
+      if(dr.nextDate){
+        const daysTo=daysUntil(dr.nextDate);
+        const td=new Date(today()+"T00:00:00"),nd=new Date(dr.nextDate+"T00:00:00");
+        if(nd<=td)sub="Due today";
+        else if(daysTo===1)sub="Tomorrow";
+        else sub="in "+daysTo+" days";
+        if(dr.occurrences>1)sub+=" (×"+dr.occurrences+")";
+      }else{sub=dr.intervalDays?"every "+dr.intervalDays+"d":""}
+      const icon=dr.isDue?"⚠️":"📋";
+      h+=wr(icon,"id",esc(dr.name),sub,"-"+toUSD(dr.reservedCents),"neg")}}
+
+  if(pic.planned.length){h+='<div class="ws"></div>';
+    for(const pp of pic.planned){if(!pp.active)continue;
+      h+=wr(pp.confirmed?"✅":"🛒","id",esc(pp.name),pp.confirmed?"Purchased":(pp.date||"Planned"),"-"+toUSD(pp.amountCents),pp.confirmed?"":"neg")}}
+
+  if(pic.pools.length){h+='<div class="ws"></div>';
+    for(const p of pic.pools){
+      const det=p.type==="daily"?toUSD(p.todayRemainingCents)+" left today · "+toUSD(p.dailyCents)+"/day":toUSD(p.remainingCents)+" remaining";
+      h+=wr("📊","ip",esc(p.name),det,"-"+toUSD(p.remainingCents),"neg")}}
+
+  h+='<div class="ws"></div>';
+  h+=wr("✨","if","Truly Free",toUSD(pic.freeTodayCents)+" remaining today",toUSD(pic.trulyFreeCents),pic.trulyFreeCents>=0?"pos":"neg");
+  h+='</div>';
+
+  h+=pic.checksumOk?'<div class="chk ok">✓ Math verified</div>':'<div class="chk bad">⚠ Math error</div>';
+
+  if(pic.transactions.length){
+    h+='<div class="sec">Recent</div><div class="tl">';
+    for(const tx of pic.transactions){
+      const tag=tx.node&&tx.node!=="free"?tx.node:"";
+      const sign=(tx.type==="income"||tx.type==="savings_withdrawal")?"+":(tx.type==="transaction"||tx.type==="bill_payment")?"-":"";
+      h+='<div class="tr"><span class="td">'+esc(tx.description)+'</span>';
+      if(tag)h+='<span class="tt">'+esc(tag)+'</span>';
+      h+='<span class="ta">'+sign+toUSD(tx.amountCents)+'</span></div>'}
+    h+='</div>'}
+
+  el.innerHTML=h;
+}
+
+function wr(icon,cls,name,det,amt,ac){
+  return'<div class="wr"><div class="wi '+cls+'">'+icon+'</div>'
+    +'<div class="wn"><div class="wn-t">'+name+'</div><div class="wn-d">'+det+'</div></div>'
+    +'<div class="wa '+(ac||'')+'">'+amt+'</div></div>';
+}
+
+// INIT — restore saved state or show welcome
+if(loadState() && STATE.setup){
+  // Restore previous session
+  if(!loadMsgs()){
+    addMsg("v","Welcome back! Your data is restored. What would you like to do?");
+  }
+  renderDash();
+  // Scroll msgs to bottom
+  const mc=document.getElementById("msgs");mc.scrollTop=mc.scrollHeight;
+} else {
+  addMsg("v","Hey! I'm SpendYes — your spending confidence engine.\n\nI help you see what you can freely spend, with total clarity. No guilt, no judgment — just honest math.\n\nLet's get started. What's your current bank account balance?");
+}
+</script>
+</body>
+</html>
