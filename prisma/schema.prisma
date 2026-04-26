@@ -30,6 +30,7 @@ model User {
   currencySymbol String  @default("$")
   localRate      Int     @default(100)
   language       String  @default("en")
+  recurring      Boolean @default(true)
 
   // Relations
   drains           Drain[]
@@ -143,27 +144,4 @@ model CycleSummary {
   totalSpentCents Int
   savedCents      Int
   poolSpend       Json     // { "food": 45000, "transport": 12000 }
-  drainsPaid      Json     // { "rent": 123700, "gym": 5500 }
-  txCount         Int
-  daysInCycle     Int
-  avgDailySpend   Int
-  createdAt       DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([userId, cycleStart])
-}
-
-// -- Message (conversation history) --
-model Message {
-  id        String   @id @default(cuid())
-  userId    String
-  role      String
-  content   String
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-}
+  drai

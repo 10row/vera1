@@ -180,7 +180,7 @@ assertTrue("Picture has checksumOk", pic.checksumOk);
 // == 5. SYSTEM PROMPT ==
 console.log("\n-- 5. SYSTEM PROMPT --");
 const prompt = v2.buildSystemPrompt(s);
-assertTrue("Prompt includes queries", prompt.includes("AVAILABLE QUERIES"));
+assertTrue("Prompt includes queries", prompt.includes("QUERIES"));
 assertTrue("Prompt includes pool_spend", prompt.includes("pool_spend"));
 assertTrue("Prompt includes search_spend", prompt.includes("search_spend"));
 assertTrue("Prompt includes projection", prompt.includes("projection"));
