@@ -28,20 +28,16 @@ function fmt(cents) {
 // -- KEYBOARDS
 const mainKeyboard = () =>
   new InlineKeyboard()
-    .text("💸 Spent", "quick_spent")
-    .text("💰 Received", "quick_received")
-    .text("📌 Coming up", "quick_coming")
+    .text("\xf0\x9f\x92\xb8 Spent", "quick_spent")
+    .text("\xf0\x9f\x92\xb0 Received", "quick_received")
     .row()
-    .text("📊 My Picture", "show_picture");
-
-const setupConfirmKeyboard = () =>
-  new InlineKeyboard()
-    .text("✓ Looks good", "confirm_setup")
-    .text("✗ Fix something", "cancel_setup");
+    .text("\xf0\x9f\xa7\xa0 How'm I doing?", "review")
+    .row()
+    .text("\xf0\x9f\x93\x8a My Picture", "show_picture");
 
 const billActionKeyboard = (billName) =>
   new InlineKeyboard()
-    .text("✓ Paid " + billName, "paid:" + billName)
+    .text("\xe2\x9c\x93 Paid " + billName, "paid:" + billName)
     .text("Skip", "skip:" + billName);
 
 // -- FORMATTING
@@ -128,18 +124,7 @@ function formatBillAlert(drain, pic) {
   ].join("\n");
 }
 
-function formatSetupConfirmation(data, daysLeft) {
-  return [
-    "```",
-    "Balance      " + fmt(v2.toCents(data.balanceUSD)),
-    "Payday       " + (data.payday || "?") + " (" + daysLeft + " days)",
-    "Income       " + fmt(v2.toCents(data.incomeUSD)),
-    "Saving       " + ((data.savingRate || 0.10) * 100).toFixed(0) + "%",
-    "```",
-  ].join("\n");
-}
-
-// -- CALL SPENDYES (Sonnet, JSON format)
+// -- CALL SPENDYES (Sonnet, JSON format - for actions)
 async function callSpendYes(state, userMessage) {
   const history = (state.conversationHistory || []).slice(-20);
   history.push({ role: "user", content: userMessage });
@@ -157,12 +142,88 @@ async function callSpendYes(state, userMessage) {
   return { text, parsed };
 }
 
+// -- CALL REVIEW (Sonnet, pure conversational - no JSON, no actions)
+async function callReview(state) {
+  const pic = v2.computePicture(state);
+  const txCount = state.transactions.length;
+  const recentTx = state.transactions.slice(-15).map(t =>
+    t.date + " | " + t.type + " | " + v2.toUSD(t.amountCents) + " | " + (t.description || t.node || "")
+  ).join("\n");
+
+  const drainsList = Object.values(state.drains).filter(d => d.active).map(d =>
+    d.name + ": " + v2.toUSD(d.amountCents) + " every " + d.intervalDays + "d, next: " + (d.nextDate || "?")
+  ).join("\n");
+
+  const poolsList = Object.values(state.pools).filter(p => p.active).map(p =>
+    p.name + ": spent " + v2.toUSD(p.spentCents) + (p.type === "daily" ? " (budget " + v2.toUSD(p.dailyCents) + "/day)" : " (budget " + v2.toUSD(p.allocatedCents) + "/mo)")
+  ).join("\n");
+
+  const prompt = `You are SpendYes, a personal finance companion on Telegram. The user just tapped "How'm I doing?" They want a genuine, insightful check-in on their financial situation.
+
+THEIR NUMBERS:
+- Balance: ${v2.toUSD(state.balanceCents)}
+- Truly free: ${v2.toUSD(pic.trulyFreeCents)}
+- Free today: ${v2.toUSD(pic.freeRemainingTodayCents)}
+- Daily pace: ${v2.toUSD(pic.dailyFreePaceCents)}
+- Days to payday: ${pic.daysLeft}
+- Savings: ${v2.toUSD(state.savingsCents)} (${(state.savingRateBps / 100)}%)
+- Total transactions logged: ${txCount}
+${pic.cycleStats ? "- This cycle: spent " + v2.toUSD(pic.cycleStats.spentCents) + ", avg " + v2.toUSD(pic.cycleStats.avgDailyCents) + "/day" : ""}
+
+BILLS:
+${drainsList || "(none)"}
+
+SPENDING POOLS:
+${poolsList || "(none)"}
+
+RECENT ACTIVITY:
+${recentTx || "(no transactions yet)"}
+
+YOUR JOB:
+Write a short, personal check-in (3-6 sentences max). Be real. Talk like a sharp friend who happens to be great with money.
+
+- If they're doing well, tell them specifically why and what they can feel good about
+- If things are tight, be honest but not scary. Name the thing that's squeezing them
+- Notice patterns in their recent spending. Call out anything interesting
+- If you see an opportunity (something they could cut, a pattern they might not see), mention it casually
+- End with something forward-looking. What to watch for, what's coming up, or what they can afford to enjoy
+
+DO NOT:
+- List bullet points or use headers. This is a conversation, not a report
+- Repeat numbers they can see in My Picture. Add INSIGHT, not data
+- Be generic. Reference their actual spending, their actual bills, their actual situation
+- Use emoji excessively. One is fine. Zero is fine too
+- Start with "Great news!" or any canned opener. Just talk
+
+Keep it under 120 words. Telegram messages should feel quick to read.`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 512,
+    system: prompt,
+    messages: [{ role: "user", content: "How'm I doing?" }],
+  });
+
+  return response.content?.[0]?.text ?? "Couldn't pull your review right now. Try again in a sec.";
+}
+
 // -- GET USER + STATE
 async function getUserAndState(telegramId) {
   let user = await prisma.user.findUnique({ where: { telegramId: String(telegramId) } });
   if (!user) user = await prisma.user.create({ data: { telegramId: String(telegramId) } });
   const state = await db.loadState(prisma, user.id);
   return { user, state };
+}
+
+// -- CONVERSATIONAL NUDGE (after 3rd and 5th transaction)
+function maybeNudge(txCount) {
+  if (txCount === 3) {
+    return "\n\n_Tip: you can ask me anything — \"can I afford dinner out?\", \"where's my money going?\", \"what should I cut?\" I'm not just buttons._";
+  }
+  if (txCount === 5) {
+    return "\n\n_By the way — try asking \"how'm I doing?\" or \"what did I spend this week?\" I can see patterns you might not._";
+  }
+  return "";
 }
 
 // -- PROCESS MESSAGE
@@ -183,13 +244,14 @@ async function processMessage(ctx, telegramId, text) {
     const pic = v2.computePicture(newState);
     const hasSetup = parsed.actions?.some(a => a.type === "setup");
     const hasTransaction = parsed.actions?.some(a => a.type === "transaction" || a.type === "income" || a.type === "confirm_payment" || a.type === "confirm_planned");
+    const nudge = hasTransaction ? maybeNudge(newState.transactions.length) : "";
     if (hasSetup || hasTransaction) {
-      const msg = (parsed.message || "Got it.") + "\n\n" + formatActionReply(pic);
+      const msg = (parsed.message || "Got it.") + "\n\n" + formatActionReply(pic) + nudge;
       await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: mainKeyboard() });
       if (hasSetup && !state.setup) {
         setTimeout(async () => {
           await ctx.reply(
-            "Now — any regular bills I should know about? Rent, subscriptions, gym, anything recurring.\n\nJust tell me in plain English. Or say skip and we're done.",
+            "Now — any regular bills I should know about? Rent, subscriptions, gym, anything recurring.\n\nJust tell me in plain English. Or say *skip* and we're done.",
             { parse_mode: "Markdown" }
           );
         }, 800);
@@ -281,8 +343,9 @@ if (bot) bot.on("message:photo", async (ctx) => {
       });
       await db.saveState(prisma, user.id, newState);
       const pic = v2.computePicture(newState);
+      const nudge = maybeNudge(newState.transactions.length);
       await ctx.reply(
-        "📄 *" + receipt.description + "* — " + fmt(v2.toCents(receipt.amountUSD)) + "\n\n" + formatActionReply(pic),
+        "\xf0\x9f\x93\x84 *" + receipt.description + "* — " + fmt(v2.toCents(receipt.amountUSD)) + "\n\n" + formatActionReply(pic) + nudge,
         { parse_mode: "Markdown", reply_markup: mainKeyboard() }
       );
     });
@@ -298,9 +361,23 @@ if (bot) bot.command("start", async (ctx) => {
     const { state } = await getUserAndState(ctx.from.id);
     if (state.setup) {
       const pic = v2.computePicture(state);
-      await ctx.reply(formatPicture(pic), { parse_mode: "Markdown", reply_markup: mainKeyboard() });
+      const txCount = state.transactions.length;
+      let greeting;
+      if (txCount === 0) {
+        greeting = "Welcome back. You're set up but haven't logged anything yet — just tell me what you spend as it happens. Or ask me anything about your money.";
+      } else if (pic.trulyFreeCents < 0) {
+        greeting = "Hey. Things are tight right now — your bills are eating more than your balance. Let's look at it together. Tap *How'm I doing?* or just ask me what's going on.";
+      } else if (pic.daysLeft <= 3) {
+        greeting = "Almost payday. You've got " + fmt(pic.freeRemainingTodayCents) + " free today. Home stretch.";
+      } else {
+        greeting = "Hey. " + fmt(pic.freeRemainingTodayCents) + " free today, " + fmt(pic.dailyFreePaceCents) + "/day pace, " + pic.daysLeft + " days to payday. You're good.";
+      }
+      await ctx.reply(greeting + "\n\n" + formatPicture(pic), { parse_mode: "Markdown", reply_markup: mainKeyboard() });
     } else {
-      await ctx.reply("Hey, I'm SpendYes — your spending confidence engine.\n\nTwo things to start: what's your balance right now, and when do you next get paid?");
+      await ctx.reply(
+        "Hey — I'm SpendYes.\n\nI don't track budgets or nag you about spending. I show you what you *can* spend, freely, with everything accounted for.\n\nTo get started, just tell me two things:\n• What's your bank balance right now?\n• When do you next get paid?\n\nJust type it naturally. Like talking to a friend.",
+        { parse_mode: "Markdown" }
+      );
     }
   } catch (err) {
     console.error("Start error:", err);
@@ -313,23 +390,34 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
   await ctx.answerCallbackQuery();
   try {
     const { user, state } = await getUserAndState(ctx.from.id);
+
     if (data === "quick_spent") {
-      await ctx.reply("What did you spend?\ne.g. _\"lunch $12\"_ or _\"coffee $5\"_", { parse_mode: "Markdown" });
+      await ctx.reply("What did you spend? Just type it — _\"lunch $12\"_ or _\"uber home $23\"_\n\nOr describe it however you want. I'll figure it out.", { parse_mode: "Markdown" });
       return;
     }
     if (data === "quick_received") {
-      await ctx.reply("What came in?\ne.g. _\"got paid $3,200\"_ or _\"friend paid me back $50\"_", { parse_mode: "Markdown" });
+      await ctx.reply("What came in? — _\"got paid $3,200\"_ or _\"friend paid me back $50\"_", { parse_mode: "Markdown" });
       return;
     }
-    if (data === "quick_coming") {
-      await ctx.reply("What's coming up?\ne.g. _\"gym $80 due the 14th\"_ or _\"trip $1000 next month\"_", { parse_mode: "Markdown" });
+
+    // -- HOW'M I DOING? (the wow button)
+    if (data === "review") {
+      if (!state.setup) {
+        await ctx.reply("Set yourself up first and log a few things — then I'll have something to tell you.");
+        return;
+      }
+      await ctx.replyWithChatAction("typing");
+      const reviewText = await callReview(state);
+      await ctx.reply(reviewText, { parse_mode: "Markdown", reply_markup: mainKeyboard() });
       return;
     }
+
     if (data === "show_picture") {
       const pic = v2.computePicture(state);
       await ctx.reply(formatPicture(pic), { parse_mode: "Markdown", reply_markup: mainKeyboard() });
       return;
     }
+
     if (data.startsWith("paid:")) {
       const billName = data.slice(5);
       await db.withUserLock(user.id, async () => {
@@ -344,6 +432,7 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
       });
       return;
     }
+
     if (data.startsWith("skip:")) {
       const billName = data.slice(5);
       await db.withUserLock(user.id, async () => {
