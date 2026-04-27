@@ -7,6 +7,7 @@ const express = require("express");
 const path = require("path");
 const Anthropic =
   require("@anthropic-ai/sdk").default;
+const OpenAI = require("openai");
 const v2 = require("./vera-v2");
 const prisma = require("./db/client");
 const db = require("./db/queries");
@@ -18,6 +19,7 @@ app.use(express.json());
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+const openai = new OpenAI();
 const tokenCache = {};
 
 async function resolveUser(webToken) {
@@ -101,30 +103,26 @@ app.post("/api/v2/chat/:sid", async (req, res) => {
       async () => {
         let st = await db.loadState(prisma, uid);
         const hist = st.conversationHistory
-          .slice(-20);
+          .slice(-10);
         hist.push({ role: "user", content: message });
-        const resp = await anthropic.messages.create({
-          model: "claude-sonnet-4-20250514",
+        const resp = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
           max_tokens: 1024,
-          system: v2.buildSystemPrompt(st),
-          messages: hist,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: v2.buildSystemPrompt(st) },
+            ...hist,
+          ],
         });
-        const text = resp.content?.[0]?.text ?? "";
+        const text = resp.choices?.[0]?.message?.content ?? "";
         let parsed;
-        const jm = text.match(
-          /```json\s*([\s\S]*?)\s*```/
-        );
-        if (jm) {
-          parsed = JSON.parse(jm[1]);
-        } else {
-          try {
-            parsed = JSON.parse(text);
-          } catch {
-            parsed = {
-              message: text,
-              actions: [{ type: "none" }],
-            };
-          }
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = {
+            message: text,
+            actions: [{ type: "none" }],
+          };
         }
         st.conversationHistory.push({
           role: "user", content: message,
