@@ -267,38 +267,15 @@ async function callSpendYes(state, userMessage) {
   return { text, parsed };
 }
 
-// -- CALL REVIEW
+// -- CALL REVIEW (GPT-4o-mini)
 async function callReview(state) {
-  const pic = v2.computePicture(state);
-  const lang = state.language || "en";
-  const recentTx = state.transactions.slice(-15).map(t =>
-    t.date + " | " + t.type + " | " + v2.toUSD(t.amountCents) + " | " + (t.description || t.node || "")
-  ).join("\n");
-  const drainsList = Object.values(state.drains).filter(d => d.active).map(d =>
-    d.name + ": " + v2.toUSD(d.amountCents) + " every " + d.intervalDays + "d, next: " + (d.nextDate || "?")
-  ).join("\n");
-  const poolsList = Object.values(state.pools).filter(p => p.active).map(p =>
-    p.name + ": spent " + v2.toUSD(p.spentCents)
-  ).join("\n");
-
-  const langInstr = lang === "ru" ? "Respond entirely in Russian." : "Respond in English.";
-  const prompt = `You are SpendYes. The user tapped "How'm I doing?" ${langInstr}
-
-NUMBERS: Balance ${v2.toUSD(state.balanceCents)}, Free ${v2.toUSD(pic.trulyFreeCents)}, Free today ${v2.toUSD(pic.freeRemainingTodayCents)}, Pace ${v2.toUSD(pic.dailyFreePaceCents)}/day, ${pic.daysLeft} days to payday, Savings ${v2.toUSD(state.savingsCents)}
-${pic.cycleStats ? "Cycle: spent " + v2.toUSD(pic.cycleStats.totalSpent) + ", avg " + v2.toUSD(pic.cycleStats.dailyAvg) + "/day" : ""}
-BILLS: ${drainsList || "none"}
-POOLS: ${poolsList || "none"}
-RECENT: ${recentTx || "none yet"}
-
-Write a short personal check-in (3-6 sentences). Be a sharp friend who's great with money. Notice patterns, be honest, end forward-looking. No bullets, no headers, no "Great news!" Under 120 words.`;
-
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 512,
-    system: prompt,
-    messages: [{ role: "user", content: lang === "ru" ? "Как дела?" : "How'm I doing?" }],
-  });
-  return response.content?.[0]?.text ?? "...";
+  const p = v2.computePicture(state), l = state.language || "en";
+  const tx = state.transactions.slice(-10).map(t => t.date+"|"+v2.toUSD(t.amountCents)+"|"+(t.description||t.node||"")).join("\n");
+  const dr = Object.values(state.drains).filter(d=>d.active).map(d=>d.name+":"+v2.toUSD(d.amountCents)).join(",");
+  const li = l==="ru" ? "Respond in Russian." : "";
+  const sys = `SpendYes check-in. ${li} Balance ${v2.toUSD(state.balanceCents)}, Free ${v2.toUSD(p.trulyFreeCents)}, Pace ${v2.toUSD(p.dailyFreePaceCents)}/day, ${p.daysLeft}d to payday. ${p.cycleStats?"Cycle:"+v2.toUSD(p.cycleStats.totalSpent)+",avg "+v2.toUSD(p.cycleStats.dailyAvg)+"/day":""}Bills:${dr||"none"} Recent:\n${tx||"none"}\n3-6 sentences. Sharp money friend. Patterns,honest. No bullets. <100 words.`;
+  const r = await openai.chat.completions.create({ model:"gpt-4o-mini", max_tokens:300, messages:[{role:"system",content:sys},{role:"user",content:l==="ru"?"Как дела?":"How'm I doing?"}]});
+  return r.choices?.[0]?.message?.content ?? "...";
 }
 
 // -- GET USER + STATE
@@ -368,10 +345,10 @@ async function processMessage(ctx, telegramId, text) {
       await db.saveState(prisma, user.id, newState);
     }
     const pic = v2.computePicture(newState);
-    const hasSetup = parsed.actions?.some(a => a.type === "setup");
     const hasTx = parsed.actions?.some(a => a.type === "transaction" || a.type === "income" || a.type === "confirm_payment" || a.type === "confirm_planned");
+    const justSetUp = !state.setup && newState.setup;
     const nudge = hasTx ? maybeNudge(newState.transactions.length, lang) : "";
-    if (hasSetup || hasTx) {
+    if (newState.setup && (justSetUp || hasTx)) {
       const msg = (parsed.message || "Got it.") + "\n\n" + formatActionReply(pic, lang) + nudge;
       await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) });
     } else {
@@ -561,6 +538,11 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
       if (!state.setup) { await ctx.reply(t(lang, "setupFirstReview")); return; }
       await ctx.replyWithChatAction("typing");
       const reviewText = await callReview(state);
+      // Save review to conversation history so follow-ups have context
+      state.conversationHistory.push({ role: "user", content: lang === "ru" ? "Как дела?" : "How'm I doing?" });
+      state.conversationHistory.push({ role: "assistant", content: reviewText });
+      if (state.conversationHistory.length > 40) state.conversationHistory = state.conversationHistory.slice(-30);
+      await db.saveState(prisma, user.id, state);
       await ctx.reply(reviewText, { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) });
       return;
     }

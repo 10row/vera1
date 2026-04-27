@@ -217,6 +217,9 @@ function applyAction(state, action) {
   switch (action.type) {
     case "setup": {
       const d = action.data;
+      if (!d.balanceUSD && !d.incomeUSD && !d.payday)
+        return s;
+      if (!d.payday) return s;
       s.setup = true;
       s.balanceCents = toCents(d.balanceUSD);
       s.incomeCents = toCents(d.incomeUSD);
@@ -925,14 +928,12 @@ function buildSystemPrompt(state) {
     "TODAY: " + today(),
     "",
     "YOUR JOB:",
-    "If not set up (setup:false): guide user through setup ONE step at a time.",
-    "Step 1: Ask their current bank balance. Wait for answer.",
-    "Step 2: Ask how much they earn and how often. Wait for answer.",
-    "Step 3: Ask when they next get paid (date). Wait for answer.",
-    "ONLY send a setup action when you have ALL THREE from the user.",
-    "NEVER fill in defaults or guess missing information.",
-    "After setup: ask about recurring bills, then spending envelopes.",
-    "If already set up: help them log spending, check what's free, manage finances.",
+    "If not set up (setup:false): you need three things: balance, income, payday.",
+    "Ask for what you do NOT have yet. Users often give multiple in one message.",
+    "Example: 'I earn 13k on the 25th monthly' = income AND payday. Take both.",
+    "Send setup action ONLY when you have ALL THREE. Never guess missing ones.",
+    "After setup: ask about recurring bills, then spending categories.",
+    "If set up: help log spending, check what's free, manage finances.",
     "",
     "ACTION TYPES (set unused data fields to null):",
     "setup: balanceUSD, incomeUSD, savingRate (0-1), payday (YYYY-MM-DD, must be future), recurring (true=salary, false=freelance)",
@@ -951,12 +952,9 @@ function buildSystemPrompt(state) {
     "reset: wipes everything (confirm with user first)",
     "none: no action needed, just conversation",
     "",
-    "WATERFALL: Balance - Bills - Planned - Pools = Truly Free",
-    "All amounts in USD. Bills reserve money until payday.",
-    "If a bill isDue:true, ask user to confirm payment.",
-    "NEVER calculate numbers yourself. The engine handles all math.",
-    "",
-    "EXAMPLES: 'balance $2000'(setup)->none,ask income. 'make $5k/mo paid 15th'->setup with all info. 'coffee $4.50'->transaction. 'rent 1400/mo on 1st'->add_drain.",
+    "WATERFALL: Balance-Bills-Planned-Pools=Free. USD. Bills reserve til payday.",
+    "isDue:true? ask user to confirm. NEVER calculate numbers, engine does math.",
+    "EX: 'balance $2k'->none,ask income. '$5k/mo on 15th'->setup. 'coffee $4.50'->transaction.",
   ];
   return P.join("\n");
 }

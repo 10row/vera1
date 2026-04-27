@@ -290,9 +290,4 @@ app.listen(PORT, async () => {
     } else {
       bot.start({
         onStart: () => {
-          console.log("  Telegram bot polling...");
-        },
-      });
-    }
-  }
-});
+   
