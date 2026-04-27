@@ -1,18 +1,12 @@
 "use strict";
-
 // OpenAI Structured Outputs schema for SpendYes
-// Guarantees 100% correct field names and types from GPT-4o-mini
-
 const responseSchema = {
   name: "spendyes_response",
   strict: true,
   schema: {
     type: "object",
     properties: {
-      message: {
-        type: "string",
-        description: "Your response message to the user"
-      },
+      message: { type: "string", description: "Your response message to the user" },
       actions: {
         type: "array",
         description: "Engine actions to perform",
@@ -33,7 +27,7 @@ const responseSchema = {
             },
             data: {
               type: "object",
-              description: "Action data — fields depend on action type",
+              description: "Action data",
               properties: {
                 balanceUSD: { type: ["number", "null"] },
                 incomeUSD: { type: ["number", "null"] },
@@ -58,10 +52,7 @@ const responseSchema = {
                 type: { type: ["string", "null"] },
                 dailyAmountUSD: { type: ["number", "null"] },
                 allocatedUSD: { type: ["number", "null"] },
-                keywords: {
-                  type: ["array", "null"],
-                  items: { type: "string" }
-                }
+                keywords: { type: ["array", "null"], items: { type: "string" } }
               },
               required: [
                 "balanceUSD", "incomeUSD", "savingRate", "payday",
@@ -69,8 +60,7 @@ const responseSchema = {
                 "name", "amountUSD", "intervalDays", "nextDate",
                 "description", "poolKey", "nextPayday",
                 "rate", "reason", "currency", "symbol", "localRate",
-                "date", "type", "dailyAmountUSD", "allocatedUSD",
-                "keywords"
+                "date", "type", "dailyAmountUSD", "allocatedUSD", "keywords"
               ],
               additionalProperties: false
             }
@@ -78,11 +68,30 @@ const responseSchema = {
           required: ["type", "data"],
           additionalProperties: false
         }
+      },
+      queries: {
+        type: "array",
+        description: "Engine queries for data lookup",
+        items: {
+          type: "object",
+          properties: {
+            type: {
+              type: "string",
+              enum: ["pool_spend", "month_total", "top_pools", "search_spend",
+                "daily_average", "projection", "trend", "savings_history", "none"]
+            },
+            pool: { type: ["string", "null"] },
+            month: { type: ["string", "null"] },
+            keyword: { type: ["string", "null"] },
+            days: { type: ["number", "null"] }
+          },
+          required: ["type", "pool", "month", "keyword", "days"],
+          additionalProperties: false
+        }
       }
     },
-    required: ["message", "actions"],
+    required: ["message", "actions", "queries"],
     additionalProperties: false
   }
 };
-
 module.exports = { responseSchema };

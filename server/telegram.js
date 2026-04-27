@@ -1,8 +1,6 @@
 "use strict";
 
-// server/telegram.js - SpendYes v2 Telegram Bot
-// Uses v2 engine (vera-v2.js) with Prisma/Postgres persistence.
-// Supports EN/RU via language detection.
+// telegram.js - SpendYes v2 Bot
 
 const Anthropic = require("@anthropic-ai/sdk").default;
 const OpenAI = require("openai");
@@ -16,7 +14,7 @@ const anthropic = new Anthropic();
 const openai = new OpenAI();
 const bot = process.env.BOT_TOKEN ? new Bot(process.env.BOT_TOKEN) : null;
 
-// -- PENDING RECEIPTS (in-memory, keyed by telegramId — lost on restart is fine)
+// -- PENDING RECEIPTS
 const pendingReceipts = new Map();
 
 // -- UTILS
@@ -43,22 +41,22 @@ const S = {
     confirmReceipt: "✓ Log it",
     editReceipt: "✏ Edit",
     cancelReceipt: "✗ Cancel",
-    receiptReading: "_reading receipt…_",
+    receiptReading: "_reading…_",
     receiptRead: "📄 I read: *DESC* — AMT\n\nLog this?",
     receiptLogged: "✓ Logged *DESC* — AMT",
     receiptCancelled: "Cancelled. Type it manually.",
-    receiptFailed: "Couldn't read that. Type it manually.",
-    receiptEdit: "What's the right amount? e.g. _\"coffee $4.50\"_",
-    spentPrompt: "What did you spend? _\"lunch $12\"_ or snap a receipt 📸",
+    receiptFailed: "Couldn't read. Type manually.",
+    receiptEdit: "What's the right amount?",
+    spentPrompt: "What did you spend? _\"lunch $12\"_",
     receivedPrompt: "What came in? _\"got paid $3,200\"_",
     notSetup: "Not set up yet. Tell me your balance to get started.",
     setupFirst: "Set up first — tell me your balance.",
-    setupFirstReview: "Set up first and log a few things — then I'll have something to say.",
+    setupFirstReview: "Set up first, then I'll have data.",
     error: "Something went wrong. Try again.",
-    welcome: "Hey — I'm SpendYes.\n\nI show you what you *can* spend freely.\n\nWhat's your current bank balance?",
+    welcome: "Hey — I'm SpendYes. I show what you *can* spend freely.\n\nWhat's your bank balance?",
     billsPrompt: "Any regular bills? Rent, subscriptions, gym?\n\nJust tell me or say *skip*.",
-    nudge3: "\n\n_Tip: ask me anything — \"can I afford dinner out?\" Or snap a receipt 📸_",
-    nudge5: "\n\n_Try \"how'm I doing?\" — I can spot patterns._",
+    nudge3: "\n\n_Tip: ask anything or snap a receipt 📸_",
+    nudge5: "\n\n_Try \"how'm I doing?\"_",
     balance: "Balance",
     bills: "Bills",
     planned: "Planned",
@@ -66,6 +64,12 @@ const S = {
     free: "Free",
     freeToday: "Free today",
     dailyPace: "Daily pace",
+    weeklyPace: "Weekly pace",
+    thisWeek: "This week",
+    recent: "Recent",
+    upcoming: "Coming up",
+    feedWeek: "This Week",
+    feedMonth: "This Month",
     payday: "Payday",
     due: "due",
     days: "d",
@@ -85,17 +89,17 @@ const S = {
     confirmReceipt: "✓ Записать",
     editReceipt: "✏ Исправить",
     cancelReceipt: "✗ Отмена",
-    receiptReading: "_читаю чек…_",
+    receiptReading: "_читаю…_",
     receiptRead: "📄 Я прочитал: *DESC* — AMT\n\nЗаписать?",
     receiptLogged: "✓ Записано *DESC* — AMT",
     receiptCancelled: "Отменено. Введите вручную.",
-    receiptFailed: "Не удалось прочитать. Введите вручную.",
-    receiptEdit: "Что правильно? _\"кофе $4.50\"_",
+    receiptFailed: "Не прочитал. Введите сами.",
+    receiptEdit: "Правильная сумма?",
     spentPrompt: "Что потратили? _\"обед $12\"_ или чек 📸",
     receivedPrompt: "Что поступило? _\"зарплата $3,200\"_",
     notSetup: "Не настроено. Скажите баланс.",
     setupFirst: "Сначала настройтесь — скажите баланс.",
-    setupFirstReview: "Сначала настройтесь и запишите расходы — тогда скажу.",
+    setupFirstReview: "Сначала настройтесь.",
     error: "Что-то пошло не так. Попробуйте ещё.",
     welcome: "Привет — я SpendYes.\n\nПоказываю сколько *можешь* тратить свободно.\n\nСколько сейчас на счёту?",
     billsPrompt: "Есть регулярные платежи? Аренда, подписки?\n\nНапишите или *пропустить*.",
@@ -108,6 +112,12 @@ const S = {
     free: "Свободно",
     freeToday: "Сегодня",
     dailyPace: "Темп/день",
+    weeklyPace: "Темп/нед",
+    thisWeek: "За неделю",
+    recent: "Последние",
+    upcoming: "Скоро",
+    feedWeek: "Эта неделя",
+    feedMonth: "Этот месяц",
     payday: "Зарплата",
     due: "к оплате",
     days: "д",
@@ -135,7 +145,10 @@ function mainKeyboard(lang) {
     .row()
     .text(t(lang, "review"), "review")
     .row()
-    .text(t(lang, "picture"), "show_picture");
+    .text(t(lang, "picture"), "show_picture")
+    .row()
+    .text(t(lang, "feedWeek"), "feed_week")
+    .text(t(lang, "feedMonth"), "feed_month");
 }
 
 function billActionKeyboard(lang, billName) {
@@ -190,17 +203,27 @@ function formatPicture(pic, lang) {
   lines.push(L(t(lang, "free"), 11) + f(pic.trulyFreeCents));
   lines.push(L(t(lang, "freeToday"), 11) + f(pic.freeRemainingTodayCents));
   lines.push(L(t(lang, "dailyPace"), 11) + f(pic.dailyFreePaceCents));
+  lines.push(L(t(lang, "weeklyPace"), 11) + f(pic.weeklyFreePaceCents));
+  lines.push(L(t(lang, "thisWeek"), 11) + f(pic.thisWeekSpentCents));
   lines.push("─".repeat(25));
   lines.push(L(t(lang, "payday"), 11) + (pic.payday || "?") + "  " + pic.daysLeft + t(lang, "days"));
   lines.push("```");
-
-  // Due bills warning
   const dueBills = pic.drains.filter(d => d.isDue);
   if (dueBills.length) {
     lines.push("");
-    for (const b of dueBills) {
-      lines.push("⚠ *" + b.name + "* " + t(lang, "due") + " — " + fmt(b.amountCents || 0));
-    }
+    for (const b of dueBills) lines.push("⚠ *" + b.name + "* " + t(lang, "due") + " — " + fmt(b.amountCents || 0));
+  }
+  const ub = (pic.upcomingBills || []).filter(b => !dueBills.some(d => d.name === b.name));
+  if (ub.length) {
+    lines.push("");
+    lines.push(t(lang, "upcoming") + ":");
+    for (const b of ub) lines.push("  " + b.name + " " + b.amt + " (" + b.days + t(lang, "days") + ")");
+  }
+  const txs = (pic.transactions || []).slice(0, 5);
+  if (txs.length) {
+    lines.push("");
+    lines.push(t(lang, "recent") + ":");
+    for (const tx of txs) lines.push("  " + (tx.description || "").slice(0, 12).padEnd(12) + " " + fmt(tx.amountCents));
   }
   return lines.join("\n");
 }
@@ -209,6 +232,7 @@ function formatActionReply(pic, lang) {
   const lines = ["```"];
   lines.push(t(lang, "freeToday").padEnd(14) + fmt(pic.freeRemainingTodayCents));
   lines.push(t(lang, "dailyPace").padEnd(14) + fmt(pic.dailyFreePaceCents));
+  lines.push(t(lang, "weeklyPace").padEnd(14) + fmt(pic.weeklyFreePaceCents));
   lines.push(t(lang, "payday").padEnd(14) + pic.daysLeft + " " + t(lang, "daysWord"));
   lines.push("```");
   const dueBills = pic.drains.filter(d => d.isDue);
@@ -226,9 +250,9 @@ function formatActionReply(pic, lang) {
 
 function formatMorningBriefing(pic, lang) {
   const lines = [];
-  if (pic.trulyFreeCents < 0) lines.push(lang === "ru" ? "Утро. Счета превышают баланс." : "Morning. Bills exceed your balance.");
-  else if (pic.freeRemainingTodayCents < 500) lines.push(lang === "ru" ? "Утро. Немного туго." : "Morning. Tight day.");
-  else lines.push(lang === "ru" ? "Утро." : "Morning.");
+  if (pic.trulyFreeCents < 0) lines.push(lang==="ru"?"Утро. Перерасход.":"Morning. Over budget.");
+  else if (pic.freeRemainingTodayCents<500) lines.push(lang==="ru"?"Утро. Туго.":"Morning. Tight.");
+  else lines.push(lang==="ru"?"Утро.":"Morning.");
   lines.push("");
   lines.push("```");
   lines.push(t(lang, "freeToday").padEnd(14) + fmt(pic.freeRemainingTodayCents));
@@ -246,7 +270,20 @@ function formatBillAlert(drain, pic, lang) {
   return "⚠ *" + drain.name + "* " + when + "\n\n```\n" + fmt(drain.amountCents) + "\n```";
 }
 
-// -- CALL SPENDYES (GPT-4o-mini, Structured Outputs)
+function formatSpendFeed(pic, state, period, lang) {
+  const w = period==="week", L = [];
+  L.push("*"+t(lang,w?"feedWeek":"feedMonth")+"*","```");
+  L.push((w?t(lang,"thisWeek"):t(lang,"feedMonth")).padEnd(14)+fmt(w?pic.thisWeekSpentCents:pic.thisMonthSpentCents));
+  if(w) L.push(t(lang,"weeklyPace").padEnd(14)+fmt(pic.weeklyFreePaceCents));
+  L.push(t(lang,"dailyPace").padEnd(14)+fmt(pic.dailyFreePaceCents),"```");
+  const cd=new Date(); cd.setDate(cd.getDate()-(w?7:30));
+  const cs=cd.toISOString().slice(0,10);
+  const txs=(state.transactions||[]).filter(tx=>tx.date>=cs&&(tx.type==="transaction"||tx.type==="refund")).slice(-10).reverse();
+  if(txs.length){L.push("");for(const tx of txs)L.push((tx.date||"").slice(5)+" "+(tx.description||"").slice(0,14).padEnd(14)+" "+fmt(tx.amountCents));}
+  return L.join("\n");
+}
+
+// -- CALL SPENDYES
 async function callSpendYes(state, userMessage) {
   const history = (state.conversationHistory || []).slice(-10);
   history.push({ role: "user", content: userMessage });
@@ -267,14 +304,14 @@ async function callSpendYes(state, userMessage) {
   return { text, parsed };
 }
 
-// -- CALL REVIEW (GPT-4o-mini)
+// -- CALL REVIEW
 async function callReview(state) {
   const p = v2.computePicture(state), l = state.language || "en";
-  const tx = state.transactions.slice(-10).map(t => t.date+"|"+v2.toUSD(t.amountCents)+"|"+(t.description||t.node||"")).join("\n");
-  const dr = Object.values(state.drains).filter(d=>d.active).map(d=>d.name+":"+v2.toUSD(d.amountCents)).join(",");
-  const li = l==="ru" ? "Respond in Russian." : "";
-  const sys = `SpendYes check-in. ${li} Balance ${v2.toUSD(state.balanceCents)}, Free ${v2.toUSD(p.trulyFreeCents)}, Pace ${v2.toUSD(p.dailyFreePaceCents)}/day, ${p.daysLeft}d to payday. ${p.cycleStats?"Cycle:"+v2.toUSD(p.cycleStats.totalSpent)+",avg "+v2.toUSD(p.cycleStats.dailyAvg)+"/day":""}Bills:${dr||"none"} Recent:\n${tx||"none"}\n3-6 sentences. Sharp money friend. Patterns,honest. No bullets. <100 words.`;
-  const r = await openai.chat.completions.create({ model:"gpt-4o-mini", max_tokens:300, messages:[{role:"system",content:sys},{role:"user",content:l==="ru"?"Как дела?":"How'm I doing?"}]});
+  const tx = (p.transactions||[]).slice(0,8).map(t=>t.date+"|"+v2.toUSD(t.amountCents)+"|"+(t.description||"")).join("\n");
+  const bl = (p.drains||[]).map(d=>d.name+":"+d.amountUSD+(d.daysUntilNext!=null?" "+d.daysUntilNext+"d":"")).join(",");
+  const li = l==="ru"?"Respond in Russian.":"";
+  const sys = `SpendYes check-in.${li} FACTS(pre-computed,NEVER recalculate):Bal:${p.balanceUSD} Free:${p.trulyFreeUSD} Pace:${p.dailyFreePaceUSD}/d WkPace:${p.weeklyFreePaceUSD} Today:${p.todaySpentUSD} FreeToday:${p.freeRemainingTodayUSD} WkSpent:${p.thisWeekSpentUSD} MoSpent:${p.thisMonthSpentUSD} AvgTx:${p.avgTransactionUSD} ${p.daysLeft}d left Day${p.dayOfCycle}/${p.daysInCycle} Cycle:${p.cycleStats?p.cycleStats.totalSpentUSD:"$0"} avg${p.cycleStats?p.cycleStats.dailyAvgUSD:"$0"}/d Bills:${bl||"none"}\nRecent:\n${tx||"none"}\nONLY quote numbers above.NEVER arithmetic.3-6 sentences.Sharp money friend.Honest.<100w`;
+  const r = await openai.chat.completions.create({model:"gpt-4o-mini",max_tokens:300,messages:[{role:"system",content:sys},{role:"user",content:l==="ru"?"\u041a\u0430\u043a \u0434\u0435\u043b\u0430?":"How'm I doing?"}]});
   return r.choices?.[0]?.message?.content ?? "...";
 }
 
@@ -527,23 +564,30 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
     const lang = state.language || detectLang(ctx);
 
     if (data === "quick_spent") {
-      await ctx.reply(t(lang, "spentPrompt"), { parse_mode: "Markdown" });
+      await ctx.reply(t(lang,"spentPrompt"),{parse_mode:"Markdown"});
       return;
     }
     if (data === "quick_received") {
-      await ctx.reply(t(lang, "receivedPrompt"), { parse_mode: "Markdown" });
+      await ctx.reply(t(lang,"receivedPrompt"),{parse_mode:"Markdown"});
       return;
     }
     if (data === "review") {
       if (!state.setup) { await ctx.reply(t(lang, "setupFirstReview")); return; }
       await ctx.replyWithChatAction("typing");
       const reviewText = await callReview(state);
-      // Save review to conversation history so follow-ups have context
+      
       state.conversationHistory.push({ role: "user", content: lang === "ru" ? "Как дела?" : "How'm I doing?" });
       state.conversationHistory.push({ role: "assistant", content: reviewText });
       if (state.conversationHistory.length > 40) state.conversationHistory = state.conversationHistory.slice(-30);
       await db.saveState(prisma, user.id, state);
       await ctx.reply(reviewText, { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) });
+      return;
+    }
+    if (data === "feed_week" || data === "feed_month") {
+      if (!state.setup) { await ctx.reply(t(lang, "setupFirst")); return; }
+      const pic = v2.computePicture(state);
+      const period = data === "feed_week" ? "week" : "month";
+      await ctx.reply(formatSpendFeed(pic, state, period, lang), { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) });
       return;
     }
     if (data === "show_picture") {
@@ -553,66 +597,31 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
     }
 
     // -- Receipt confirmation
-    if (data === "receipt_confirm") {
-      const receipt = pendingReceipts.get(String(ctx.from.id));
-      if (!receipt) { await ctx.reply("No pending receipt."); return; }
+    if (data==="receipt_confirm") {
+      const rc=pendingReceipts.get(String(ctx.from.id));
+      if(!rc){await ctx.reply("No pending receipt.");return;}
       pendingReceipts.delete(String(ctx.from.id));
-      await db.withUserLock(user.id, async () => {
-        const freshState = await db.loadState(prisma, user.id);
-        let newState = v2.applyAction(freshState, {
-          type: "transaction", data: { description: receipt.description, amountUSD: receipt.amountUSD }
-        });
-        await db.saveState(prisma, user.id, newState);
-        const pic = v2.computePicture(newState);
-        const nudge = maybeNudge(newState.transactions.length, lang);
-        const msg = t(lang, "receiptLogged")
-          .replace("DESC", receipt.description)
-          .replace("AMT", fmt(v2.toCents(receipt.amountUSD)));
-        await ctx.editMessageText(msg + "\n\n" + formatActionReply(pic, lang) + nudge, {
-          parse_mode: "Markdown", reply_markup: mainKeyboard(lang)
-        });
-      });
-      return;
+      await db.withUserLock(user.id,async()=>{const fs=await db.loadState(prisma,user.id);
+      let ns=v2.applyAction(fs,{type:"transaction",data:{description:rc.description,amountUSD:rc.amountUSD}});
+      await db.saveState(prisma,user.id,ns);const p=v2.computePicture(ns);
+      const msg=t(lang,"receiptLogged").replace("DESC",rc.description).replace("AMT",fmt(v2.toCents(rc.amountUSD)));
+      await ctx.editMessageText(msg+"\n\n"+formatActionReply(p,lang)+maybeNudge(ns.transactions.length,lang),{parse_mode:"Markdown",reply_markup:mainKeyboard(lang)});
+      });return;
     }
-    if (data === "receipt_edit") {
+    if (data==="receipt_edit"||data==="receipt_cancel") {
       pendingReceipts.delete(String(ctx.from.id));
-      await ctx.editMessageText(t(lang, "receiptEdit"), { parse_mode: "Markdown" });
-      return;
-    }
-    if (data === "receipt_cancel") {
-      pendingReceipts.delete(String(ctx.from.id));
-      await ctx.editMessageText(t(lang, "receiptCancelled"), { parse_mode: "Markdown" });
+      await ctx.editMessageText(t(lang,data==="receipt_edit"?"receiptEdit":"receiptCancelled"),{parse_mode:"Markdown"});
       return;
     }
 
     // -- Bill paid/skip
-    if (data.startsWith("paid:")) {
-      const billName = data.slice(5);
-      await db.withUserLock(user.id, async () => {
-        const freshState = await db.loadState(prisma, user.id);
-        let newState = v2.applyAction(freshState, { type: "confirm_payment", data: { name: billName } });
-        await db.saveState(prisma, user.id, newState);
-        const newPic = v2.computePicture(newState);
-        await ctx.editMessageText(
-          t(lang, "paidConfirm").replace("NAME", billName) + "\n\n" + formatActionReply(newPic, lang),
-          { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) }
-        );
-      });
-      return;
-    }
-    if (data.startsWith("skip:")) {
-      const billName = data.slice(5);
-      await db.withUserLock(user.id, async () => {
-        const freshState = await db.loadState(prisma, user.id);
-        let newState = v2.applyAction(freshState, { type: "skip_payment", data: { name: billName } });
-        await db.saveState(prisma, user.id, newState);
-        const newPic = v2.computePicture(newState);
-        await ctx.editMessageText(
-          t(lang, "skippedConfirm").replace("NAME", billName) + "\n\n" + formatActionReply(newPic, lang),
-          { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) }
-        );
-      });
-      return;
+    if (data.startsWith("paid:")||data.startsWith("skip:")) {
+      const isPaid=data.startsWith("paid:"),bn=data.slice(isPaid?5:5);
+      await db.withUserLock(user.id,async()=>{const fs=await db.loadState(prisma,user.id);
+      const ns=v2.applyAction(fs,{type:isPaid?"confirm_payment":"skip_payment",data:{name:bn}});
+      await db.saveState(prisma,user.id,ns);const np=v2.computePicture(ns);
+      await ctx.editMessageText(t(lang,isPaid?"paidConfirm":"skippedConfirm").replace("NAME",bn)+"\n\n"+formatActionReply(np,lang),{parse_mode:"Markdown",reply_markup:mainKeyboard(lang)});
+      });return;
     }
   } catch (err) {
     console.error("Callback handler error:", err);
@@ -620,33 +629,30 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
 });
 
 // -- PROACTIVE
-async function sendMorningBriefing(telegramId) {
-  if (!bot) return;
-  try {
-    const { state } = await getUserAndState(telegramId);
-    if (!state.setup) return;
-    const lang = state.language || "en";
-    const pic = v2.computePicture(state);
-    await bot.api.sendMessage(telegramId, formatMorningBriefing(pic, lang), {
-      parse_mode: "Markdown", reply_markup: mainKeyboard(lang),
-    });
-  } catch (err) { console.error("Morning briefing error:", err); }
+async function sendMorningBriefing(tid) {
+  if(!bot)return;
+  try{const{state}=await getUserAndState(tid);if(!state.setup)return;
+  const l=state.language||"en",p=v2.computePicture(state);
+  await bot.api.sendMessage(tid,formatMorningBriefing(p,l),{parse_mode:"Markdown",reply_markup:mainKeyboard(l)});
+  }catch(e){console.error("Briefing err:",e);}
 }
-
-async function sendBillAlert(telegramId, billName) {
-  if (!bot) return;
-  try {
-    const { state } = await getUserAndState(telegramId);
-    if (!state.setup) return;
-    const lang = state.language || "en";
-    const key = billName.toLowerCase().trim();
-    const drain = state.drains[key];
-    if (!drain) return;
-    const pic = v2.computePicture(state);
-    await bot.api.sendMessage(telegramId, formatBillAlert(drain, pic, lang), {
-      parse_mode: "Markdown", reply_markup: billActionKeyboard(lang, billName),
-    });
-  } catch (err) { console.error("Bill alert error:", err); }
+async function sendBillAlert(tid,bn) {
+  if(!bot)return;
+  try{const{state}=await getUserAndState(tid);if(!state.setup)return;
+  const l=state.language||"en",dr=Object.values(state.drains).find(d=>d.name.toLowerCase()===bn.toLowerCase()&&d.active);
+  if(!dr)return;const p=v2.computePicture(state);
+  await bot.api.sendMessage(tid,formatBillAlert(dr,p,l),{parse_mode:"Markdown"});
+  }catch(e){console.error("Bill alert err:",e);}
 }
-
-module.exports = { bot, sendMorningBriefing, sendBillAlert };
+async function runDailyBriefings() {
+  try{const us=await prisma.user.findMany({where:{setup:true,telegramId:{not:null}},select:{telegramId:true}});
+  for(const u of us)if(u.telegramId)await sendMorningBriefing(u.telegramId);
+  console.log("Briefings:"+us.length);}catch(e){console.error("Briefings err:",e);}
+}
+async function runBillAlerts() {
+  try{const us=await prisma.user.findMany({where:{setup:true,telegramId:{not:null}},select:{id:true,telegramId:true}});
+  for(const u of us){const st=await db.loadState(prisma,u.id),p=v2.computePicture(st);
+  for(const b of(p.upcomingBills||[]))if(b.days<=1)await sendBillAlert(u.telegramId,b.name);
+  }}catch(e){console.error("Bill alerts err:",e);}
+}
+module.exports={bot,sendMorningBriefing,sendBillAlert,runDailyBriefings,runBillAlerts};
