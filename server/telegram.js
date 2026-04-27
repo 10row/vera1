@@ -5,12 +5,14 @@
 // Supports EN/RU via language detection.
 
 const Anthropic = require("@anthropic-ai/sdk").default;
+const OpenAI = require("openai");
 const { Bot, InlineKeyboard } = require("grammy");
 const prisma = require("./db/client");
 const db = require("./db/queries");
 const v2 = require("./vera-v2");
 
 const anthropic = new Anthropic();
+const openai = new OpenAI();
 const bot = process.env.BOT_TOKEN ? new Bot(process.env.BOT_TOKEN) : null;
 
 // -- PENDING RECEIPTS (in-memory, keyed by telegramId — lost on restart is fine)
@@ -243,22 +245,24 @@ function formatBillAlert(drain, pic, lang) {
   return "⚠ *" + drain.name + "* " + when + "\n\n```\n" + fmt(drain.amountCents) + "\n```";
 }
 
-// -- CALL SPENDYES (Sonnet, JSON format)
+// -- CALL SPENDYES (GPT-4o-mini, JSON format)
 async function callSpendYes(state, userMessage) {
-  const history = (state.conversationHistory || []).slice(-20);
+  const history = (state.conversationHistory || []).slice(-10);
   history.push({ role: "user", content: userMessage });
   const langNote = state.language === "ru" ? "\n\nIMPORTANT: The user speaks Russian. Respond in Russian. All message text must be in Russian." : "";
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
     max_tokens: 1024,
-    system: v2.buildSystemPrompt(state) + langNote,
-    messages: history,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: v2.buildSystemPrompt(state) + langNote },
+      ...history,
+    ],
   });
-  const text = response.content?.[0]?.text ?? "";
+  const text = response.choices?.[0]?.message?.content ?? "";
   let parsed;
-  const jm = text.match(/```json\s*([\s\S]*?)\s*```/);
-  if (jm) { parsed = JSON.parse(jm[1]); }
-  else { try { parsed = JSON.parse(text); } catch { parsed = { message: text, actions: [{ type: "none" }] }; } }
+  try { parsed = JSON.parse(text); }
+  catch { parsed = { message: text, actions: [{ type: "none" }] }; }
   return { text, parsed };
 }
 
@@ -288,7 +292,7 @@ RECENT: ${recentTx || "none yet"}
 Write a short personal check-in (3-6 sentences). Be a sharp friend who's great with money. Notice patterns, be honest, end forward-looking. No bullets, no headers, no "Great news!" Under 120 words.`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     max_tokens: 512,
     system: prompt,
     messages: [{ role: "user", content: lang === "ru" ? "Как дела?" : "How'm I doing?" }],
