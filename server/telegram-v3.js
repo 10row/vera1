@@ -61,8 +61,9 @@ async function getUserAndState(telegramId) {
 }
 
 async function ensureLanguage(ctx, user, state) {
+  if (state.setup) return state.language || "en";
   const d = fmt.detectLang(ctx);
-  if (state.language !== d && !state.setup) {
+  if (state.language !== d) {
     state.language = d;
     await prisma.user.update({ where: { id: user.id }, data: { language: d } });
   }
@@ -81,7 +82,7 @@ async function processMessage(ctx, telegramId, text) {
     const miniAppUrl = process.env.MINIAPP_URL || null;
 
     // Call AI
-    const { text: raw, parsed } = await callSpendYes(state, text);
+    const { text: raw, parsed } = await callSpendYes(state, text, user.id);
 
     // If verify flag is set, ask for confirmation without committing
     if (parsed.verify) {
@@ -177,10 +178,47 @@ async function processMessage(ctx, telegramId, text) {
   });
 }
 
+// ── REPLY KEYBOARD (review button) — must register BEFORE message:text ──
+if (bot) bot.hears(/How'm I doing|Как дела/i, async (ctx) => {
+  try {
+    const { user, state } = await getUserAndState(ctx.from.id);
+    const lang = state.language || fmt.detectLang(ctx);
+    const miniAppUrl = process.env.MINIAPP_URL || null;
+    if (!state.setup) {
+      await ctx.reply(fmt.t(lang, "notSetup"));
+      return;
+    }
+    await ctx.replyWithChatAction("typing");
+    const rv = await callReview(state, user.id);
+    state.conversationHistory.push({
+      role: "user",
+      content: lang === "ru" ? "Как дела?" : "How'm I doing?",
+    });
+    state.conversationHistory.push({ role: "assistant", content: rv });
+    if (state.conversationHistory.length > 40) {
+      state.conversationHistory = state.conversationHistory.slice(-30);
+    }
+    await db.saveState(prisma, user.id, state);
+    await safeReply(ctx, rv, {
+      parse_mode: "Markdown",
+      reply_markup: fmt.mainKeyboard(lang, miniAppUrl),
+    });
+  } catch (err) {
+    console.error("Review err:", err);
+    await ctx.reply(fmt.t(fmt.detectLang(ctx), "error")).catch(() => {});
+  }
+});
+
 // ── TEXT MESSAGES ──────────────────────────────
 if (bot) bot.on("message:text", async (ctx) => {
-  try { await processMessage(ctx, ctx.from.id, ctx.message.text); }
-  catch (err) {
+  try {
+    const text = ctx.message.text;
+    if (text.length > 2000) {
+      await ctx.reply("Message too long. Keep it under 2000 characters.");
+      return;
+    }
+    await processMessage(ctx, ctx.from.id, text);
+  } catch (err) {
     console.error("Msg err:", err);
     await ctx.reply(fmt.t(fmt.detectLang(ctx), "error")).catch(() => {});
   }
@@ -340,7 +378,7 @@ if (bot) bot.command("reset", async (ctx) => {
       prisma.user.update({
         where: { id: user.id },
         data: {
-          setup: false, balanceCents: 0, incomeCents: 0,
+          setup: false, balanceCents: 0,
           payday: null, cycleStart: null, language: lang,
         },
       }),
@@ -456,38 +494,7 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
   } catch (err) { console.error("CB err:", err); }
 });
 
-// ── REPLY KEYBOARD (review button) ────────────
-// grammy handles reply keyboard text as regular messages
-// We need to intercept the review button text
-if (bot) bot.hears(/How'm I doing|Как дела/i, async (ctx) => {
-  try {
-    const { user, state } = await getUserAndState(ctx.from.id);
-    const lang = state.language || fmt.detectLang(ctx);
-    const miniAppUrl = process.env.MINIAPP_URL || null;
-    if (!state.setup) {
-      await ctx.reply(fmt.t(lang, "notSetup"));
-      return;
-    }
-    await ctx.replyWithChatAction("typing");
-    const rv = await callReview(state, user.id);
-    state.conversationHistory.push({
-      role: "user",
-      content: lang === "ru" ? "Как дела?" : "How'm I doing?",
-    });
-    state.conversationHistory.push({ role: "assistant", content: rv });
-    if (state.conversationHistory.length > 40) {
-      state.conversationHistory = state.conversationHistory.slice(-30);
-    }
-    await db.saveState(prisma, user.id, state);
-    await safeReply(ctx, rv, {
-      parse_mode: "Markdown",
-      reply_markup: fmt.mainKeyboard(lang, miniAppUrl),
-    });
-  } catch (err) {
-    console.error("Review err:", err);
-    await ctx.reply(fmt.t(fmt.detectLang(ctx), "error")).catch(() => {});
-  }
-});
+// (review hears handler moved above message:text to prevent double-fire)
 
 // ── PROACTIVE: MORNING BRIEFINGS ──────────────
 async function sendMorningBriefing(tid) {
@@ -574,14 +581,4 @@ async function runReconciliation() {
         reply_markup: fmt.mainKeyboard(lang, miniAppUrl),
       });
     }
-  } catch (e) { console.error("Reconciliation err:", e); }
-}
-
-module.exports = {
-  bot,
-  sendMorningBriefing,
-  sendEnvelopeAlert,
-  runDailyBriefings,
-  runEnvelopeAlerts,
-  runReconciliation,
-};
+  } catch (e) { console.error("Reconcilia

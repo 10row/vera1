@@ -102,6 +102,20 @@ app.post("/api/v3/chat/:sid", async (req, res) => {
       st.conversationHistory.push({ role: "assistant", content: text });
       if (st.conversationHistory.length > 40) st.conversationHistory = st.conversationHistory.slice(-30);
 
+      // If verify flag is set, save conversation but don't apply actions
+      if (parsed.verify) {
+        await persist(uid, st);
+        return {
+          message: parsed.message,
+          verify: true,
+          actions: parsed.actions,
+          queries: [],
+          queryResults: {},
+          pic: v3.computePicture(st),
+          state: sanitise(st),
+        };
+      }
+
       // Save undo snapshot before applying actions
       const hasChange = (parsed.actions || []).some(a => a.type !== "none");
       if (hasChange) {
@@ -154,20 +168,20 @@ app.post("/api/v3/query/:sid", async (req, res) => {
 app.post("/api/v3/reset/:sid", async (req, res) => {
   try {
     const uid = await resolveUser(req.params.sid);
-    await prisma.$transaction([
-      prisma.transaction.deleteMany({ where: { userId: uid } }),
-      prisma.envelope.deleteMany({ where: { userId: uid } }),
-      prisma.monthlySummary.deleteMany({ where: { userId: uid } }),
-      prisma.cycleSummary.deleteMany({ where: { userId: uid } }),
-      prisma.message.deleteMany({ where: { userId: uid } }),
-      prisma.user.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.transaction.deleteMany({ where: { userId: uid } });
+      await tx.envelope.deleteMany({ where: { userId: uid } });
+      await tx.monthlySummary.deleteMany({ where: { userId: uid } });
+      await tx.cycleSummary.deleteMany({ where: { userId: uid } });
+      await tx.message.deleteMany({ where: { userId: uid } });
+      await tx.user.update({
         where: { id: uid },
         data: {
-          setup: false, balanceCents: 0, incomeCents: 0,
+          setup: false, balanceCents: 0,
           payday: null, cycleStart: null, language: "en",
         },
-      }),
-    ]);
+      });
+    });
     res.json({ ok: true });
   } catch (e) {
     console.error("Reset err:", e.message);
@@ -229,15 +243,4 @@ app.listen(PORT, async () => {
       await runDailyBriefings();
     }
     // Envelope alerts every 6 hours
-    if (h % 6 === 0) await runEnvelopeAlerts();
-    // Weekly reconciliation on Sundays at 18:00 UTC
-    if (dow === 0 && h === 18 && day !== lastRecon) {
-      lastRecon = day;
-      await runReconciliation();
-    }
-  }, 3600000);
-
-  console.log("  Scheduler: briefings 8AM UTC, alerts q6h, reconciliation Sun 6PM UTC");
-  console.log("  Admin dashboard: /admin");
-  console.log("  Mini App: /miniapp");
-});
+    if (h % 6 =

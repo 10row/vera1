@@ -70,49 +70,49 @@ router.get("/api/overview", async (req, res) => {
 router.get("/api/users", async (req, res) => {
   try {
     const users = await prisma.user.findMany({
-      select: { id:true, telegramId:true, setup:true, language:true, currency:true, currencySymbol:true, balanceCents:true, incomeCents:true, savingsCents:true, savingRateBps:true, payday:true, createdAt:true, updatedAt:true,
-        _count: { select: { transactions:true, messages:true, drains:true, pools:true } } },
+      select: { id:true, telegramId:true, setup:true, language:true, currency:true, currencySymbol:true, balanceCents:true, incomeCents:true, payday:true, createdAt:true, updatedAt:true,
+        _count: { select: { transactions:true, messages:true, envelopes:true } } },
       orderBy: { updatedAt: "desc" },
     });
     res.json(users.map(u => ({
       id:u.id, telegramId:u.telegramId||null, setup:u.setup, language:u.language,
       currency:u.currency||"USD", currencySymbol:u.currencySymbol||"$",
       balanceUSD:(u.balanceCents/100).toFixed(2), incomeUSD:(u.incomeCents/100).toFixed(2),
-      savingsUSD:(u.savingsCents/100).toFixed(2), savingRate:(u.savingRateBps/100).toFixed(1)+"%",
       payday:u.payday, createdAt:u.createdAt, lastActive:u.updatedAt,
       txCount:u._count.transactions, msgCount:u._count.messages,
-      drainCount:u._count.drains, poolCount:u._count.pools,
+      envelopeCount:u._count.envelopes,
     })));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get("/api/users/:id/detail", async (req, res) => {
   try {
-    const v2 = require("./vera-v2");
+    const v3 = require("./vera-v3");
     const db = require("./db/queries");
     const user = await prisma.user.findUnique({ where:{id:req.params.id} });
     if (!user) return res.status(404).json({error:"Not found"});
     const state = await db.loadState(prisma, user.id);
-    const pic = v2.computePicture(state);
+    const pic = v3.computePicture(state);
     const sym = state.currencySymbol || "$";
-    const M = c => v2.toMoney(c, sym);
+    const M = c => v3.toMoney(c, sym);
     const txs = (state.transactions||[]).slice(-20).reverse().map(tx=>({
       id:tx.id, type:tx.type, amount:M(tx.amountCents),
-      desc:tx.description||"", date:tx.date, node:tx.node||"free",
+      desc:tx.description||"", date:tx.date, envelope:tx.envelope||"free",
     }));
-    const drains = Object.values(state.drains).filter(d=>d.active).map(d=>({
-      name:d.name, amount:M(d.amountCents), next:d.nextDate, interval:d.intervalDays,
+    const envelopes = (pic.envelopes||[]).map(e=>({
+      name:e.name, rhythm:e.rhythm, amount:e.amountFormatted,
+      spent:e.spentFormatted, funded:e.fundedFormatted,
+      next:e.nextDate, priority:e.priority, isDue:e.isDue,
     }));
     res.json({
       id:user.id, telegramId:user.telegramId, setup:state.setup,
       currency:state.currency||"USD", symbol:sym,
-      balance:M(state.balanceCents), income:M(state.incomeCents),
-      savings:M(state.savingsCents), savingRate:(state.savingRateBps/100).toFixed(1)+"%",
-      free:pic.trulyFreeUSD||M(0), freeToday:pic.freeRemainingTodayUSD||M(0),
-      dailyPace:pic.dailyFreePaceUSD||M(0), weeklyPace:pic.weeklyFreePaceUSD||M(0),
+      balance:M(state.balanceCents),
+      free:pic.freeFormatted||M(0), freeToday:pic.freeRemainingTodayFormatted||M(0),
+      dailyPace:pic.dailyPaceFormatted||M(0), weeklyPace:pic.weeklyPaceFormatted||M(0),
       daysLeft:pic.daysLeft||0, payday:state.payday,
-      thisWeekSpent:pic.thisWeekSpentUSD||M(0), thisMonthSpent:pic.thisMonthSpentUSD||M(0),
-      transactions:txs, drains,
+      thisWeekSpent:pic.thisWeekSpentFormatted||M(0), thisMonthSpent:pic.thisMonthSpentFormatted||M(0),
+      transactions:txs, envelopes,
     });
   } catch (e) { res.status(500).json({error:e.message}); }
 });
@@ -149,7 +149,7 @@ router.get("/api/activity", async (req, res) => {
       if (!daily[tx.date]) daily[tx.date] = { date:tx.date, txCount:0, spentCents:0, earnedCents:0 };
       daily[tx.date].txCount++;
       if (tx.type==="income") daily[tx.date].earnedCents += tx.amountCents;
-      else if (tx.type==="transaction"||tx.type==="bill_payment") daily[tx.date].spentCents += tx.amountCents;
+      else if (tx.type==="spend"||tx.type==="envelope_payment") daily[tx.date].spentCents += tx.amountCents;
     }
     res.json(Object.values(daily));
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -157,22 +157,18 @@ router.get("/api/activity", async (req, res) => {
 
 router.get("/api/financial", async (req, res) => {
   try {
-    const users = await prisma.user.findMany({ where:{setup:true}, select:{balanceCents:true,savingsCents:true,incomeCents:true,savingRateBps:true} });
-    let tB=0,tS=0,tI=0,tR=0;
-    for (const u of users) { tB+=u.balanceCents; tS+=u.savingsCents; tI+=u.incomeCents; tR+=u.savingRateBps; }
+    const users = await prisma.user.findMany({ where:{setup:true}, select:{balanceCents:true,incomeCents:true} });
+    let tB=0,tI=0;
+    for (const u of users) { tB+=u.balanceCents; tI+=u.incomeCents; }
     const n = users.length||1;
-    const pools = await prisma.pool.findMany({ where:{active:true}, select:{name:true,spentCents:true} });
-    const pm = {};
-    for (const p of pools) { if (!pm[p.name]) pm[p.name]={s:0,c:0}; pm[p.name].s+=p.spentCents; pm[p.name].c++; }
-    const topP = Object.entries(pm).map(([n,v])=>({name:n,spentUSD:(v.s/100).toFixed(2),users:v.c})).sort((a,b)=>b.spentUSD-a.spentUSD).slice(0,10);
-    const drains = await prisma.drain.findMany({ where:{active:true}, select:{name:true,amountCents:true} });
-    const dm = {};
-    for (const d of drains) { if (!dm[d.name]) dm[d.name]={a:0,c:0}; dm[d.name].a+=d.amountCents; dm[d.name].c++; }
-    const topD = Object.entries(dm).map(([n,v])=>({name:n,amountUSD:(v.a/100).toFixed(2),users:v.c})).sort((a,b)=>b.c-a.c).slice(0,10);
+    const envelopes = await prisma.envelope.findMany({ where:{active:true}, select:{name:true,rhythm:true,spentCents:true,amountCents:true} });
+    const em = {};
+    for (const e of envelopes) { if (!em[e.name]) em[e.name]={s:0,a:0,c:0,r:e.rhythm}; em[e.name].s+=e.spentCents; em[e.name].a+=e.amountCents; em[e.name].c++; }
+    const topE = Object.entries(em).map(([n,v])=>({name:n,rhythm:v.r,spentUSD:(v.s/100).toFixed(2),amountUSD:(v.a/100).toFixed(2),users:v.c})).sort((a,b)=>b.c-a.c).slice(0,10);
     res.json({
-      totalBalanceUSD:(tB/100).toFixed(2), totalSavingsUSD:(tS/100).toFixed(2),
-      avgIncomeUSD:(tI/n/100).toFixed(2), avgSavingRate:(tR/n/100).toFixed(1)+"%",
-      userCount:users.length, topPools:topP, topDrains:topD,
+      totalBalanceUSD:(tB/100).toFixed(2),
+      avgIncomeUSD:(tI/n/100).toFixed(2),
+      userCount:users.length, topEnvelopes:topE,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -1,9 +1,9 @@
 "use strict";
 
-// server/db/queries.js — v2 Database helpers
+// server/db/queries.js — V3 Database helpers (envelope-based)
 // All amounts in INTEGER CENTS.
 
-const v2 = require("../vera-v2");
+const v3 = require("../vera-v3");
 
 // ── PER-USER MUTEX ──────────────────────────────
 const locks = new Map();
@@ -27,9 +27,7 @@ async function loadState(prisma, userId) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
-      drains: true,
-      pools: true,
-      plannedPurchases: true,
+      envelopes: true,
       transactions: { orderBy: { createdAt: "desc" }, take: 500 },
       monthlies: true,
       cycles: { orderBy: { createdAt: "asc" } },
@@ -40,42 +38,34 @@ async function loadState(prisma, userId) {
     },
   });
 
-  if (!user) return v2.createFreshState();
+  if (!user) return v3.createFreshState();
 
-  const drains = {};
-  for (const d of user.drains) {
-    drains[d.key] = {
-      name: d.name, amountCents: d.amountCents,
-      intervalDays: d.intervalDays,
-      nextDate: d.nextDate, active: d.active,
-    };
-  }
-
-  const pools = {};
-  for (const p of user.pools) {
-    pools[p.key] = {
-      name: p.name, type: p.type,
-      dailyCents: p.dailyCents,
-      allocatedCents: p.allocatedCents,
-      keywords: p.keywords || [],
-      spentCents: p.spentCents, active: p.active,
-    };
-  }
-
-  const plannedPurchases = {};
-  for (const pp of user.plannedPurchases) {
-    plannedPurchases[pp.key] = {
-      name: pp.name, amountCents: pp.amountCents,
-      date: pp.date, confirmed: pp.confirmed,
-      active: pp.active,
+  const envelopes = {};
+  for (const e of user.envelopes) {
+    envelopes[e.key] = {
+      name: e.name,
+      rhythm: e.rhythm,
+      amountCents: e.amountCents,
+      targetCents: e.targetCents,
+      fundedCents: e.fundedCents,
+      spentCents: e.spentCents,
+      fundRate: e.fundRate,
+      fundAmountCents: e.fundAmountCents,
+      intervalDays: e.intervalDays,
+      nextDate: e.nextDate,
+      keywords: e.keywords || [],
+      priority: e.priority,
+      active: e.active,
     };
   }
 
   const transactions = user.transactions.reverse().map(tx => ({
-    id: tx.id, type: tx.type,
+    id: tx.id,
+    type: tx.type,
     amountCents: tx.amountCents,
     description: tx.description,
-    node: tx.node, date: tx.date,
+    envelope: tx.envelope,
+    date: tx.date,
     ts: tx.createdAt.getTime(),
   }));
 
@@ -84,7 +74,7 @@ async function loadState(prisma, userId) {
     if (!monthlySummaries[m.month]) {
       monthlySummaries[m.month] = {};
     }
-    monthlySummaries[m.month][m.poolKey] = {
+    monthlySummaries[m.month][m.envelopeKey] = {
       spent: m.spentCents,
       earned: m.earnedCents,
       count: m.txCount,
@@ -97,8 +87,7 @@ async function loadState(prisma, userId) {
     incomeCents: c.incomeCents,
     totalSpentCents: c.totalSpentCents,
     savedCents: c.savedCents,
-    poolSpend: c.poolSpend || {},
-    drainsPaid: c.drainsPaid || {},
+    envSpend: c.envelopeSpend || {},
     txCount: c.txCount,
     daysInCycle: c.daysInCycle,
     avgDailySpend: c.avgDailySpend,
@@ -111,19 +100,17 @@ async function loadState(prisma, userId) {
   return {
     setup: user.setup,
     balanceCents: user.balanceCents,
-    incomeCents: user.incomeCents,
-    savingsCents: user.savingsCents,
-    savingRateBps: user.savingRateBps,
     payday: user.payday,
     cycleStart: user.cycleStart,
-    recurring: user.recurring !== false,
     currency: user.currency,
     currencySymbol: user.currencySymbol,
-    localRate: user.localRate,
     language: user.language || "en",
-    drains, pools, plannedPurchases,
-    transactions, conversationHistory,
-    monthlySummaries, cycleHistory,
+    envelopes,
+    transactions,
+    conversationHistory,
+    monthlySummaries,
+    cycleHistory,
+    undoSnapshot: null,
   };
 }
 
@@ -136,87 +123,53 @@ async function saveState(prisma, userId, state) {
       data: {
         setup: state.setup,
         balanceCents: state.balanceCents,
-        incomeCents: state.incomeCents,
-        savingsCents: state.savingsCents,
-        savingRateBps: state.savingRateBps,
         payday: state.payday,
         cycleStart: state.cycleStart,
-        recurring: state.recurring !== false,
         currency: state.currency,
         currencySymbol: state.currencySymbol,
-        localRate: state.localRate || 100,
         language: state.language || "en",
       },
     });
 
-    // 2. Drains
-    for (const [key, d] of Object.entries(state.drains)) {
-      await tx.drain.upsert({
+    // 2. Envelopes
+    for (const [key, e] of Object.entries(state.envelopes)) {
+      await tx.envelope.upsert({
         where: { userId_key: { userId, key } },
         update: {
-          name: d.name,
-          amountCents: d.amountCents,
-          intervalDays: d.intervalDays || 30,
-          nextDate: d.nextDate || null,
-          active: d.active !== false,
+          name: e.name,
+          rhythm: e.rhythm || "monthly",
+          amountCents: e.amountCents || 0,
+          targetCents: e.targetCents || null,
+          fundedCents: e.fundedCents || 0,
+          spentCents: e.spentCents || 0,
+          fundRate: e.fundRate || null,
+          fundAmountCents: e.fundAmountCents || null,
+          intervalDays: e.intervalDays || 30,
+          nextDate: e.nextDate || null,
+          keywords: e.keywords || [],
+          priority: e.priority || "flexible",
+          active: e.active !== false,
         },
         create: {
-          userId, key, name: d.name,
-          amountCents: d.amountCents,
-          intervalDays: d.intervalDays || 30,
-          nextDate: d.nextDate || null,
-          active: d.active !== false,
+          userId, key,
+          name: e.name,
+          rhythm: e.rhythm || "monthly",
+          amountCents: e.amountCents || 0,
+          targetCents: e.targetCents || null,
+          fundedCents: e.fundedCents || 0,
+          spentCents: e.spentCents || 0,
+          fundRate: e.fundRate || null,
+          fundAmountCents: e.fundAmountCents || null,
+          intervalDays: e.intervalDays || 30,
+          nextDate: e.nextDate || null,
+          keywords: e.keywords || [],
+          priority: e.priority || "flexible",
+          active: e.active !== false,
         },
       });
     }
 
-    // 3. Pools
-    for (const [key, p] of Object.entries(state.pools)) {
-      await tx.pool.upsert({
-        where: { userId_key: { userId, key } },
-        update: {
-          name: p.name, type: p.type || "daily",
-          dailyCents: p.dailyCents || 0,
-          allocatedCents: p.allocatedCents || 0,
-          keywords: p.keywords || [],
-          spentCents: p.spentCents || 0,
-          active: p.active !== false,
-        },
-        create: {
-          userId, key, name: p.name,
-          type: p.type || "daily",
-          dailyCents: p.dailyCents || 0,
-          allocatedCents: p.allocatedCents || 0,
-          keywords: p.keywords || [],
-          spentCents: p.spentCents || 0,
-          active: p.active !== false,
-        },
-      });
-    }
-
-    // 4. Planned Purchases
-    const pps = state.plannedPurchases || {};
-    for (const [key, pp] of Object.entries(pps)) {
-      await tx.plannedPurchase.upsert({
-        where: { userId_key: { userId, key } },
-        update: {
-          name: pp.name,
-          amountCents: pp.amountCents,
-          date: pp.date || null,
-          confirmed: pp.confirmed || false,
-          active: pp.active !== false,
-        },
-        create: {
-          userId, key, name: pp.name,
-          amountCents: pp.amountCents,
-          date: pp.date || null,
-          confirmed: pp.confirmed || false,
-          active: pp.active !== false,
-        },
-      });
-    }
-
-    // 5. Transactions (append only)
+    // 3. Transactions (append only)
     const existing = await tx.transaction.findMany({
       where: { userId },
       select: { id: true },
@@ -229,21 +182,21 @@ async function saveState(prisma, userId, state) {
             id: t.id, userId, type: t.type,
             amountCents: t.amountCents,
             description: t.description || "",
-            node: t.node || null,
+            envelope: t.envelope || null,
             date: t.date,
           },
         });
       }
     }
 
-    // 6. Monthly summaries
+    // 4. Monthly summaries
     const ms = state.monthlySummaries;
-    for (const [month, pools] of Object.entries(ms)) {
-      for (const [poolKey, data] of Object.entries(pools)) {
+    for (const [month, envelopes] of Object.entries(ms)) {
+      for (const [envelopeKey, data] of Object.entries(envelopes)) {
         await tx.monthlySummary.upsert({
           where: {
-            userId_month_poolKey: {
-              userId, month, poolKey,
+            userId_month_envelopeKey: {
+              userId, month, envelopeKey,
             },
           },
           update: {
@@ -252,7 +205,7 @@ async function saveState(prisma, userId, state) {
             txCount: data.count || 0,
           },
           create: {
-            userId, month, poolKey,
+            userId, month, envelopeKey,
             spentCents: data.spent || 0,
             earnedCents: data.earned || 0,
             txCount: data.count || 0,
@@ -261,7 +214,7 @@ async function saveState(prisma, userId, state) {
       }
     }
 
-    // 7. Cycle history
+    // 5. Cycle history
     await tx.cycleSummary.deleteMany({
       where: { userId },
     });
@@ -271,11 +224,10 @@ async function saveState(prisma, userId, state) {
           userId,
           cycleStart: c.cycleStart,
           cycleEnd: c.cycleEnd,
-          incomeCents: c.incomeCents,
+          incomeCents: c.incomeCents || 0,
           totalSpentCents: c.totalSpentCents,
-          savedCents: c.savedCents,
-          poolSpend: c.poolSpend || {},
-          drainsPaid: c.drainsPaid || {},
+          savedCents: c.savedCents || 0,
+          envelopeSpend: c.envSpend || {},
           txCount: c.txCount,
           daysInCycle: c.daysInCycle,
           avgDailySpend: c.avgDailySpend,
@@ -283,7 +235,7 @@ async function saveState(prisma, userId, state) {
       });
     }
 
-    // 8. Messages (atomic)
+    // 6. Messages (atomic)
     await tx.message.deleteMany({
       where: { userId },
     });

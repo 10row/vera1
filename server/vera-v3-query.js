@@ -1,13 +1,10 @@
 "use strict";
-// vera-v3-query.js — Query system for V3
-
 function runQuery(state, query, computePicture, toMoney) {
   if (!query || !query.type) return { error: "Invalid query" };
   const sym = state.currencySymbol || "$";
   const M = c => toMoney(c, sym);
   const t = new Date().toISOString().slice(0, 10);
   const mk = t.slice(0, 7);
-
   switch (query.type) {
     case "envelope_spend": {
       const key = (query.envelope || "").toLowerCase().trim().replace(/\s+/g, "_");
@@ -31,7 +28,9 @@ function runQuery(state, query, computePicture, toMoney) {
       return { month: mo, envelopes: envs };
     }
     case "search_spend": {
-      const kw = (query.keyword || "").toLowerCase(), days = query.days || 30;
+      const kw = (query.keyword || "").toLowerCase().trim();
+      if (!kw) return { keyword: "", days: 0, count: 0, spentCents: 0, spentFormatted: M(0), matches: [], error: "No keyword" };
+      const days = query.days || 30;
       const cut = new Date(t + "T00:00:00");
       cut.setDate(cut.getDate() - days);
       const cs = cut.toISOString().slice(0, 10);
@@ -54,13 +53,13 @@ function runQuery(state, query, computePicture, toMoney) {
     }
     case "trend": {
       if (!state.cycleHistory.length) return { trend: "no_history" };
+      if (state.cycleHistory.length < 2) return { trend: "insufficient_data", lastCycleFormatted: M(state.cycleHistory[0].totalSpentCents) };
       const last = state.cycleHistory[state.cycleHistory.length - 1];
-      const prev = state.cycleHistory.length > 1 ? state.cycleHistory[state.cycleHistory.length - 2] : last;
+      const prev = state.cycleHistory[state.cycleHistory.length - 2];
       const pct = prev.totalSpentCents > 0 ? Math.round(((last.totalSpentCents - prev.totalSpentCents) / prev.totalSpentCents) * 100) : 0;
       return { direction: pct > 5 ? "up" : pct < -5 ? "down" : "stable", pctChange: pct, lastCycleFormatted: M(last.totalSpentCents) };
     }
     default: return { error: "Unknown query: " + query.type };
   }
 }
-
 module.exports = { runQuery };

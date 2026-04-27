@@ -20,7 +20,7 @@ try {
 }
 
 // ── CALL SPENDYES (structured outputs) ─────────
-async function callSpendYes(state, userMessage) {
+async function callSpendYes(state, userMessage, userId) {
   const history = (state.conversationHistory || []).slice(-10);
   history.push({ role: "user", content: userMessage });
   const langNote = state.language === "ru"
@@ -37,7 +37,7 @@ async function callSpendYes(state, userMessage) {
   });
   const text = response.choices?.[0]?.message?.content ?? "";
   const usage = response.usage || {};
-  logApiCall(null, "gpt-4o-mini", usage.prompt_tokens || 0, usage.completion_tokens || 0, "chat").catch(() => {});
+  logApiCall(userId || null, "gpt-4o-mini", usage.prompt_tokens || 0, usage.completion_tokens || 0, "chat").catch(() => {});
   let parsed;
   try { parsed = JSON.parse(text); }
   catch { parsed = { message: text, actions: [{ type: "none", data: {} }], queries: [], verify: false }; }
@@ -45,7 +45,7 @@ async function callSpendYes(state, userMessage) {
 }
 
 // ── CALL REVIEW (free-text, V3 computePicture) ─
-async function callReview(state) {
+async function callReview(state, userId) {
   const pic = v3.computePicture(state);
   const lang = state.language || "en";
   const sym = state.currencySymbol || "$";
@@ -113,8 +113,8 @@ RULES:
     ],
   });
   const usage = response.usage || {};
-  logApiCall(null, "gpt-4o-mini", usage.prompt_tokens || 0, usage.completion_tokens || 0, "review").catch(() => {});
+  logApiCall(userId || null, "gpt-4o-mini", usage.prompt_tokens || 0, usage.completion_tokens || 0, "review").catch(() => {});
   return response.choices?.[0]?.message?.content ?? "...";
 }
 
-module.exports = { callSpendYes, callReview };
+module.expo
