@@ -30,7 +30,7 @@ async function loadState(prisma, userId) {
       drains: true,
       pools: true,
       plannedPurchases: true,
-      transactions: { orderBy: { createdAt: "asc" } },
+      transactions: { orderBy: { createdAt: "desc" }, take: 500 },
       monthlies: true,
       cycles: { orderBy: { createdAt: "asc" } },
       messages: {
@@ -71,7 +71,7 @@ async function loadState(prisma, userId) {
     };
   }
 
-  const transactions = user.transactions.map(tx => ({
+  const transactions = user.transactions.reverse().map(tx => ({
     id: tx.id, type: tx.type,
     amountCents: tx.amountCents,
     description: tx.description,

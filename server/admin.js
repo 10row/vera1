@@ -3,11 +3,16 @@ const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
 const prisma = require("./db/client");
+const { logApiCall } = require("./admin-api");
 const router = express.Router();
 
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS;
 const sessions = new Map();
+const IS_PROD = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
+setInterval(() => {
+  for (const [k, v] of sessions) { if (Date.now() - v.ts > 86400000) sessions.delete(k); }
+}, 1800000);
 
 function authRequired(req, res, next) {
   const sid = (req.headers.cookie || "").match(/admin_sid=([^;]+)/)?.[1];
@@ -25,7 +30,8 @@ router.post("/login", express.json(), (req, res) => {
     const sid = crypto.randomBytes(32).toString("hex");
     sessions.set(sid, { ts: Date.now() });
     for (const [k, v] of sessions) { if (Date.now() - v.ts > 86400000) sessions.delete(k); }
-    res.setHeader("Set-Cookie", `admin_sid=${sid}; Path=/admin; HttpOnly; SameSite=Strict; Max-Age=86400`);
+    const sf = IS_PROD ? "; Secure" : "";
+    res.setHeader("Set-Cookie", `admin_sid=${sid}; Path=/admin; HttpOnly; SameSite=Strict; Max-Age=86400${sf}`);
     return res.json({ ok: true });
   }
   return res.status(401).json({ error: "Invalid credentials" });
@@ -64,12 +70,13 @@ router.get("/api/overview", async (req, res) => {
 router.get("/api/users", async (req, res) => {
   try {
     const users = await prisma.user.findMany({
-      select: { id:true, telegramId:true, setup:true, language:true, balanceCents:true, incomeCents:true, savingsCents:true, savingRateBps:true, payday:true, createdAt:true, updatedAt:true,
+      select: { id:true, telegramId:true, setup:true, language:true, currency:true, currencySymbol:true, balanceCents:true, incomeCents:true, savingsCents:true, savingRateBps:true, payday:true, createdAt:true, updatedAt:true,
         _count: { select: { transactions:true, messages:true, drains:true, pools:true } } },
       orderBy: { updatedAt: "desc" },
     });
     res.json(users.map(u => ({
       id:u.id, telegramId:u.telegramId||null, setup:u.setup, language:u.language,
+      currency:u.currency||"USD", currencySymbol:u.currencySymbol||"$",
       balanceUSD:(u.balanceCents/100).toFixed(2), incomeUSD:(u.incomeCents/100).toFixed(2),
       savingsUSD:(u.savingsCents/100).toFixed(2), savingRate:(u.savingRateBps/100).toFixed(1)+"%",
       payday:u.payday, createdAt:u.createdAt, lastActive:u.updatedAt,
@@ -143,22 +150,5 @@ router.get("/api/health", async (req, res) => {
     res.json({ db:"connected", lastApiCall:lastLog?.createdAt||null, lastApiModel:lastLog?.model||null, lastTransaction:lastTx?.createdAt||null, ts:new Date().toISOString() });
   } catch (e) { res.json({ db:"disconnected", error:e.message, ts:new Date().toISOString() }); }
 });
-
-// Cost per token in hundredths of a cent (divide by 100 for cents, by 10000 for dollars)
-const COST_MAP = {
-  "gpt-4o-mini": { prompt: 15, output: 60 },
-  "claude-sonnet-4-20250514": { prompt: 300, output: 1500 },
-  "claude-haiku-4-5-20251001": { prompt: 80, output: 400 },
-};
-
-async function logApiCall(userId, model, promptTokens, outputTokens, endpoint) {
-  const rates = COST_MAP[model] || { prompt: 10, output: 40 };
-  const costCents = Math.round(promptTokens * rates.prompt / 100 + outputTokens * rates.output / 100);
-  try {
-    await prisma.apiLog.create({
-      data: { userId, model, promptTokens, outputTokens, totalTokens: promptTokens + outputTokens, costCents, endpoint },
-    });
-  } catch (e) { console.error("ApiLog err:", e.message); }
-}
 
 module.exports = { router, logApiCall };

@@ -10,14 +10,20 @@ const db = require("./db/queries");
 const { router: adminRouter, logApiCall } = require("./admin");
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.use(express.json());
+app.use(express.json({ limit: "16kb" }));
 const openai = new OpenAI();
-const tokenCache = {};
+const tokenCache = new Map();
+const TOKEN_CACHE_MAX = 500;
 
 async function resolveUser(wt) {
-  if (tokenCache[wt]) return tokenCache[wt];
+  if (tokenCache.has(wt)) return tokenCache.get(wt);
   const u = await db.getOrCreateWebUser(prisma, wt);
-  tokenCache[wt] = u.id; return u.id;
+  if (tokenCache.size >= TOKEN_CACHE_MAX) {
+    const first = tokenCache.keys().next().value;
+    tokenCache.delete(first);
+  }
+  tokenCache.set(wt, u.id);
+  return u.id;
 }
 async function persist(uid, st) { await db.saveState(prisma, uid, st); }
 
@@ -50,6 +56,7 @@ app.post("/api/v2/action/:sid", async (req, res) => {
 app.post("/api/v2/chat/:sid", async (req, res) => {
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: "message required" });
+  if (message.length > 2000) return res.status(400).json({ error: "message too long" });
   try {
     const uid = await resolveUser(req.params.sid);
     const result = await db.withUserLock(uid, async () => {

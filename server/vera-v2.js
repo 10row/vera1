@@ -6,17 +6,19 @@ function toCents(usd) {
   if (isNaN(n) || !isFinite(n)) return 0;
   return Math.round(n * 100);
 }
-function toUSD(cents) {
-  if (cents === null || cents === undefined) return "$0.00";
+function toMoney(cents, sym) {
+  if (cents === null || cents === undefined) return (sym || "$") + "0.00";
   const neg = cents < 0, abs = Math.abs(cents);
   const dollars = Math.floor(abs / 100);
   const rem = abs % 100, sign = neg ? "-" : "";
-  return sign + "$" + dollars.toLocaleString() + "." + String(rem).padStart(2, "0");
+  return sign + (sym || "$") + dollars.toLocaleString() + "." + String(rem).padStart(2, "0");
 }
-function toUSDShort(c) {
-  const s = toUSD(c);
+function toUSD(cents) { return toMoney(cents, "$"); }
+function toMoneyShort(cents, sym) {
+  const s = toMoney(cents, sym);
   return s.endsWith(".00") ? s.slice(0, -3) : s;
 }
+function toUSDShort(c) { return toMoneyShort(c, "$"); }
 function today() { return new Date().toISOString().slice(0, 10); }
 function daysUntil(dateStr) {
   if (!dateStr) return 30;
@@ -378,94 +380,13 @@ function tickState(state) {
   }
   return s;
 }
-function runQuery(state, query) {
-  if (!query || !query.type) return { error: "Invalid query" };
-  const s = state, t = today(), mk = monthKey(t);
-  switch (query.type) {
-    case "pool_spend": {
-      const pk = query.pool ? query.pool.toLowerCase().trim() : "";
-      const mo = query.month || mk, ms = s.monthlySummaries[mo];
-      if (ms && ms[pk]) return { pool:pk, month:mo, spentCents:ms[pk].spent, spentUSD:toUSD(ms[pk].spent), txCount:ms[pk].count };
-      return { pool:pk, month:mo, spentCents:0, spentUSD:"$0.00", txCount:0 };
-    }
-    case "month_total": {
-      const mo = query.month || mk, ms = s.monthlySummaries[mo];
-      if (ms && ms["_total"]) {
-        const mt = ms["_total"];
-        return { month:mo, spentCents:mt.spent, spentUSD:toUSD(mt.spent), earnedCents:mt.earned, earnedUSD:toUSD(mt.earned), txCount:mt.count };
-      }
-      return { month:mo, spentCents:0, spentUSD:"$0.00", earnedCents:0, earnedUSD:"$0.00", txCount:0 };
-    }
-    case "top_pools": {
-      const mo = query.month || mk, ms = s.monthlySummaries[mo] || {};
-      const pools = [];
-      for (const [k, v] of Object.entries(ms)) {
-        if (k.startsWith("_")) continue;
-        pools.push({ pool:k, spentCents:v.spent, spentUSD:toUSD(v.spent), txCount:v.count });
-      }
-      pools.sort((a, b) => b.spentCents - a.spentCents);
-      return { month:mo, pools };
-    }
-    case "search_spend": {
-      const kw = (query.keyword || "").toLowerCase(), days = query.days || 30;
-      const cut = new Date(t + "T00:00:00");
-      cut.setDate(cut.getDate() - days);
-      const cs = cut.toISOString().slice(0, 10);
-      let tot = 0, cnt = 0; const matches = [];
-      for (const tx of s.transactions) {
-        if (tx.date < cs) continue;
-        if (tx.type !== "transaction" && tx.type !== "refund") continue;
-        if (tx.description && tx.description.toLowerCase().includes(kw)) {
-          tot += tx.amountCents; cnt++;
-          matches.push({ date:tx.date, description:tx.description, amountUSD:toUSD(tx.amountCents) });
-        }
-      }
-      return { keyword:kw, days, count:cnt, spentCents:tot, spentUSD:toUSD(tot), matches:matches.slice(-20) };
-    }
-    case "daily_average": {
-      const txD = new Set(); let tot = 0;
-      for (const tx of s.transactions) {
-        if (tx.type === "transaction" || tx.type === "refund") {
-          tot += tx.amountCents; txD.add(tx.date);
-        }
-      }
-      const nd = Math.max(1, txD.size), avg = Math.round(tot / nd);
-      return { avgCents:avg, avgUSD:toUSD(avg), daysTracked:txD.size };
-    }
-    case "projection": {
-      const pic = computePicture(s);
-      if (!pic.setup) return { error: "Not set up yet" };
-      const dl = pic.daysLeft || 1;
-      const db = pic.cycleStats ? pic.cycleStats.dailyAvg : 0;
-      const proj = db * dl, free = pic.trulyFreeCents;
-      const v = free <= 0 ? "over_budget" : proj > free ? "tight" : "comfortable";
-      return { freeCents:free, freeUSD:toUSD(free), projectedSpendCents:proj, projectedSpendUSD:toUSD(proj), dailyBurnCents:db, dailyBurnUSD:toUSD(db), daysLeft:dl, verdict:v };
-    }
-    case "trend": {
-      if (s.cycleHistory.length === 0) return { trend: "no_history" };
-      const last = s.cycleHistory[s.cycleHistory.length - 1];
-      const pk = query.pool ? query.pool.toLowerCase().trim() : null;
-      if (pk) {
-        const lp = last.poolSpend[pk] || 0;
-        const pv = s.cycleHistory.length > 1 ? (s.cycleHistory[s.cycleHistory.length - 2].poolSpend[pk] || 0) : lp;
-        const pc = pv > 0 ? Math.round(((lp - pv) / pv) * 100) : 0;
-        return { pool:pk, direction:pc > 5 ? "up" : pc < -5 ? "down" : "stable", pctChange:pc, lastCycleCents:lp, lastCycleUSD:toUSD(lp) };
-      }
-      const lt = last.totalSpentCents;
-      const pv = s.cycleHistory.length > 1 ? s.cycleHistory[s.cycleHistory.length - 2].totalSpentCents : lt;
-      const pc = pv > 0 ? Math.round(((lt - pv) / pv) * 100) : 0;
-      return { direction:pc > 5 ? "up" : pc < -5 ? "down" : "stable", pctChange:pc, lastCycleCents:lt, lastCycleUSD:toUSD(lt), avgDailyUSD:toUSD(last.avgDailySpend) };
-    }
-    case "savings_history": {
-      const h = s.cycleHistory.map(c => ({ cycleEnd:c.cycleEnd, savedCents:c.savedCents, savedUSD:toUSD(c.savedCents) }));
-      return { currentSavingsCents:s.savingsCents, currentSavingsUSD:toUSD(s.savingsCents), rateBps:s.savingRateBps, history:h };
-    }
-    default: return { error: "Unknown query: " + query.type };
-  }
-}
+const { runQuery: _runQuery } = require("./vera-v2-query");
+function runQuery(state, query) { return _runQuery(state, query, computePicture, toMoney); }
 function computePicture(state) {
   const s = tickState(state);
   if (!s.setup) return { setup: false };
+  const sym = s.currencySymbol || "$";
+  const cur = s.currency || "USD";
   const dl = daysUntil(s.payday);
   const dic = s.cycleStart ? daysBetween(s.cycleStart, s.payday) : dl;
   const doc = Math.max(1, dic - dl + 1);
@@ -477,9 +398,9 @@ function computePicture(state) {
     billsRes += res;
     const dTo = d.nextDate ? daysUntil(d.nextDate) : null;
     drainList.push({
-      name:d.name, amountCents:d.amountCents, amountUSD:toUSDShort(d.amountCents),
+      name:d.name, amountCents:d.amountCents, amountUSD:toMoneyShort(d.amountCents, sym),
       nextDate:d.nextDate, daysUntilNext:dTo, isDue:d.isDue||false,
-      intervalDays:d.intervalDays||30, occurrences:occ, reservedCents:res, reservedUSD:toUSDShort(res),
+      intervalDays:d.intervalDays||30, occurrences:occ, reservedCents:res, reservedUSD:toMoneyShort(res, sym),
     });
   }
   let plannedTot = 0; const plannedList = [];
@@ -488,7 +409,7 @@ function computePicture(state) {
     if (!pp.active) continue;
     if (!pp.confirmed) plannedTot += pp.amountCents;
     plannedList.push({
-      name:pp.name, amountCents:pp.amountCents, amountUSD:toUSDShort(pp.amountCents),
+      name:pp.name, amountCents:pp.amountCents, amountUSD:toMoneyShort(pp.amountCents, sym),
       date:pp.date, confirmed:pp.confirmed, isDue:pp.isDue||false,
     });
   }
@@ -503,7 +424,7 @@ function computePicture(state) {
     poolList.push({
       name:p.name, key, type:p.type, totalCents:tot, remainingCents:rem,
       spentCents:p.spentCents, spentTodayCents:st, todayRemainingCents:tr,
-      totalUSD:toUSDShort(tot), remainingUSD:toUSDShort(rem), keywords:p.keywords,
+      totalUSD:toMoneyShort(tot, sym), remainingUSD:toMoneyShort(rem, sym), keywords:p.keywords,
     });
   }
   const free = s.balanceCents - billsRes - plannedTot - poolRes;
@@ -533,59 +454,62 @@ function computePicture(state) {
   const mk = monthKey(today()), mSnap = s.monthlySummaries[mk] || {};
   const moSpent = mSnap["_total"] ? mSnap["_total"].spent : 0;
   const avgTx = cyTxC > 0 ? Math.round(cySpent / cyTxC) : 0;
+  const M = c => toMoney(c, sym);
   const upBills = [];
   for (const dr of drainList) {
     if (dr.daysUntilNext !== null && dr.daysUntilNext <= 7)
       upBills.push({ name:dr.name, amt:dr.amountUSD, days:dr.daysUntilNext });
   }
   return {
-    setup: true,
-    balanceCents:s.balanceCents, balanceUSD:toUSD(s.balanceCents),
-    savingsCents:s.savingsCents, savingsUSD:toUSD(s.savingsCents),
+    setup: true, currency:cur, currencySymbol:sym,
+    balanceCents:s.balanceCents, balanceUSD:M(s.balanceCents),
+    savingsCents:s.savingsCents, savingsUSD:M(s.savingsCents),
     savingRateBps:s.savingRateBps,
-    trulyFreeCents:free, trulyFreeUSD:toUSD(free),
-    dailyFreePaceCents:dailyPace, dailyFreePaceUSD:toUSD(dailyPace),
-    freeRemainingTodayCents:freeToday, freeRemainingTodayUSD:toUSD(freeToday),
-    todaySpentCents:todayTot, todaySpentUSD:toUSD(todayTot), todayUnallocCents:todayUn,
-    billsReservedCents:billsRes, billsReservedUSD:toUSD(billsRes),
-    plannedTotalCents:plannedTot, plannedPurchasesUSD:toUSD(plannedTot),
-    poolReserveCents:poolRes, poolReserveUSD:toUSD(poolRes),
+    trulyFreeCents:free, trulyFreeUSD:M(free),
+    dailyFreePaceCents:dailyPace, dailyFreePaceUSD:M(dailyPace),
+    freeRemainingTodayCents:freeToday, freeRemainingTodayUSD:M(freeToday),
+    todaySpentCents:todayTot, todaySpentUSD:M(todayTot), todayUnallocCents:todayUn,
+    billsReservedCents:billsRes, billsReservedUSD:M(billsRes),
+    plannedTotalCents:plannedTot, plannedPurchasesUSD:M(plannedTot),
+    poolReserveCents:poolRes, poolReserveUSD:M(poolRes),
     daysLeft:dl, dayOfCycle:doc, daysInCycle:dic, payday:s.payday,
     drains:drainList, plannedPurchases:plannedList, pools:poolList,
-    weeklyFreePaceCents:wkPace, weeklyFreePaceUSD:toUSD(wkPace),
-    thisWeekSpentCents:wkSpent, thisWeekSpentUSD:toUSD(wkSpent),
-    thisMonthSpentCents:moSpent, thisMonthSpentUSD:toUSD(moSpent),
-    avgTransactionCents:avgTx, avgTransactionUSD:toUSD(avgTx),
+    weeklyFreePaceCents:wkPace, weeklyFreePaceUSD:M(wkPace),
+    thisWeekSpentCents:wkSpent, thisWeekSpentUSD:M(wkSpent),
+    thisMonthSpentCents:moSpent, thisMonthSpentUSD:M(moSpent),
+    avgTransactionCents:avgTx, avgTransactionUSD:M(avgTx),
     upcomingBills:upBills,
     checksumOk: (billsRes + plannedTot + poolRes + free) === s.balanceCents,
-    cycleStats: { totalSpent:cySpent, totalSpentUSD:toUSD(cySpent), dailyAvg:dAvg, dailyAvgUSD:toUSD(dAvg), txCount:cyTxC, daysInCycle:cyDays },
+    cycleStats: { totalSpent:cySpent, totalSpentUSD:M(cySpent), dailyAvg:dAvg, dailyAvgUSD:M(dAvg), txCount:cyTxC, daysInCycle:cyDays },
     monthlySnapshot:mSnap,
     transactions: s.transactions.slice(-20).reverse(),
   };
 }
 function buildSystemPrompt(state) {
   const pic = computePicture(state), s = state;
+  const sym = s.currencySymbol || "$";
+  const M = c => toMoney(c, sym);
   const ad = (a) => a.filter(x => x.active);
   const drn = Object.values(s.drains);
   const pps = Object.values(s.plannedPurchases || {});
   const pls = Object.values(s.pools);
   const snap = JSON.stringify({
-    setup:s.setup, recurring:s.recurring,
-    balance:toUSD(s.balanceCents), savings:toUSD(s.savingsCents),
+    setup:s.setup, recurring:s.recurring, currency:s.currency||"USD",
+    balance:M(s.balanceCents), savings:M(s.savingsCents),
     savingRate:(s.savingRateBps/100)+"%", payday:s.payday,
     daysLeft:pic.daysLeft??"?",
-    drains:ad(drn).map(d=>({name:d.name,amt:toUSD(d.amountCents),isDue:d.isDue||false,next:d.nextDate,interval:d.intervalDays})),
-    planned:ad(pps).map(p=>({name:p.name,amt:toUSD(p.amountCents),done:p.confirmed,date:p.date,isDue:p.isDue||false})),
+    drains:ad(drn).map(d=>({name:d.name,amt:M(d.amountCents),isDue:d.isDue||false,next:d.nextDate,interval:d.intervalDays})),
+    planned:ad(pps).map(p=>({name:p.name,amt:M(p.amountCents),done:p.confirmed,date:p.date,isDue:p.isDue||false})),
     dueBills:(s._dueBills||[]), duePlanned:(s._duePlanned||[]),
-    pools:ad(pls).map(p=>({name:p.name,type:p.type,daily:p.type==="daily"?toUSD(p.dailyCents):undefined,spent:toUSD(p.spentCents),kw:p.keywords})),
-    free:pic.trulyFreeCents!==undefined?toUSD(pic.trulyFreeCents):"?",
-    pace:pic.dailyFreePaceCents!==undefined?toUSD(pic.dailyFreePaceCents):"?",
-    freeToday:pic.freeRemainingTodayCents!==undefined?toUSD(pic.freeRemainingTodayCents):"?",
-    spentToday:pic.todaySpentCents!==undefined?toUSD(pic.todaySpentCents):"?",
+    pools:ad(pls).map(p=>({name:p.name,type:p.type,daily:p.type==="daily"?M(p.dailyCents):undefined,spent:M(p.spentCents),kw:p.keywords})),
+    free:pic.trulyFreeCents!==undefined?M(pic.trulyFreeCents):"?",
+    pace:pic.dailyFreePaceCents!==undefined?M(pic.dailyFreePaceCents):"?",
+    freeToday:pic.freeRemainingTodayCents!==undefined?M(pic.freeRemainingTodayCents):"?",
+    spentToday:pic.todaySpentCents!==undefined?M(pic.todaySpentCents):"?",
     weeklyPace:pic.weeklyFreePaceUSD||"?",
-    thisWeekSpent:pic.thisWeekSpentUSD||"$0.00",
-    thisMonthSpent:pic.thisMonthSpentUSD||"$0.00",
-    avgTx:pic.avgTransactionUSD||"$0.00",
+    thisWeekSpent:pic.thisWeekSpentUSD||sym+"0.00",
+    thisMonthSpent:pic.thisMonthSpentUSD||sym+"0.00",
+    avgTx:pic.avgTransactionUSD||sym+"0.00",
     upcomingBills:pic.upcomingBills||[],
     cycleStats:pic.cycleStats||null,
   });
@@ -594,9 +518,9 @@ function buildSystemPrompt(state) {
     "Be warm, concise, never judgmental. Sharp friend great with money.",
     "","STATE:", snap, "",
     "TODAY:" + today(), "",
-    "JOB: If not set up: need balance, income, payday. Ask for missing ones only.",
+    "JOB: If not set up: need balance, income, payday, saving rate. Ask for missing ones only.",
     "Users give multiple in one msg. 'I earn 13k on 25th monthly'=income+payday.",
-    "Send setup ONLY with ALL THREE. After setup: ask bills, then categories.",
+    "Send setup ONLY with ALL THREE (balance+income+payday). After: ask saving rate, then bills, categories.",
     "If set up: log spending, check free, manage finances.",
     "","ACTIONS (unused data=null):",
     "setup:balanceUSD,incomeUSD,savingRate(0-1),payday(YYYY-MM-DD future),recurring",
@@ -606,16 +530,20 @@ function buildSystemPrompt(state) {
     "add_pool:name,type(daily/monthly),dailyAmountUSD/allocatedUSD,keywords|remove_pool:name",
     "add_planned:name,amountUSD,date|remove_planned:name|confirm_planned:name",
     "income:amountUSD,description,nextPayday|correction:amountUSD",
-    "set_saving_rate:rate(0-1)|reset|none",
+    "set_saving_rate:rate(0-1)|set_savings:amountUSD|withdraw_savings:amountUSD,reason|reset|none",
+    "","SAVINGS: income auto-deducts savings at user's rate. ALWAYS tell user after income:",
+    "'Saved X (rate%), Y added to balance.' 'got paid'/'salary'->income NOT correction.",
+    "Users can: set_saving_rate, withdraw_savings, set_savings.",
     "","WATERFALL:Balance-Bills-Planned-Pools=Free. Bills reserve til payday.",
-    "isDue:true? ask confirm. NEVER calculate—engine does ALL math. Read numbers from state only.",
-    "weeklyPace,thisWeekSpent,thisMonthSpent,avgTx are pre-computed. Just quote them.",
+    "isDue:true? ask confirm. NEVER calculate—engine does ALL math. Read numbers from state.",
+    "weeklyPace,thisWeekSpent,thisMonthSpent,avgTx pre-computed. Just quote them.",
     "EX:'balance $2k'->none,ask income.'$5k/mo on 15th'->setup.'coffee $4.50'->transaction.",
+    "'got paid $5k'->income:5000. 'savings 15%'->set_saving_rate:0.15",
   ];
   return P.join("\n");
 }
 module.exports = {
-  toCents, toUSD, toUSDShort,
+  toCents, toMoney, toMoneyShort, toUSD, toUSDShort,
   today, daysUntil, daysBetween,
   monthKey, matchPool, countOccurrences,
   createFreshState, applyAction,

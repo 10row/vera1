@@ -48,9 +48,10 @@ async function callReview(state) {
   const pic = v2.computePicture(state);
   const lang = state.language || "en";
 
+  const sym = state.currencySymbol || "$";
   // Recent transactions — clean readable list
   const recentTxs = (pic.transactions || []).slice(0, 8).map(tx =>
-    `  ${tx.date} | ${v2.toUSD(tx.amountCents)} | ${tx.description || "unnamed"}`
+    `  ${tx.date} | ${v2.toMoney(tx.amountCents, sym)} | ${tx.description || "unnamed"}`
   ).join("\n");
 
   // Bills summary
@@ -77,8 +78,10 @@ PRE-COMPUTED FACTS (use these, NEVER recalculate):
 - Spent this month: ${pic.thisMonthSpentUSD}
 - Average transaction: ${pic.avgTransactionUSD}
 - Days left in cycle: ${pic.daysLeft} (Day ${pic.dayOfCycle} of ${pic.daysInCycle})
-- Cycle total spent: ${pic.cycleStats ? pic.cycleStats.totalSpentUSD : "$0"}
-- Cycle daily average: ${pic.cycleStats ? pic.cycleStats.dailyAvgUSD : "$0"}/day
+- Savings: ${pic.savingsUSD} (rate: ${(pic.savingRateBps / 100).toFixed(0)}%)
+- Currency: ${state.currency || "USD"}
+- Cycle total spent: ${pic.cycleStats ? pic.cycleStats.totalSpentUSD : sym + "0"}
+- Cycle daily average: ${pic.cycleStats ? pic.cycleStats.dailyAvgUSD : sym + "0"}/day
 - Bills: ${billsList || "none"}
 
 Recent transactions:
@@ -88,6 +91,7 @@ RULES:
 - Quote the pre-computed numbers above. NEVER do arithmetic.
 - Keep it under 100 words.
 - Don't list every number — pick the 2-3 most relevant insights.
+- If savings > 0, mention them positively. Remind user they can adjust their rate.
 - End with something actionable or encouraging.`;
 
   const userMsg = lang === "ru" ? "Как у меня дела?" : "How am I doing?";

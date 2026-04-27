@@ -6,223 +6,306 @@
 <title>SpendYes Admin</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0a0e17;--card:#141b2d;--border:#1e293b;--text:#e2e8f0;--dim:#64748b;--accent:#3b82f6;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--purple:#8b5cf6}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+:root{--bg:#0a0e17;--card:#141b2d;--card2:#1a2236;--border:#1e293b;--border2:#2d3a52;--text:#e2e8f0;--dim:#64748b;--dimmer:#475569;--accent:#3b82f6;--accent2:#60a5fa;--green:#10b981;--green2:#34d399;--red:#ef4444;--amber:#f59e0b;--purple:#8b5cf6;--purple2:#a78bfa;--cyan:#06b6d4}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
 /* ── NAV ── */
-.nav{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid var(--border);background:var(--card)}
-.nav h1{font-size:18px;font-weight:700;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.nav .status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
-.dot.ok{background:var(--green)}
-.dot.err{background:var(--red)}
-.nav button{background:none;border:1px solid var(--border);border-radius:8px;color:var(--dim);padding:6px 14px;font-size:13px;cursor:pointer}
-.nav button:hover{color:var(--text);border-color:var(--dim)}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 32px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#141b2d,#111827)}
+.nav-left{display:flex;align-items:center;gap:16px}
+.logo{font-size:20px;font-weight:800;background:linear-gradient(135deg,#60a5fa,#a78bfa,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.version{font-size:11px;color:var(--dimmer);background:var(--card2);padding:2px 8px;border-radius:4px;font-weight:500}
+.status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim);flex-shrink:0}
+.dot.ok{background:var(--green);box-shadow:0 0 8px #10b98166}
+.dot.err{background:var(--red);box-shadow:0 0 8px #ef444466}
+.nav-right{display:flex;align-items:center;gap:12px}
+.btn-ghost{background:none;border:1px solid var(--border);border-radius:8px;color:var(--dim);padding:6px 14px;font-size:12px;cursor:pointer;font-weight:500;transition:all .2s}
+.btn-ghost:hover{color:var(--text);border-color:var(--dimmer);background:var(--card2)}
+/* ── TOOLBAR ── */
+.toolbar{display:flex;align-items:center;justify-content:space-between;padding:12px 32px;border-bottom:1px solid #0f172a}
+.toolbar-left{font-size:12px;color:var(--dimmer)}
+.btn-primary{background:var(--accent);border:none;border-radius:8px;color:#fff;padding:7px 18px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-primary:hover{background:#2563eb;transform:translateY(-1px)}
 /* ── GRID ── */
-.dash{padding:24px 28px;display:grid;gap:20px;grid-template-columns:repeat(4,1fr)}
+.dash{padding:24px 32px;display:grid;gap:16px;grid-template-columns:repeat(4,1fr)}
 @media(max-width:1200px){.dash{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.dash{grid-template-columns:1fr;padding:16px}}
 /* ── CARDS ── */
-.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;overflow:hidden}
-.card.wide{grid-column:span 2}
-.card.full{grid-column:1/-1}
-.card h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:14px;font-weight:600}
-.big{font-size:32px;font-weight:700;line-height:1.1}
-.big.green{color:var(--green)}.big.blue{color:var(--accent)}.big.purple{color:var(--purple)}.big.amber{color:var(--amber)}
-.sub{font-size:13px;color:var(--dim);margin-top:4px}
-/* ── METRIC ROW ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;overflow:hidden;transition:border-color .2s}
+.card:hover{border-color:var(--border2)}
+.card.w2{grid-column:span 2}
+.card.w4{grid-column:1/-1}
+.card h2{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--dimmer);margin-bottom:14px;font-weight:600}
+.card .err-msg{color:var(--red);font-size:12px;opacity:.8}
+/* ── KPI ── */
+.kpi-val{font-size:36px;font-weight:800;line-height:1;letter-spacing:-1px}
+.kpi-sub{font-size:12px;color:var(--dimmer);margin-top:6px;font-weight:500}
+.kpi-val.green{color:var(--green)}.kpi-val.blue{color:var(--accent2)}.kpi-val.purple{color:var(--purple2)}.kpi-val.amber{color:var(--amber)}.kpi-val.cyan{color:var(--cyan)}
+/* ── METRICS ── */
 .metrics{display:flex;gap:20px;flex-wrap:wrap}
-.metric{flex:1;min-width:80px}
-.metric .val{font-size:20px;font-weight:700}
-.metric .lbl{font-size:12px;color:var(--dim);margin-top:2px}
+.metric{flex:1;min-width:90px}
+.metric .val{font-size:22px;font-weight:700;letter-spacing:-.5px}
+.metric .lbl{font-size:11px;color:var(--dimmer);margin-top:3px;font-weight:500}
 /* ── TABLE ── */
-.tbl{width:100%;border-collapse:collapse;font-size:13px}
-.tbl th{text-align:left;color:var(--dim);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--border)}
-.tbl td{padding:8px 10px;border-bottom:1px solid #0f172a}
-.tbl tr:hover td{background:#1a2235}
-.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
-.badge.on{background:#10b98122;color:var(--green)}
-.badge.off{background:#64748b22;color:var(--dim)}
+.tbl-wrap{overflow-x:auto;margin:0 -20px;padding:0 20px}
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{text-align:left;color:var(--dimmer);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid #0f172a;white-space:nowrap}
+.tbl tr:hover td{background:#1a223588}
+.mono{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dimmer)}
+.badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.3px}
+.badge.on{background:#10b98118;color:var(--green2);border:1px solid #10b98133}
+.badge.off{background:#64748b12;color:var(--dimmer);border:1px solid #64748b22}
+.badge.cur{background:#3b82f618;color:var(--accent2);border:1px solid #3b82f633;font-family:monospace}
 /* ── BAR CHART ── */
-.bars{display:flex;align-items:flex-end;gap:4px;height:100px;margin-top:10px}
-.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
-.bar{width:100%;border-radius:4px 4px 0 0;background:var(--accent);min-height:2px;transition:height .4s}
-.bar-lbl{font-size:10px;color:var(--dim)}
-/* ── PROGRESS ── */
-.prog-bg{height:8px;background:#1e293b;border-radius:4px;overflow:hidden;margin-top:8px}
-.prog-fill{height:100%;border-radius:4px;transition:width .4s}
-/* ── REFRESH ── */
-.refresh-bar{display:flex;align-items:center;justify-content:space-between;padding:0 28px}
-.refresh-bar span{font-size:12px;color:var(--dim)}
-.refresh-bar button{background:var(--accent);border:none;border-radius:8px;color:#fff;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;margin:12px 0}
-.refresh-bar button:hover{opacity:.85}
-/* ── RANK LIST ── */
+.bars{display:flex;align-items:flex-end;gap:3px;height:110px;margin-top:8px;padding-bottom:20px;position:relative}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative}
+.bar{width:100%;border-radius:3px 3px 0 0;min-height:2px;transition:height .5s cubic-bezier(.4,0,.2,1);position:relative}
+.bar.tx{background:linear-gradient(180deg,var(--accent),#2563eb)}
+.bar.sp{background:linear-gradient(180deg,var(--purple),#6d28d9);opacity:.7}
+.bar-lbl{font-size:9px;color:var(--dimmer);position:absolute;bottom:-16px;white-space:nowrap}
+.bar-tip{font-size:9px;color:var(--dim);position:absolute;top:-14px}
+/* ── RANK ── */
 .rank{list-style:none;padding:0}
-.rank li{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #0f172a;font-size:13px}
+.rank li{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #0f172a;font-size:13px}
 .rank li:last-child{border:none}
-.rank .rk-name{color:var(--text)}.rank .rk-val{color:var(--dim);font-weight:600}
+.rank .rn{color:var(--text);font-weight:500}
+.rank .rv{color:var(--dimmer);font-weight:600;font-family:monospace;font-size:12px}
+/* ── PROGRESS ── */
+.prog{height:6px;background:#1e293b;border-radius:3px;overflow:hidden;margin-top:8px}
+.prog-bar{height:100%;border-radius:3px;transition:width .5s}
+/* ── EMPTY ── */
+.empty{color:var(--dimmer);font-size:12px;text-align:center;padding:24px 0}
 /* ── LOADING ── */
-.loading{text-align:center;color:var(--dim);padding:40px;font-size:14px}
+.loading{text-align:center;color:var(--dimmer);padding:60px;font-size:14px}
+.loading .spin{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .6s linear infinite;margin-bottom:12px}
+@keyframes sp{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 <nav class="nav">
-  <h1>SpendYes Admin</h1>
-  <div class="status"><div class="dot" id="hDot"></div><span id="hText">Checking...</span></div>
-  <button onclick="logout()">Sign Out</button>
+  <div class="nav-left">
+    <span class="logo">SpendYes</span>
+    <span class="version">ADMIN v2</span>
+  </div>
+  <div class="status"><div class="dot" id="hDot"></div><span id="hTxt">Connecting...</span></div>
+  <div class="nav-right">
+    <span id="clock" style="font-size:11px;color:var(--dimmer);font-family:monospace"></span>
+    <button class="btn-ghost" onclick="logout()">Sign Out</button>
+  </div>
 </nav>
-<div class="refresh-bar">
-  <span id="lastRefresh">Loading...</span>
-  <button onclick="loadAll()">Refresh</button>
+<div class="toolbar">
+  <div class="toolbar-left" id="lastRefresh">Initializing...</div>
+  <button class="btn-primary" onclick="loadAll()">Refresh</button>
 </div>
-<div class="dash" id="dash"><div class="loading">Loading dashboard...</div></div>
+<div class="dash" id="dash">
+  <div class="loading" style="grid-column:1/-1"><div class="spin"></div><br>Loading dashboard...</div>
+</div>
 
 <script>
-const $ = s => document.querySelector(s);
-const fmt = (n) => parseFloat(n).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
-const fmtI = (n) => parseInt(n).toLocaleString();
+const $=s=>document.querySelector(s);
+const fmt=n=>parseFloat(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtI=n=>parseInt(n||0).toLocaleString();
+const fmtC=(n,sym)=>(sym||"$")+fmt(n);
 
-async function api(path) {
-  const r = await fetch("/admin/api/" + path);
-  if (r.status === 401 || r.redirected) { window.location.href = "/admin/login"; return null; }
-  return r.json();
-}
-async function logout() {
-  await fetch("/admin/logout", {method:"POST"});
-  window.location.href = "/admin/login";
-}
+// Clock
+setInterval(()=>{const d=new Date();$("#clock").textContent=d.toLocaleTimeString()},1000);
 
-async function loadAll() {
-  const [ov, costs, users, activity, fin, health] = await Promise.all([
-    api("overview"), api("costs"), api("users"), api("activity?days=14"), api("financial"), api("health"),
+async function api(path){
+  try{
+    const r=await fetch("/admin/api/"+path);
+    if(r.status===401||r.redirected){window.location.href="/admin/login";return null}
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    return await r.json();
+  }catch(e){console.error("API /"+path+":",e);return{_error:e.message}}
+}
+async function logout(){await fetch("/admin/logout",{method:"POST"});window.location.href="/admin/login"}
+
+async function loadAll(){
+  $("#lastRefresh").textContent="Refreshing...";
+  const [ov,costs,users,activity,fin,health]=await Promise.all([
+    api("overview"),api("costs"),api("users"),api("activity?days=14"),api("financial"),api("health"),
   ]);
-  if (!ov) return;
+  if(ov===null)return; // redirected to login
   renderHealth(health);
-  renderDash(ov, costs, users, activity, fin);
-  $("#lastRefresh").textContent = "Last refresh: " + new Date().toLocaleTimeString();
+  renderDash(ov,costs,users,activity,fin);
+  $("#lastRefresh").textContent="Updated "+new Date().toLocaleTimeString();
 }
 
-function renderHealth(h) {
-  const dot = $("#hDot"), txt = $("#hText");
-  if (h.db === "connected") { dot.className = "dot ok"; txt.textContent = "DB connected"; }
-  else { dot.className = "dot err"; txt.textContent = "DB disconnected"; }
+function renderHealth(h){
+  const dot=$("#hDot"),txt=$("#hTxt");
+  if(!h||h._error){dot.className="dot err";txt.textContent="Error: "+(h?._error||"unknown");return}
+  if(h.db==="connected"){dot.className="dot ok";txt.textContent="DB connected"}
+  else{dot.className="dot err";txt.textContent="DB disconnected"}
 }
 
-function renderDash(ov, costs, users, activity, fin) {
-  let html = "";
-  // Row 1: Overview KPIs
-  html += kpiCard("Total Users", ov.totalUsers, "blue");
-  html += kpiCard("Setup Complete", ov.setupUsers, "green", ov.setupRate + "% conversion");
-  html += kpiCard("Active (7d)", ov.active7d, "purple");
-  html += kpiCard("Active (30d)", ov.active30d, "amber");
+function err(label){return`<div class="err-msg">Failed to load ${label}</div>`}
+function ok(d){return d&&!d._error}
 
-  // Row 2: Cost overview
-  html += `<div class="card wide"><h2>API Costs</h2><div class="metrics">
-    <div class="metric"><div class="val green">$${costs.today.costUSD}</div><div class="lbl">Today (${fmtI(costs.today.calls)} calls)</div></div>
-    <div class="metric"><div class="val blue">$${costs.week.costUSD}</div><div class="lbl">This Week</div></div>
-    <div class="metric"><div class="val purple">$${costs.month.costUSD}</div><div class="lbl">This Month</div></div>
-    <div class="metric"><div class="val amber">$${costs.total.costUSD}</div><div class="lbl">All Time</div></div>
-  </div></div>`;
+function renderDash(ov,costs,users,activity,fin){
+  let h="";
 
-  // Cost by model
-  html += `<div class="card"><h2>Cost by Model</h2><ul class="rank">`;
-  for (const m of costs.byModel) html += `<li><span class="rk-name">${m.model}</span><span class="rk-val">$${m.costUSD} (${fmtI(m.calls)})</span></li>`;
-  if (!costs.byModel.length) html += `<li><span class="rk-name" style="color:var(--dim)">No data yet</span><span class="rk-val"></span></li>`;
-  html += `</ul></div>`;
-
-  // Cost by endpoint
-  html += `<div class="card"><h2>Cost by Endpoint</h2><ul class="rank">`;
-  for (const e of costs.byEndpoint) html += `<li><span class="rk-name">${e.endpoint}</span><span class="rk-val">$${e.costUSD} (${fmtI(e.calls)})</span></li>`;
-  if (!costs.byEndpoint.length) html += `<li><span class="rk-name" style="color:var(--dim)">No data yet</span><span class="rk-val"></span></li>`;
-  html += `</ul></div>`;
-
-  // Activity chart
-  html += `<div class="card wide"><h2>Daily Activity (14 days)</h2><div class="bars" id="actBars">`;
-  const maxTx = Math.max(1, ...activity.map(d => d.txCount));
-  for (const d of activity) {
-    const h = Math.max(2, Math.round(d.txCount / maxTx * 90));
-    html += `<div class="bar-col"><div class="bar" style="height:${h}px" title="${d.txCount} txs"></div><div class="bar-lbl">${d.date.slice(5)}</div></div>`;
+  // ── ROW 1: KPIs ──
+  if(ok(ov)){
+    h+=kpi("Total Users",ov.totalUsers,"blue");
+    h+=kpi("Setup Complete",ov.setupUsers,"green",ov.setupRate+"% conversion");
+    h+=kpi("Active 7d",ov.active7d,"purple");
+    h+=kpi("Active 30d",ov.active30d,"cyan");
+  }else{
+    h+=`<div class="card w4">${err("overview")}</div>`;
   }
-  if (!activity.length) html += `<div style="color:var(--dim);padding:30px">No activity yet</div>`;
-  html += `</div></div>`;
 
-  // Financial aggregates
-  html += `<div class="card"><h2>Platform Financials</h2><div class="metrics" style="flex-direction:column;gap:10px">
-    <div class="metric"><div class="val green">$${fmt(fin.totalBalanceUSD)}</div><div class="lbl">Total Balances</div></div>
-    <div class="metric"><div class="val purple">$${fmt(fin.totalSavingsUSD)}</div><div class="lbl">Total Savings</div></div>
-    <div class="metric"><div class="val blue">$${fmt(fin.avgIncomeUSD)}</div><div class="lbl">Avg Income</div></div>
-    <div class="metric"><div class="val amber">${fin.avgSavingRate}</div><div class="lbl">Avg Saving Rate</div></div>
-  </div></div>`;
+  // ── ROW 2: Costs ──
+  if(ok(costs)){
+    h+=`<div class="card w2"><h2>API Costs</h2><div class="metrics">
+      <div class="metric"><div class="val green">$${costs.today.costUSD}</div><div class="lbl">Today &middot; ${fmtI(costs.today.calls)} calls</div></div>
+      <div class="metric"><div class="val blue">$${costs.week.costUSD}</div><div class="lbl">7 Days</div></div>
+      <div class="metric"><div class="val purple">$${costs.month.costUSD}</div><div class="lbl">30 Days</div></div>
+      <div class="metric"><div class="val amber">$${costs.total.costUSD}</div><div class="lbl">All Time</div></div>
+    </div></div>`;
 
-  // Top categories
-  html += `<div class="card"><h2>Top Spending Categories</h2><ul class="rank">`;
-  for (const p of fin.topPools) html += `<li><span class="rk-name">${p.name}</span><span class="rk-val">$${fmt(p.spentUSD)} (${p.users})</span></li>`;
-  if (!fin.topPools.length) html += `<li><span class="rk-name" style="color:var(--dim)">No pools yet</span><span class="rk-val"></span></li>`;
-  html += `</ul></div>`;
+    h+=`<div class="card"><h2>By Model</h2><ul class="rank">`;
+    if(costs.byModel.length)for(const m of costs.byModel)h+=`<li><span class="rn">${shortModel(m.model)}</span><span class="rv">$${m.costUSD} &middot; ${fmtI(m.calls)}</span></li>`;
+    else h+=`<li class="empty">No data yet</li>`;
+    h+=`</ul></div>`;
 
-  // Engagement metrics
-  html += `<div class="card wide"><h2>Engagement</h2><div class="metrics">
-    <div class="metric"><div class="val blue">${fmtI(ov.totalTransactions)}</div><div class="lbl">Total Transactions</div></div>
-    <div class="metric"><div class="val purple">${fmtI(ov.totalMessages)}</div><div class="lbl">Total Messages</div></div>
-    <div class="metric"><div class="val green">${users.length > 0 ? (ov.totalTransactions / users.length).toFixed(1) : 0}</div><div class="lbl">Avg Txs / User</div></div>
-    <div class="metric"><div class="val amber">${users.length > 0 ? (ov.totalMessages / users.length).toFixed(1) : 0}</div><div class="lbl">Avg Msgs / User</div></div>
-  </div>`;
-  // Language breakdown
-  if (ov.languages.length) {
-    html += `<div style="margin-top:16px"><h2 style="font-size:12px;color:var(--dim);margin-bottom:8px">LANGUAGE BREAKDOWN</h2>`;
-    for (const l of ov.languages) {
-      const pct = ov.setupUsers > 0 ? Math.round(l.count / ov.setupUsers * 100) : 0;
-      html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="font-size:13px;width:30px">${l.lang.toUpperCase()}</span><div class="prog-bg" style="flex:1"><div class="prog-fill" style="width:${pct}%;background:var(--accent)"></div></div><span style="font-size:12px;color:var(--dim)">${l.count} (${pct}%)</span></div>`;
-    }
-    html += `</div>`;
+    h+=`<div class="card"><h2>By Endpoint</h2><ul class="rank">`;
+    if(costs.byEndpoint.length)for(const e of costs.byEndpoint)h+=`<li><span class="rn">${e.endpoint}</span><span class="rv">$${e.costUSD} &middot; ${fmtI(e.calls)}</span></li>`;
+    else h+=`<li class="empty">No data yet</li>`;
+    h+=`</ul></div>`;
+  }else{
+    h+=`<div class="card w4"><h2>API Costs</h2>${err("costs — ApiLog table may need migration")}</div>`;
   }
-  html += `</div>`;
 
-  // Top bills
-  html += `<div class="card"><h2>Common Bills</h2><ul class="rank">`;
-  for (const d of fin.topDrains) html += `<li><span class="rk-name">${d.name}</span><span class="rk-val">$${fmt(d.amountUSD)} (${d.users})</span></li>`;
-  if (!fin.topDrains.length) html += `<li><span class="rk-name" style="color:var(--dim)">No bills yet</span><span class="rk-val"></span></li>`;
-  html += `</ul></div>`;
+  // ── ROW 3: Activity + Financials ──
+  if(ok(activity)){
+    h+=`<div class="card w2"><h2>Daily Activity &middot; 14 Days</h2>`;
+    if(activity.length){
+      const maxTx=Math.max(1,...activity.map(d=>d.txCount));
+      h+=`<div class="bars">`;
+      for(const d of activity){
+        const ht=Math.max(3,Math.round(d.txCount/maxTx*90));
+        h+=`<div class="bar-col"><div class="bar-tip">${d.txCount||""}</div><div class="bar tx" style="height:${ht}px"></div><div class="bar-lbl">${d.date.slice(5)}</div></div>`;
+      }
+      h+=`</div>`;
+    }else h+=`<div class="empty">No activity yet</div>`;
+    h+=`</div>`;
+  }else{
+    h+=`<div class="card w2"><h2>Activity</h2>${err("activity")}</div>`;
+  }
 
-  // User table
-  html += `<div class="card full"><h2>All Users</h2>`;
-  if (users.length) {
-    html += `<div style="overflow-x:auto"><table class="tbl"><thead><tr>
-      <th>ID</th><th>Telegram</th><th>Status</th><th>Lang</th><th>Balance</th><th>Income</th><th>Savings</th><th>Txs</th><th>Msgs</th><th>Created</th><th>Last Active</th>
-    </tr></thead><tbody>`;
-    for (const u of users) {
-      const ago = timeAgo(u.lastActive);
-      html += `<tr>
-        <td style="font-family:monospace;font-size:11px">${u.id.slice(0,8)}...</td>
-        <td>${u.telegramId || '<span style="color:var(--dim)">web</span>'}</td>
-        <td><span class="badge ${u.setup?'on':'off'}">${u.setup?'Setup':'Pending'}</span></td>
-        <td>${u.language.toUpperCase()}</td>
-        <td>$${fmt(u.balanceUSD)}</td><td>$${fmt(u.incomeUSD)}</td><td>$${fmt(u.savingsUSD)}</td>
-        <td>${u.txCount}</td><td>${u.msgCount}</td>
-        <td style="font-size:12px;color:var(--dim)">${new Date(u.createdAt).toLocaleDateString()}</td>
-        <td style="font-size:12px;color:var(--dim)">${ago}</td>
-      </tr>`;
+  if(ok(fin)){
+    h+=`<div class="card"><h2>Platform Financials</h2><div class="metrics" style="flex-direction:column;gap:12px">
+      <div class="metric"><div class="val green">$${fmt(fin.totalBalanceUSD)}</div><div class="lbl">Total Balances</div></div>
+      <div class="metric"><div class="val purple">$${fmt(fin.totalSavingsUSD)}</div><div class="lbl">Total Savings</div></div>
+      <div class="metric"><div class="val blue">$${fmt(fin.avgIncomeUSD)}</div><div class="lbl">Avg Income</div></div>
+      <div class="metric"><div class="val amber">${fin.avgSavingRate}</div><div class="lbl">Avg Saving Rate</div></div>
+    </div></div>`;
+
+    h+=`<div class="card"><h2>Top Spending Pools</h2><ul class="rank">`;
+    if(fin.topPools.length)for(const p of fin.topPools)h+=`<li><span class="rn">${p.name}</span><span class="rv">$${fmt(p.spentUSD)} &middot; ${p.users}u</span></li>`;
+    else h+=`<li class="empty">No pools yet</li>`;
+    h+=`</ul></div>`;
+  }else{
+    h+=`<div class="card w2"><h2>Financials</h2>${err("financial data")}</div>`;
+  }
+
+  // ── ROW 4: Engagement + Languages ──
+  if(ok(ov)){
+    const ul=ok(users)?users:[];
+    const n=ul.length||1;
+    h+=`<div class="card w2"><h2>Engagement</h2><div class="metrics">
+      <div class="metric"><div class="val blue">${fmtI(ov.totalTransactions)}</div><div class="lbl">Transactions</div></div>
+      <div class="metric"><div class="val purple">${fmtI(ov.totalMessages)}</div><div class="lbl">Messages</div></div>
+      <div class="metric"><div class="val green">${(ov.totalTransactions/n).toFixed(1)}</div><div class="lbl">Avg Txs/User</div></div>
+      <div class="metric"><div class="val amber">${(ov.totalMessages/n).toFixed(1)}</div><div class="lbl">Avg Msgs/User</div></div>
+    </div>`;
+    if(ov.languages&&ov.languages.length){
+      h+=`<div style="margin-top:18px"><h2 style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--dimmer);font-weight:600;margin-bottom:10px">Languages</h2>`;
+      for(const l of ov.languages){
+        const pct=ov.setupUsers>0?Math.round(l.count/ov.setupUsers*100):0;
+        const flag=l.lang==="ru"?"RU":l.lang==="en"?"EN":l.lang.toUpperCase();
+        h+=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:700;width:28px;color:var(--text)">${flag}</span>
+          <div class="prog" style="flex:1"><div class="prog-bar" style="width:${Math.max(pct,4)}%;background:linear-gradient(90deg,var(--accent),var(--purple))"></div></div>
+          <span style="font-size:11px;color:var(--dimmer);min-width:60px;text-align:right">${l.count} (${pct}%)</span>
+        </div>`;
+      }
+      h+=`</div>`;
     }
-    html += `</tbody></table></div>`;
-  } else html += `<div style="color:var(--dim);padding:20px;text-align:center">No users yet</div>`;
-  html += `</div>`;
+    h+=`</div>`;
+  }
 
-  $("#dash").innerHTML = html;
+  if(ok(fin)){
+    h+=`<div class="card"><h2>Common Bills</h2><ul class="rank">`;
+    if(fin.topDrains.length)for(const d of fin.topDrains)h+=`<li><span class="rn">${d.name}</span><span class="rv">$${fmt(d.amountUSD)} &middot; ${d.users}u</span></li>`;
+    else h+=`<li class="empty">No bills yet</li>`;
+    h+=`</ul></div>`;
+  }
+
+  // ── ROW 5: User table ──
+  if(ok(users)){
+    h+=`<div class="card w4"><h2>All Users &middot; ${users.length} total</h2>`;
+    if(users.length){
+      h+=`<div class="tbl-wrap"><table class="tbl"><thead><tr>
+        <th>ID</th><th>Telegram</th><th>Status</th><th>Lang</th><th>Currency</th>
+        <th>Balance</th><th>Income</th><th>Savings</th><th>Rate</th>
+        <th>Txs</th><th>Msgs</th><th>Bills</th><th>Pools</th>
+        <th>Created</th><th>Last Active</th>
+      </tr></thead><tbody>`;
+      for(const u of users){
+        const ago=timeAgo(u.lastActive);
+        const sym=u.currencySymbol||"$";
+        const cur=u.currency||"USD";
+        h+=`<tr>
+          <td class="mono">${u.id.slice(0,8)}</td>
+          <td>${u.telegramId||'<span style="color:var(--dimmer)">web</span>'}</td>
+          <td><span class="badge ${u.setup?"on":"off"}">${u.setup?"SETUP":"PENDING"}</span></td>
+          <td style="font-weight:600">${(u.language||"en").toUpperCase()}</td>
+          <td><span class="badge cur">${cur}</span></td>
+          <td>${sym}${fmt(u.balanceUSD)}</td>
+          <td>${sym}${fmt(u.incomeUSD)}</td>
+          <td>${sym}${fmt(u.savingsUSD)}</td>
+          <td style="color:var(--dimmer)">${u.savingRate}</td>
+          <td>${u.txCount}</td><td>${u.msgCount}</td>
+          <td>${u.drainCount}</td><td>${u.poolCount}</td>
+          <td class="mono">${new Date(u.createdAt).toLocaleDateString()}</td>
+          <td style="color:${agoColor(u.lastActive)}">${ago}</td>
+        </tr>`;
+      }
+      h+=`</tbody></table></div>`;
+    }else h+=`<div class="empty">No users yet</div>`;
+    h+=`</div>`;
+  }else{
+    h+=`<div class="card w4"><h2>Users</h2>${err("users")}</div>`;
+  }
+
+  $("#dash").innerHTML=h;
 }
 
-function kpiCard(label, value, color, sub) {
-  return `<div class="card"><h2>${label}</h2><div class="big ${color}">${fmtI(value)}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
+function kpi(label,value,color,sub){
+  return`<div class="card"><h2>${label}</h2><div class="kpi-val ${color}">${fmtI(value)}</div>${sub?`<div class="kpi-sub">${sub}</div>`:""}</div>`;
 }
-
-function timeAgo(d) {
-  const s = Math.floor((Date.now() - new Date(d)) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return Math.floor(s/60) + "m ago";
-  if (s < 86400) return Math.floor(s/3600) + "h ago";
-  return Math.floor(s/86400) + "d ago";
+function shortModel(m){
+  if(m.includes("gpt-4o-mini"))return"GPT-4o Mini";
+  if(m.includes("claude-sonnet"))return"Claude Sonnet";
+  if(m.includes("claude-haiku"))return"Claude Haiku";
+  return m.length>20?m.slice(0,18)+"...":m;
+}
+function timeAgo(d){
+  if(!d)return"never";
+  const s=Math.floor((Date.now()-new Date(d))/1000);
+  if(s<60)return"just now";if(s<3600)return Math.floor(s/60)+"m ago";
+  if(s<86400)return Math.floor(s/3600)+"h ago";return Math.floor(s/86400)+"d ago";
+}
+function agoColor(d){
+  if(!d)return"var(--dimmer)";
+  const h=(Date.now()-new Date(d))/3600000;
+  if(h<24)return"var(--green)";if(h<72)return"var(--accent2)";
+  if(h<168)return"var(--amber)";return"var(--dimmer)";
 }
 
 loadAll();
-setInterval(loadAll, 60000);
+setInterval(loadAll,60000);
 </script>
 </body>
 </html>
