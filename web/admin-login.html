@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SpendYes Admin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0e17;color:#e2e8f0;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.card{background:#141b2d;border:1px solid #1e293b;border-radius:16px;padding:40px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+h1{font-size:22px;font-weight:700;text-align:center;margin-bottom:6px;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sub{text-align:center;color:#64748b;font-size:13px;margin-bottom:28px}
+label{display:block;font-size:13px;color:#94a3b8;margin-bottom:6px;font-weight:500}
+input{width:100%;padding:12px 14px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;color:#e2e8f0;font-size:15px;margin-bottom:18px;outline:none;transition:border .2s}
+input:focus{border-color:#60a5fa}
+button{width:100%;padding:13px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border:none;border-radius:10px;color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .2s}
+button:hover{opacity:.9}
+.err{color:#f87171;font-size:13px;text-align:center;margin-top:12px;display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>SpendYes Admin</h1>
+  <p class="sub">Enter credentials to continue</p>
+  <form id="f">
+    <label>Username</label>
+    <input id="u" type="text" autocomplete="username" required>
+    <label>Password</label>
+    <input id="p" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign In</button>
+  </form>
+  <div class="err" id="e"></div>
+</div>
+<script>
+document.getElementById("f").onsubmit=async e=>{
+  e.preventDefault();
+  const el=document.getElementById("e");el.style.display="none";
+  try{
+    const r=await fetch("/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user:document.getElementById("u").value,pass:document.getElementById("p").value})});
+    if(r.ok){window.location.href="/admin/";}
+    else{const d=await r.json();el.textContent=d.error||"Invalid";el.style.display="block";}
+  }catch{el.textContent="Connection error";el.style.display="block";}
+};
+</script>
+</body>
+</html>

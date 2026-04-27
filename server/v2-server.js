@@ -2,16 +2,15 @@
 require("dotenv").config();
 const express = require("express");
 const path = require("path");
-const Anthropic = require("@anthropic-ai/sdk").default;
 const OpenAI = require("openai");
 const v2 = require("./vera-v2");
 const { responseSchema } = require("./openai-schema");
 const prisma = require("./db/client");
 const db = require("./db/queries");
+const { router: adminRouter, logApiCall } = require("./admin");
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const openai = new OpenAI();
 const tokenCache = {};
 
@@ -63,6 +62,8 @@ app.post("/api/v2/chat/:sid", async (req, res) => {
         messages: [{ role: "system", content: v2.buildSystemPrompt(st) }, ...hist],
       });
       const text = resp.choices?.[0]?.message?.content ?? "";
+      const usage = resp.usage || {};
+      logApiCall(uid, "gpt-4o-mini", usage.prompt_tokens||0, usage.completion_tokens||0, "chat").catch(()=>{});
       let parsed;
       try { parsed = JSON.parse(text); } catch { parsed = { message: text, actions: [{ type: "none" }] }; }
       st.conversationHistory.push({ role: "user", content: message });
@@ -105,6 +106,8 @@ app.post("/api/v2/reset/:sid", async (req, res) => {
   } catch (e) { console.error("Reset err:", e.message); res.status(500).json({ error: e.message }); }
 });
 
+app.use("/admin", adminRouter);
+
 app.get("/health", async (req, res) => {
   try { await prisma.$queryRaw`SELECT 1`; res.json({ status: "ok", db: "connected", ts: new Date().toISOString() }); }
   catch { res.status(500).json({ status: "error", db: "disconnected", ts: new Date().toISOString() }); }
@@ -127,7 +130,6 @@ if (bot && process.env.BOT_TOKEN) {
 
 app.listen(PORT, async () => {
   console.log("SpendYes v2 on http://localhost:" + PORT);
-  if (!process.env.ANTHROPIC_API_KEY) console.log("  WARNING: No ANTHROPIC_API_KEY");
   if (bot && process.env.BOT_TOKEN) {
     if (process.env.WEBHOOK_URL) {
       try {
@@ -146,4 +148,5 @@ app.listen(PORT, async () => {
     if (h % 6 === 0) await runBillAlerts();
   }, 3600000);
   console.log("  Scheduler: briefings 8AM UTC, bills q6h");
+  console.log("  Admin dashboard: /admin");
 });
