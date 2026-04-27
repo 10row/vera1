@@ -9,6 +9,7 @@ const Anthropic =
   require("@anthropic-ai/sdk").default;
 const OpenAI = require("openai");
 const v2 = require("./vera-v2");
+const { responseSchema } = require("./openai-schema");
 const prisma = require("./db/client");
 const db = require("./db/queries");
 
@@ -108,7 +109,7 @@ app.post("/api/v2/chat/:sid", async (req, res) => {
         const resp = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           max_tokens: 1024,
-          response_format: { type: "json_object" },
+          response_format: { type: "json_schema", json_schema: responseSchema },
           messages: [
             { role: "system", content: v2.buildSystemPrompt(st) },
             ...hist,
