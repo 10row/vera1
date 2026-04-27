@@ -534,8 +534,8 @@ function buildSystemPrompt(state) {
     "SAVINGS: income auto-deducts at rate. Tell user 'Saved X (Y%), Z added.'",
     "'got paid'->income NOT correction. set_saving_rate/withdraw_savings/set_savings.",
     "","WATERFALL:Balance-Bills-Planned-Pools=Free. NEVER calculate, engine does math.",
-    "isDue:true? ask confirm. Quote pre-computed numbers only.",
-    "EX:'$5k/mo on 15th'->setup.'coffee $4.50'->transaction.'got paid $5k'->income:5000",
+    "ACT FAST: user says bill->add_drain. isDue->confirm_payment. Don't ask, DO it, tell user.",
+    "EX:'rent $1200 due 5th'->add_drain immediately. 'coffee $4'->transaction.'got paid'->income",
   ];
   return P.join("\n");
 }

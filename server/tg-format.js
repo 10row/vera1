@@ -111,8 +111,6 @@ const S = {
     thisWeek: "За неделю",
     recent: "Последние",
     upcoming: "Скоро",
-    feedWeekLabel: "Эта неделя",
-    feedMonthLabel: "Этот месяц",
     savings: "Накопления",
     savingRate: "Отложить",
     payday: "Зарплата",
@@ -135,82 +133,72 @@ function detectLang(ctx) {
 function formatPicture(pic, lang) {
   if (!pic.setup) return t(lang, "notSetup");
   const sym = pic.currencySymbol || "$";
-  const f = (c) => fmt(c, sym).padStart(8);
-  const L = (label, w) => (label + " ".repeat(Math.max(1, w - label.length))).slice(0, w);
-  const lines = ["```"];
-  lines.push(L(t(lang, "balance"), 11) + f(pic.balanceCents));
-  lines.push("─".repeat(25));
-  if (pic.drains.length) {
-    lines.push(t(lang, "bills") + "    − " + f(pic.billsReservedCents));
-    for (const d of pic.drains) {
-      const daysStr = d.daysUntilNext != null ? " " + d.daysUntilNext + t(lang, "days") : "";
-      const dueMarker = d.isDue ? " !" : "";
-      lines.push("  " + d.name.slice(0, 10).padEnd(10) + " " + fmt(d.amountCents || 0, sym).padStart(6) + daysStr + dueMarker);
-    }
-  } else {
-    lines.push(L(t(lang, "bills"), 11) + "− " + f(0));
-  }
-  const activePlanned = pic.plannedPurchases.filter(p => !p.confirmed);
-  if (activePlanned.length) {
-    lines.push(L(t(lang, "planned"), 11) + "− " + f(pic.plannedTotalCents));
-    for (const p of activePlanned) {
-      const dateStr = p.date ? " " + p.date.slice(5) : "";
-      lines.push("  " + p.name.slice(0, 10).padEnd(10) + " " + fmt(p.amountCents || 0, sym).padStart(6) + dateStr);
-    }
-  } else {
-    lines.push(L(t(lang, "planned"), 11) + "− " + f(pic.plannedTotalCents));
-  }
-  lines.push(L(t(lang, "pools"), 11) + "− " + f(pic.poolReserveCents));
-  lines.push("─".repeat(25));
-  lines.push(L(t(lang, "free"), 11) + f(pic.trulyFreeCents));
-  lines.push(L(t(lang, "freeToday"), 11) + f(pic.freeRemainingTodayCents));
-  lines.push(L(t(lang, "dailyPace"), 11) + f(pic.dailyFreePaceCents));
-  lines.push(L(t(lang, "weeklyPace"), 11) + f(pic.weeklyFreePaceCents));
-  lines.push(L(t(lang, "thisWeek"), 11) + f(pic.thisWeekSpentCents));
-  lines.push("─".repeat(25));
-  lines.push(L(t(lang, "payday"), 11) + (pic.payday || "?") + "  " + pic.daysLeft + t(lang, "days"));
+  const f = (c) => fmt(c, sym);
+  const lines = [];
+
+  // Headline — the number that matters most
+  lines.push("*" + t(lang, "freeToday") + ": " + f(pic.freeRemainingTodayCents) + "*");
+  lines.push(t(lang, "dailyPace") + " " + f(pic.dailyFreePaceCents) + " · " + pic.daysLeft + " " + t(lang, "daysWord"));
+  lines.push("");
+
+  // Waterfall breakdown
+  const R = (label, val) => label.padEnd(12) + f(val).padStart(10);
+  lines.push("```");
+  lines.push(R(t(lang, "balance"), pic.balanceCents));
+  if (pic.billsReservedCents > 0) lines.push(R("- " + t(lang, "bills"), pic.billsReservedCents));
+  if (pic.plannedTotalCents > 0) lines.push(R("- " + t(lang, "planned"), pic.plannedTotalCents));
+  if (pic.poolReserveCents > 0) lines.push(R("- " + t(lang, "pools"), pic.poolReserveCents));
+  lines.push("".padEnd(22, "-"));
+  lines.push(R(t(lang, "free"), pic.trulyFreeCents));
+  lines.push("");
+  lines.push(R(t(lang, "weeklyPace"), pic.weeklyFreePaceCents));
+  lines.push(R(t(lang, "thisWeek"), pic.thisWeekSpentCents));
+  lines.push(t(lang, "payday").padEnd(12) + ((pic.payday || "?").slice(5) + " " + pic.daysLeft + t(lang, "days")).padStart(10));
   if (pic.savingsCents > 0 || pic.savingRateBps > 0) {
-    lines.push("─".repeat(25));
-    lines.push(L(t(lang, "savings"), 11) + f(pic.savingsCents) + "  " + (pic.savingRateBps / 100).toFixed(0) + "%");
+    lines.push(R(t(lang, "savings"), pic.savingsCents) + " " + (pic.savingRateBps / 100).toFixed(0) + "%");
   }
   lines.push("```");
+
+  // Due bills — urgent
   const dueBills = pic.drains.filter(d => d.isDue);
-  if (dueBills.length) {
-    lines.push("");
-    for (const b of dueBills) lines.push("⚠ *" + b.name + "* " + t(lang, "due") + " — " + fmt(b.amountCents || 0, sym));
-  }
+  for (const b of dueBills) lines.push("⚠ *" + b.name + "* " + t(lang, "due") + " — " + f(b.amountCents || 0));
+
+  // Upcoming bills
   const ub = (pic.upcomingBills || []).filter(b => !dueBills.some(d => d.name === b.name));
   if (ub.length) {
     lines.push("");
     lines.push(t(lang, "upcoming") + ":");
     for (const b of ub) lines.push("  " + b.name + " " + b.amt + " (" + b.days + t(lang, "days") + ")");
   }
-  const txs = (pic.transactions || []).slice(0, 5);
+
+  // Recent spending only — filter out setup, income, correction
+  const spendTypes = new Set(["transaction", "refund", "bill_payment"]);
+  const txs = (pic.transactions || []).filter(tx => spendTypes.has(tx.type)).slice(0, 5);
   if (txs.length) {
     lines.push("");
     lines.push(t(lang, "recent") + ":");
-    for (const tx of txs) lines.push("  " + (tx.description || "").slice(0, 12).padEnd(12) + " " + fmt(tx.amountCents, sym));
+    for (const tx of txs) {
+      const sign = tx.type === "refund" ? "+" : "";
+      lines.push("  " + (tx.description || "").slice(0, 12).padEnd(12) + " " + sign + f(tx.amountCents));
+    }
   }
   return lines.join("\n");
 }
 
 function formatActionReply(pic, lang) {
   const sym = pic.currencySymbol || "$";
-  const lines = ["```"];
-  lines.push(t(lang, "freeToday").padEnd(14) + fmt(pic.freeRemainingTodayCents, sym));
-  lines.push(t(lang, "dailyPace").padEnd(14) + fmt(pic.dailyFreePaceCents, sym));
-  lines.push(t(lang, "weeklyPace").padEnd(14) + fmt(pic.weeklyFreePaceCents, sym));
-  lines.push(t(lang, "payday").padEnd(14) + pic.daysLeft + " " + t(lang, "daysWord"));
-  lines.push("```");
+  const f = (c) => fmt(c, sym);
+  const lines = [];
+  lines.push("*" + t(lang, "freeToday") + ": " + f(pic.freeRemainingTodayCents) + "*");
+  lines.push(t(lang, "dailyPace") + " " + f(pic.dailyFreePaceCents) + " · " + pic.daysLeft + " " + t(lang, "daysWord"));
   const dueBills = pic.drains.filter(d => d.isDue);
   if (dueBills.length) {
-    const bill = dueBills[0];
-    lines.push("\n⚠ *" + bill.name + "* " + t(lang, "due") + " — " + fmt(bill.amountCents || 0, sym));
+    lines.push("⚠ *" + dueBills[0].name + "* " + t(lang, "due") + " — " + f(dueBills[0].amountCents || 0));
   }
   if (pic.freeRemainingTodayCents < 200 && pic.trulyFreeCents > 0) {
-    lines.push("\n" + t(lang, "free") + ": " + fmt(pic.trulyFreeCents, sym) + " / " + pic.daysLeft + " " + t(lang, "daysWord"));
+    lines.push(t(lang, "free") + ": " + f(pic.trulyFreeCents) + " / " + pic.daysLeft + " " + t(lang, "daysWord"));
   } else if (pic.trulyFreeCents < 0) {
-    lines.push("\n⚠");
+    lines.push("⚠");
   }
   return lines.join("\n");
 }
@@ -222,13 +210,10 @@ function formatMorningBriefing(pic, lang) {
   else if (pic.freeRemainingTodayCents < 500) lines.push(lang === "ru" ? "Утро. Туго сегодня." : "Morning. It's tight today.");
   else lines.push(lang === "ru" ? "Доброе утро!" : "Good morning!");
   lines.push("");
-  lines.push("```");
-  lines.push(t(lang, "freeToday").padEnd(14) + fmt(pic.freeRemainingTodayCents, sym));
-  lines.push(t(lang, "dailyPace").padEnd(14) + fmt(pic.dailyFreePaceCents, sym));
-  lines.push(t(lang, "payday").padEnd(14) + (pic.daysLeft === 0
+  lines.push("*" + t(lang, "freeToday") + ": " + fmt(pic.freeRemainingTodayCents, sym) + "*");
+  lines.push(t(lang, "dailyPace") + " " + fmt(pic.dailyFreePaceCents, sym) + " · " + (pic.daysLeft === 0
     ? (lang === "ru" ? "сегодня" : "today")
     : pic.daysLeft + " " + t(lang, "daysWord")));
-  lines.push("```");
   return lines.join("\n");
 }
 
@@ -238,25 +223,26 @@ function formatBillAlert(drain, pic, lang) {
   const when = days <= 0
     ? (lang === "ru" ? "к оплате сегодня" : "due today")
     : (lang === "ru" ? "к оплате завтра" : "due tomorrow");
-  return "⚠ *" + drain.name + "* " + when + "\n\n```\n" + fmt(drain.amountCents, sym) + "\n```";
+  return "⚠ *" + drain.name + "* " + when + " — " + fmt(drain.amountCents, sym);
 }
 
 function formatSpendFeed(pic, state, period, lang) {
   const sym = pic.currencySymbol || "$";
+  const f = (c) => fmt(c, sym);
   const w = period === "week", L = [];
-  L.push("*" + t(lang, w ? "feedWeek" : "feedMonth") + "*", "```");
-  L.push((w ? t(lang, "thisWeek") : t(lang, "feedMonth")).padEnd(14) + fmt(w ? pic.thisWeekSpentCents : pic.thisMonthSpentCents, sym));
-  if (w) L.push(t(lang, "weeklyPace").padEnd(14) + fmt(pic.weeklyFreePaceCents, sym));
-  L.push(t(lang, "dailyPace").padEnd(14) + fmt(pic.dailyFreePaceCents, sym), "```");
+  L.push("*" + t(lang, w ? "feedWeek" : "feedMonth") + "*");
+  L.push(f(w ? pic.thisWeekSpentCents : pic.thisMonthSpentCents) + " " + (w ? t(lang, "thisWeek").toLowerCase() : t(lang, "feedMonth").toLowerCase()));
+  if (w) L.push(t(lang, "weeklyPace") + " " + f(pic.weeklyFreePaceCents));
+  L.push(t(lang, "dailyPace") + " " + f(pic.dailyFreePaceCents));
+  L.push("");
   const cd = new Date(); cd.setDate(cd.getDate() - (w ? 7 : 30));
   const cs = cd.toISOString().slice(0, 10);
   const txs = (state.transactions || [])
     .filter(tx => tx.date >= cs && (tx.type === "transaction" || tx.type === "refund"))
     .slice(-10).reverse();
   if (txs.length) {
-    L.push("");
     for (const tx of txs) {
-      L.push((tx.date || "").slice(5) + " " + (tx.description || "").slice(0, 14).padEnd(14) + " " + fmt(tx.amountCents, sym));
+      L.push((tx.date || "").slice(5) + " " + (tx.description || "").slice(0, 14).padEnd(14) + " " + f(tx.amountCents));
     }
   }
   return L.join("\n");
