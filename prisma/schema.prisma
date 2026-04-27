@@ -1,4 +1,4 @@
-// Vera v2 — Database Schema
+// Vera V3 — Database Schema
 // All monetary values in INTEGER CENTS. No floating point anywhere.
 
 generator client {
@@ -18,79 +18,47 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  // Core state (the "balance sheet")
+  // Core state
   setup          Boolean @default(false)
   balanceCents   Int     @default(0)
   incomeCents    Int     @default(0)
-  savingsCents   Int     @default(0)
-  savingRateBps  Int     @default(0)
   payday         String?
   cycleStart     String?
   currency       String  @default("USD")
   currencySymbol String  @default("$")
-  localRate      Int     @default(100)
   language       String  @default("en")
-  recurring      Boolean @default(true)
 
   // Relations
-  drains           Drain[]
-  pools            Pool[]
-  plannedPurchases PlannedPurchase[]
-  transactions     Transaction[]
-  monthlies        MonthlySummary[]
-  cycles           CycleSummary[]
-  messages         Message[]
+  envelopes    Envelope[]
+  transactions Transaction[]
+  monthlies    MonthlySummary[]
+  cycles       CycleSummary[]
+  messages     Message[]
 
   @@index([telegramId])
   @@index([webToken])
 }
 
-// -- Drain (recurring bill / obligation) --
-model Drain {
-  id            String  @id @default(cuid())
-  userId        String
-  key           String
-  name          String
-  amountCents   Int
-  intervalDays  Int     @default(30)
-  nextDate      String?
-  active        Boolean @default(true)
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, key])
-  @@index([userId])
-}
-
-// -- Pool (spending category with budget) --
-model Pool {
-  id             String   @id @default(cuid())
-  userId         String
-  key            String
-  name           String
-  type           String   @default("daily")
-  dailyCents     Int      @default(0)
-  allocatedCents Int      @default(0)
-  keywords       String[]
-  spentCents     Int      @default(0)
-  active         Boolean  @default(true)
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, key])
-  @@index([userId])
-}
-
-// -- Planned Purchase (reserved future spend) --
-model PlannedPurchase {
-  id          String  @id @default(cuid())
-  userId      String
-  key         String
-  name        String
-  amountCents Int
-  date        String?
-  confirmed   Boolean @default(false)
-  active      Boolean @default(true)
+// -- Envelope (one primitive for bills, budgets, savings, goals) --
+model Envelope {
+  id              String   @id @default(cuid())
+  userId          String
+  key             String
+  name            String
+  rhythm          String   // daily, weekly, monthly, on_income, once, ongoing
+  amountCents     Int      @default(0)
+  targetCents     Int?
+  fundedCents     Int      @default(0)
+  spentCents      Int      @default(0)
+  fundRate        Int?     // basis points for % auto-fund (1000 = 10%)
+  fundAmountCents Int?     // cents for fixed auto-fund
+  intervalDays    Int      @default(30)
+  nextDate        String?
+  keywords        String[] @default([])
+  priority        String   @default("flexible") // essential | flexible
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -102,36 +70,36 @@ model PlannedPurchase {
 model Transaction {
   id          String   @id @default(cuid())
   userId      String
-  type        String
+  type        String   // spend, refund, income, correction, pay_envelope, fund_envelope
   amountCents Int
   description String   @default("")
-  node        String?
+  envelope    String?  // envelope key (was "node" in v2)
   date        String
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, date])
-  @@index([userId, node])
+  @@index([userId, envelope])
   @@index([userId, type])
 }
 
-// -- Monthly Summary (graph node: one per user per month per pool) --
+// -- Monthly Summary (one per user per month per envelope) --
 // Pre-computed aggregates. Updated on every transaction.
 model MonthlySummary {
   id          String @id @default(cuid())
   userId      String
   month       String // "2026-04"
-  poolKey     String // pool key, "_total", or "_free"
+  envelopeKey String // envelope key, "_total", or "_free"
   spentCents  Int    @default(0)
   earnedCents Int    @default(0)
   txCount     Int    @default(0)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, month, poolKey])
+  @@unique([userId, month, envelopeKey])
   @@index([userId, month])
-  @@index([userId, poolKey])
+  @@index([userId, envelopeKey])
 }
 
 // -- Cycle Summary (archived snapshot when pay cycle ends) --
@@ -143,8 +111,7 @@ model CycleSummary {
   incomeCents     Int
   totalSpentCents Int
   savedCents      Int
-  poolSpend       Json     // { "food": 45000, "transport": 12000 }
-  drainsPaid      Json     // { "rent": 123700, "gym": 5500 }
+  envelopeSpend   Json     // { "groceries": 45000, "coffee": 12000 }
   txCount         Int
   daysInCycle     Int
   avgDailySpend   Int
@@ -173,12 +140,12 @@ model Message {
 model ApiLog {
   id            String   @id @default(cuid())
   userId        String?
-  model         String   // "gpt-4o-mini", "claude-sonnet-4-20250514", etc.
+  model         String
   promptTokens  Int      @default(0)
   outputTokens  Int      @default(0)
   totalTokens   Int      @default(0)
-  costCents     Int      @default(0) // estimated cost in hundredths of a cent
-  endpoint      String   @default("chat") // "chat", "review", "briefing"
+  costCents     Int      @default(0)
+  endpoint      String   @default("chat")
   createdAt     DateTime @default(now())
 
   @@index([createdAt])

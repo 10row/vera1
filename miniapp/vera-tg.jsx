@@ -1,462 +1,438 @@
-// miniapp/vera-tg.jsx
-// Vera Telegram Mini App
-// Dark-themed financial dashboard + Vera chat, connected to backend API.
-// Loaded inside index.html which sets window.TELEGRAM_USER_ID.
+// miniapp/vera-tg.jsx — V3 Mini App
+// Full screen dark dashboard. One scrollable view.
+// Fuel gauge → Envelopes → Recent transactions → Savings.
+// No chat. No tabs. No settings.
 
 "use strict";
 
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useCallback } = React;
 
-// ── CONFIG ────────────────────────────────────────────────────────────────────
-const API_BASE = ""; // same origin
+const API_BASE = "";
 
-// ── THEME ─────────────────────────────────────────────────────────────────────
+// ── THEME ────────────────────────────────────
 const C = {
-  bg:      "#0F0F0F",
-  card:    "#1A1A1A",
-  border:  "#2A2A2A",
-  muted:   "#555",
-  text:    "#E8E4DF",
-  sub:     "#999",
-  green:   "#4CAF87",
-  amber:   "#F0A050",
-  red:     "#E05555",
-  accent:  "#4CAF87",
+  bg:     "#0F0F0F",
+  card:   "#1A1A1A",
+  border: "#2A2A2A",
+  text:   "#E8E4DF",
+  sub:    "#888",
+  muted:  "#555",
+  green:  "#4CAF87",
+  amber:  "#F0A050",
+  red:    "#E05555",
 };
 
-const S = {
-  page: {
-    display: "flex", flexDirection: "column", height: "100%",
-    background: C.bg, color: C.text, fontFamily: "'Inter', sans-serif",
-    fontSize: 14,
-  },
-  tab: {
-    display: "flex", borderBottom: `1px solid ${C.border}`,
-    background: C.bg, flexShrink: 0,
-  },
-  tabBtn: (active) => ({
-    flex: 1, padding: "12px 0", background: "none", border: "none",
-    color: active ? C.green : C.sub, fontFamily: "'Inter', sans-serif",
-    fontSize: 13, fontWeight: active ? 600 : 400, cursor: "pointer",
-    borderBottom: active ? `2px solid ${C.green}` : "2px solid transparent",
-    transition: "color 0.15s",
-  }),
-  scroll: {
-    flex: 1, overflowY: "auto", padding: "16px",
-    WebkitOverflowScrolling: "touch",
-  },
-  card: {
-    background: C.card, borderRadius: 12, padding: "14px 16px",
-    marginBottom: 10, border: `1px solid ${C.border}`,
-  },
-  row: {
-    display: "flex", justifyContent: "space-between", alignItems: "baseline",
-    marginBottom: 4,
-  },
-  label: { color: C.sub, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em" },
-  value: { fontSize: 20, fontFamily: "'Lora', serif", fontWeight: 500 },
-  small: { fontSize: 13, color: C.sub },
-  heroValue: {
-    fontSize: 36, fontFamily: "'Lora', serif", fontWeight: 500,
-    color: C.green, letterSpacing: "-0.02em",
-  },
-  heroLabel: { fontSize: 13, color: C.sub, marginTop: 2 },
-  divider: { height: 1, background: C.border, margin: "10px 0" },
-  bucket: {
-    display: "flex", justifyContent: "space-between",
-    padding: "8px 0", borderBottom: `1px solid ${C.border}`,
-  },
-  bucketLabel: { fontSize: 13, color: C.sub },
-  bucketValue: { fontSize: 13, fontWeight: 500 },
-  pill: (colour) => ({
-    display: "inline-block", background: colour + "22", color: colour,
-    borderRadius: 20, padding: "2px 8px", fontSize: 11, fontWeight: 500,
-  }),
-  chatWrap: {
-    display: "flex", flexDirection: "column", height: "100%",
-  },
-  messages: {
-    flex: 1, overflowY: "auto", padding: "12px 14px",
-    display: "flex", flexDirection: "column", gap: 8,
-    WebkitOverflowScrolling: "touch",
-  },
-  bubble: (isUser) => ({
-    maxWidth: "82%", padding: "10px 14px", borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-    background: isUser ? C.green : C.card,
-    color: isUser ? "#fff" : C.text,
-    alignSelf: isUser ? "flex-end" : "flex-start",
-    fontSize: 14, lineHeight: 1.45,
-    border: isUser ? "none" : `1px solid ${C.border}`,
-  }),
-  inputRow: {
-    display: "flex", gap: 8, padding: "10px 12px",
-    borderTop: `1px solid ${C.border}`, background: C.bg, flexShrink: 0,
-  },
-  input: {
-    flex: 1, background: C.card, border: `1px solid ${C.border}`,
-    borderRadius: 22, padding: "10px 16px", color: C.text,
-    fontFamily: "'Inter', sans-serif", fontSize: 14, outline: "none",
-    resize: "none", maxHeight: 100, lineHeight: 1.4,
-  },
-  sendBtn: (disabled) => ({
-    width: 40, height: 40, borderRadius: "50%", border: "none",
-    background: disabled ? C.border : C.green,
-    color: "#fff", fontSize: 18, cursor: disabled ? "default" : "pointer",
-    flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-    transition: "background 0.15s",
-  }),
-};
+// ── HELPERS ──────────────────────────────────
+function fmtMoney(cents, sym = "$") {
+  if (cents == null) return sym + "0";
+  const neg = cents < 0, abs = Math.abs(cents);
+  const whole = Math.floor(abs / 100).toLocaleString();
+  return (neg ? "-" : "") + sym + whole;
+}
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-function fmt(usd, rate, sym) {
-  if (usd == null) return "—";
-  const local = usd * (rate || 1);
-  return `${sym || "$"}${Math.round(local).toLocaleString()}`;
-}
-function fmtUSD(usd) {
-  if (usd == null) return "—";
-  return `$${Math.abs(usd).toFixed(0)}`;
-}
-function colourFor(ratio) {
-  if (ratio >= 0.5) return C.green;
-  if (ratio >= 0.2) return C.amber;
+function gaugeColor(ratio) {
+  if (ratio > 0.5) return C.green;
+  if (ratio > 0.2) return C.amber;
   return C.red;
 }
 
-// ── PICTURE PANEL ─────────────────────────────────────────────────────────────
-function PicturePanel({ pic, state, loading, onRefresh }) {
-  if (loading && !pic) {
-    return (
-      <div style={{ ...S.scroll, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: C.sub }}>Loading…</div>
-      </div>
-    );
+function groupByDay(txs) {
+  const groups = {};
+  for (const tx of txs) {
+    const d = tx.date || "unknown";
+    if (!groups[d]) groups[d] = [];
+    groups[d].push(tx);
   }
-  if (!pic) {
-    return (
-      <div style={{ ...S.scroll, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
-        <div style={{ fontSize: 32 }}>💬</div>
-        <div style={{ color: C.sub, textAlign: "center" }}>
-          Say hi to Kitty in the Chat tab to get started
-        </div>
-      </div>
-    );
-  }
+  return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+}
 
-  const loc = state?.location || {};
-  const rate = loc.localRate || 1;
-  const sym  = loc.symbol || "$";
-  const f = (u) => fmt(u, rate, sym);
+function formatDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T12:00:00");
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (dateStr === today.toISOString().slice(0, 10)) return "Today";
+  if (dateStr === yesterday.toISOString().slice(0, 10)) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
 
-  const daysLeft = pic.daysLeft || 0;
-  const freeRatio = pic.trulyFree > 0 ? Math.min(1, (pic.freeToday || 0) / (pic.trulyFree / Math.max(daysLeft, 1))) : 0;
-  const freeColour = colourFor(freeRatio);
+// ── STYLES ───────────────────────────────────
+const styles = {
+  page: {
+    minHeight: "100%", background: C.bg, color: C.text,
+    fontFamily: "'Inter', sans-serif", fontSize: 14,
+    padding: "0 16px 32px", overflowY: "auto",
+    WebkitOverflowScrolling: "touch",
+  },
+  section: { marginBottom: 24 },
+  sectionTitle: {
+    fontSize: 11, color: C.sub, textTransform: "uppercase",
+    letterSpacing: "0.1em", fontWeight: 500, marginBottom: 8,
+  },
+  card: {
+    background: C.card, borderRadius: 12, padding: "14px 16px",
+    marginBottom: 8, border: `1px solid ${C.border}`,
+  },
+  row: {
+    display: "flex", justifyContent: "space-between",
+    alignItems: "center",
+  },
+  loading: {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    height: "100%", color: C.sub, fontSize: 16,
+  },
+  error: {
+    display: "flex", flexDirection: "column", alignItems: "center",
+    justifyContent: "center", height: "100%", color: C.red, padding: 32,
+    textAlign: "center",
+  },
+};
 
-  return (
-    <div style={S.scroll}>
-      {/* Hero — Free Today */}
-      <div style={{ ...S.card, textAlign: "center", padding: "20px 16px" }}>
-        <div style={{ color: C.sub, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
-          Free Today
-        </div>
-        <div style={{ ...S.heroValue, color: freeColour }}>
-          {f(pic.freeToday)}
-        </div>
-        <div style={S.heroLabel}>
-          {daysLeft} day{daysLeft !== 1 ? "s" : ""} left in cycle
-          {loc.name ? ` · ${loc.flag || ""} ${loc.name}` : ""}
-        </div>
-        {pic.freeSpentToday > 0 && (
-          <div style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>
-            {f(pic.freeSpentToday)} spent from free pool today
-          </div>
-        )}
-      </div>
+// ── FUEL GAUGE ───────────────────────────────
+function FuelGauge({ pic, sym }) {
+  const freeToday = pic.freeRemainingTodayCents ?? 0;
+  const dailyPace = pic.dailyPaceCents ?? 1;
+  const ratio = dailyPace > 0 ? Math.max(0, Math.min(1, freeToday / dailyPace)) : 0;
+  const color = gaugeColor(ratio);
+  const pct = Math.round(ratio * 100);
 
-      {/* Four Buckets */}
-      <div style={S.card}>
-        <div style={{ ...S.label, marginBottom: 8 }}>Your Picture</div>
+  // Arc gauge using SVG
+  const size = 200, stroke = 12, radius = (size - stroke) / 2;
+  const circ = Math.PI * radius; // half circle
+  const offset = circ - (circ * ratio);
 
-        <div style={S.bucket}>
-          <span style={S.bucketLabel}>Bills</span>
-          <span style={{ ...S.bucketValue, color: C.red }}>{f(pic.bucket1)}</span>
-        </div>
-        <div style={S.bucket}>
-          <span style={S.bucketLabel}>Stash</span>
-          <span style={{ ...S.bucketValue, color: C.amber }}>{f(pic.bucket2)}</span>
-        </div>
-        <div style={S.bucket}>
-          <span style={S.bucketLabel}>Daily</span>
-          <span style={{ ...S.bucketValue }}>{f(pic.bucket3)}</span>
-        </div>
-        <div style={{ ...S.bucket, borderBottom: "none" }}>
-          <span style={S.bucketLabel}>Free</span>
-          <span style={{ ...S.bucketValue, color: freeColour }}>{f(pic.trulyFree)}</span>
-        </div>
-
-        <div style={S.divider} />
-
-        <div style={{ ...S.row, marginBottom: 0 }}>
-          <span style={{ fontSize: 13, color: C.sub }}>Balance</span>
-          <span style={{ fontSize: 15, fontWeight: 600 }}>{f(pic.confirmedBalance)}</span>
-        </div>
-        {pic.savings > 0 && (
-          <div style={{ ...S.row, marginBottom: 0, marginTop: 4 }}>
-            <span style={{ fontSize: 13, color: C.sub }}>Savings</span>
-            <span style={{ fontSize: 13, color: C.green }}>{f(pic.savings)}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Envelopes */}
-      {pic.computedEnvelopes?.filter(e => e.active).length > 0 && (
-        <div style={S.card}>
-          <div style={{ ...S.label, marginBottom: 8 }}>Stash & Daily</div>
-          {pic.computedEnvelopes.filter(e => e.active).map((env, i, arr) => {
-            const remaining = env.type === "daily" ? (env.dailyLeft ?? env.remainingUSD) : env.remainingUSD;
-            const ratio = remaining > 0 && env.allocatedUSD > 0 ? remaining / env.allocatedUSD : 0;
-            const c = colourFor(ratio);
-            return (
-              <div key={i} style={{ ...S.bucket, borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                <div>
-                  <div style={{ fontSize: 13 }}>{env.name}</div>
-                  {env.dailyAmountUSD > 0 && (
-                    <div style={{ fontSize: 11, color: C.sub }}>
-                      {f(env.dailyLeft ?? 0)} left today · {f(env.dailyAmountUSD)}/day
-                    </div>
-                  )}
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 13, color: c, fontWeight: 500 }}>{f(remaining)}</div>
-                  <div style={{ fontSize: 11, color: C.sub }}>of {f(env.allocatedUSD)}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Bills */}
-      {pic.committedList?.length > 0 && (
-        <div style={S.card}>
-          <div style={{ ...S.label, marginBottom: 8 }}>Bills</div>
-          {pic.committedList.map((b, i) => (
-            <div key={i} style={{ ...S.bucket, borderBottom: i < pic.committedList.length - 1 ? `1px solid ${C.border}` : "none" }}>
-              <div>
-                <div style={{ fontSize: 13 }}>{b.name}</div>
-                <div style={{ fontSize: 11, color: C.sub }}>
-                  {b.paidThisCycle ? "Paid ✓" : `Due ${b.nextDate || "—"}`}
-                </div>
-              </div>
-              <span style={{ ...S.pill(b.paidThisCycle ? C.green : C.amber) }}>
-                {f(b.amountUSD)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Cycle spending summary */}
-      {pic.cycleTotal > 0 && (
-        <div style={S.card}>
-          <div style={{ ...S.row, marginBottom: 0 }}>
-            <span style={{ fontSize: 13, color: C.sub }}>Spent this cycle</span>
-            <span style={{ fontSize: 13 }}>{f(pic.cycleTotal)}</span>
-          </div>
-          {pic.savings > 0 && (
-            <div style={{ ...S.row, marginBottom: 0, marginTop: 4 }}>
-              <span style={{ fontSize: 13, color: C.sub }}>Savings</span>
-              <span style={{ fontSize: 13, color: C.green }}>{f(pic.savings)}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div style={{ height: 8 }} />
-
-      <button
-        onClick={onRefresh}
-        style={{
-          width: "100%", padding: "12px", border: `1px solid ${C.border}`,
-          borderRadius: 10, background: "none", color: C.sub,
-          fontFamily: "'Inter', sans-serif", fontSize: 13, cursor: "pointer",
-        }}
-      >
-        Refresh
-      </button>
-      <div style={{ height: 20 }} />
-    </div>
+  return React.createElement("div", {
+    style: { textAlign: "center", padding: "24px 0 16px" },
+  },
+    React.createElement("svg", {
+      width: size, height: size / 2 + 20, viewBox: `0 0 ${size} ${size / 2 + 20}`,
+    },
+      // Background arc
+      React.createElement("path", {
+        d: `M ${stroke / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - stroke / 2} ${size / 2}`,
+        fill: "none", stroke: C.border, strokeWidth: stroke, strokeLinecap: "round",
+      }),
+      // Filled arc
+      React.createElement("path", {
+        d: `M ${stroke / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - stroke / 2} ${size / 2}`,
+        fill: "none", stroke: color, strokeWidth: stroke, strokeLinecap: "round",
+        strokeDasharray: circ, strokeDashoffset: offset,
+        style: { transition: "stroke-dashoffset 0.6s ease, stroke 0.3s ease" },
+      }),
+    ),
+    // Hero number
+    React.createElement("div", {
+      style: {
+        fontSize: 42, fontFamily: "'Lora', serif", fontWeight: 500,
+        color, marginTop: -20, letterSpacing: "-0.02em",
+      },
+    }, fmtMoney(freeToday, sym)),
+    React.createElement("div", {
+      style: { fontSize: 13, color: C.sub, marginTop: 4 },
+    }, "Free today"),
+    // Pace + days
+    React.createElement("div", {
+      style: { fontSize: 12, color: C.muted, marginTop: 8 },
+    }, fmtMoney(pic.dailyPaceCents, sym) + "/day · " + (pic.daysLeft ?? "?") + " days left"),
   );
 }
 
-// ── CHAT PANEL ────────────────────────────────────────────────────────────────
-function ChatPanel({ telegramId, onPicUpdate }) {
-  const [msgs, setMsgs] = useState([
-    { role: "assistant", text: "Hi! I'm Kitty. Tell me what you spent, earned, or ask me anything." }
-  ]);
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const bottomRef = useRef(null);
-  const textareaRef = useRef(null);
+// ── ENVELOPE CARD ────────────────────────────
+function EnvelopeCard({ env, sym }) {
+  const [expanded, setExpanded] = useState(false);
+  const isGoal = env.rhythm === "ongoing" && env.targetCents > 0;
+  const isBudget = ["daily", "weekly", "monthly", "on_income"].includes(env.rhythm);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs]);
-
-  async function send() {
-    const text = input.trim();
-    if (!text || sending) return;
-
-    const userMsg = { role: "user", text };
-    const nextMsgs = [...msgs, userMsg];
-    setMsgs(nextMsgs);
-    setInput("");
-    setSending(true);
-
-    // Resize textarea
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
-
-    try {
-      const apiMsgs = nextMsgs
-        .filter(m => m.role !== "assistant" || m !== msgs[0]) // skip system greeting
-        .map(m => ({ role: m.role, content: m.text }));
-
-      const res = await fetch(`${API_BASE}/api/vera/${telegramId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMsgs }),
-      });
-      const data = await res.json();
-
-      if (data.error) throw new Error(data.error);
-
-      const reply = data.message + (data.followup ? `\n\n_${data.followup}_` : "");
-      setMsgs(m => [...m, { role: "assistant", text: reply }]);
-
-      // Push updated picture up
-      if (data.pic && onPicUpdate) onPicUpdate(data.pic, data.state);
-    } catch (err) {
-      setMsgs(m => [...m, { role: "assistant", text: `Sorry, something went wrong: ${err.message}` }]);
-    } finally {
-      setSending(false);
-    }
+  let progress = 0, progressLabel = "", progressColor = C.green;
+  if (isGoal) {
+    progress = env.targetCents > 0 ? Math.min(1, (env.fundedCents || 0) / env.targetCents) : 0;
+    progressLabel = fmtMoney(env.fundedCents, sym) + " / " + fmtMoney(env.targetCents, sym);
+    progressColor = C.green;
+  } else if (isBudget) {
+    const total = env.amountCents || 1;
+    progress = Math.min(1, (env.spentCents || 0) / total);
+    progressLabel = fmtMoney(env.spentCents, sym) + " / " + fmtMoney(env.amountCents, sym);
+    progressColor = progress > 0.9 ? C.red : progress > 0.7 ? C.amber : C.green;
   }
 
-  function onKey(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
-  }
+  const remaining = env.remainingCents ?? (env.amountCents - (env.spentCents || 0));
 
-  function onInput(e) {
-    setInput(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = Math.min(e.target.scrollHeight, 100) + "px";
-  }
-
-  return (
-    <div style={S.chatWrap}>
-      <div style={S.messages}>
-        {msgs.map((m, i) => (
-          <div key={i} style={S.bubble(m.role === "user")}>
-            {m.text.split("\n").map((line, j) => (
-              <span key={j}>
-                {line.startsWith("_") && line.endsWith("_")
-                  ? <em style={{ color: C.sub, fontSize: 13 }}>{line.slice(1, -1)}</em>
-                  : line}
-                {j < m.text.split("\n").length - 1 && <br />}
-              </span>
-            ))}
-          </div>
-        ))}
-        {sending && (
-          <div style={{ ...S.bubble(false), color: C.sub }}>
-            <span>Kitty is thinking</span>
-            <span style={{ animation: "blink 1s step-end infinite" }}> …</span>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      <div style={S.inputRow}>
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={onInput}
-          onKeyDown={onKey}
-          placeholder="Message Kitty…"
-          rows={1}
-          style={S.input}
-          disabled={sending}
-        />
-        <button onClick={send} disabled={!input.trim() || sending} style={S.sendBtn(!input.trim() || sending)}>
-          ↑
-        </button>
-      </div>
-    </div>
+  return React.createElement("div", {
+    style: { ...styles.card, cursor: "pointer" },
+    onClick: () => setExpanded(!expanded),
+  },
+    // Header row
+    React.createElement("div", { style: styles.row },
+      React.createElement("div", null,
+        React.createElement("span", {
+          style: { fontSize: 14, fontWeight: 500 },
+        }, env.name),
+        env.isDue ? React.createElement("span", {
+          style: {
+            fontSize: 10, color: C.red, marginLeft: 8,
+            background: C.red + "22", borderRadius: 10, padding: "2px 6px",
+          },
+        }, "DUE") : null,
+        env.priority === "essential" ? React.createElement("span", {
+          style: {
+            fontSize: 10, color: C.amber, marginLeft: 6,
+          },
+        }, "●") : null,
+      ),
+      React.createElement("span", {
+        style: {
+          fontSize: 15, fontFamily: "'Lora', serif", fontWeight: 500,
+          color: remaining < 0 ? C.red : C.text,
+        },
+      }, isGoal ? fmtMoney(env.fundedCents, sym) : fmtMoney(remaining, sym)),
+    ),
+    // Progress bar
+    (isBudget || isGoal) ? React.createElement("div", {
+      style: { marginTop: 8 },
+    },
+      React.createElement("div", {
+        style: {
+          height: 3, background: C.border, borderRadius: 2, overflow: "hidden",
+        },
+      },
+        React.createElement("div", {
+          style: {
+            height: "100%", width: (progress * 100) + "%",
+            background: progressColor, borderRadius: 2,
+            transition: "width 0.4s ease",
+          },
+        }),
+      ),
+      React.createElement("div", {
+        style: { fontSize: 11, color: C.sub, marginTop: 4 },
+      }, progressLabel),
+    ) : null,
+    // Expanded details
+    expanded ? React.createElement("div", {
+      style: { marginTop: 8, fontSize: 12, color: C.sub },
+    },
+      React.createElement("div", null, "Rhythm: " + env.rhythm +
+        (env.intervalDays && env.rhythm !== "daily" ? " (" + env.intervalDays + "d)" : "")),
+      env.nextDate ? React.createElement("div", null, "Next: " + env.nextDate) : null,
+      env.keywords?.length > 0 ? React.createElement("div", null,
+        "Keywords: " + env.keywords.join(", ")) : null,
+      env.fundRate > 0 ? React.createElement("div", null,
+        "Auto-fund: " + (env.fundRate / 100) + "% of income") : null,
+      env.fundAmountCents > 0 ? React.createElement("div", null,
+        "Auto-fund: " + fmtMoney(env.fundAmountCents, sym) + "/income") : null,
+    ) : null,
   );
 }
 
-// ── ROOT APP ──────────────────────────────────────────────────────────────────
+// ── TRANSACTION ROW ──────────────────────────
+function TxRow({ tx, sym }) {
+  const isRefund = tx.type === "refund";
+  return React.createElement("div", {
+    style: { ...styles.row, padding: "6px 0" },
+  },
+    React.createElement("div", null,
+      React.createElement("span", {
+        style: { fontSize: 13 },
+      }, tx.description || "unnamed"),
+      tx.envelope && tx.envelope !== "free" ? React.createElement("span", {
+        style: { fontSize: 11, color: C.muted, marginLeft: 6 },
+      }, tx.envelope) : null,
+    ),
+    React.createElement("span", {
+      style: {
+        fontSize: 13, fontFamily: "'Lora', serif",
+        color: isRefund ? C.green : C.text,
+      },
+    }, (isRefund ? "+" : "") + fmtMoney(tx.amountCents, sym)),
+  );
+}
+
+// ── MAIN APP ─────────────────────────────────
 function App() {
-  const telegramId = window.TELEGRAM_USER_ID || "dev";
-  const [tab, setTab] = useState("picture");
-  const [pic, setPic] = useState(null);
-  const [state, setState] = useState(null);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchPic = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/picture/${telegramId}`);
-      const data = await res.json();
-      if (data.pic) setPic(data.pic);
-      if (data.state) setState(data.state);
-    } catch (err) {
-      console.error("fetchPic error:", err);
+      setLoading(true);
+      const userId = window.TELEGRAM_USER_ID || "dev";
+      const res = await fetch(API_BASE + "/api/v3/picture/" + userId);
+      if (!res.ok) throw new Error("Server error " + res.status);
+      const json = await res.json();
+      setData(json);
+      setError(null);
+    } catch (e) {
+      setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [telegramId]);
+  }, []);
 
-  useEffect(() => { fetchPic(); }, [fetchPic]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  function onPicUpdate(newPic, newState) {
-    setPic(newPic);
-    if (newState) setState(newState);
+  // Pull to refresh via Telegram's built-in
+  useEffect(() => {
+    if (window.Telegram?.WebApp) {
+      // Polling refresh every 30s when visible
+      const interval = setInterval(fetchData, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [fetchData]);
+
+  if (loading && !data) {
+    return React.createElement("div", { style: styles.loading }, "Loading...");
+  }
+  if (error && !data) {
+    return React.createElement("div", { style: styles.error },
+      React.createElement("div", null, "Couldn't load data"),
+      React.createElement("div", {
+        style: { fontSize: 12, marginTop: 8, color: C.sub },
+      }, error),
+      React.createElement("button", {
+        onClick: fetchData,
+        style: {
+          marginTop: 16, padding: "8px 24px", background: C.green,
+          border: "none", borderRadius: 8, color: "#fff", cursor: "pointer",
+        },
+      }, "Retry"),
+    );
   }
 
-  return (
-    <div style={S.page}>
-      <style>{`
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-        textarea::placeholder { color: #555; }
-        textarea::-webkit-scrollbar { display: none; }
-        ::-webkit-scrollbar { width: 0; }
-        * { -webkit-tap-highlight-color: transparent; }
-      `}</style>
+  const pic = data?.pic;
+  const state = data?.state;
+  if (!pic || !pic.setup) {
+    return React.createElement("div", { style: styles.loading },
+      "Open the chat to get started.",
+    );
+  }
 
-      {/* Tabs */}
-      <div style={S.tab}>
-        <button style={S.tabBtn(tab === "picture")} onClick={() => setTab("picture")}>
-          📊 Picture
-        </button>
-        <button style={S.tabBtn(tab === "chat")} onClick={() => setTab("chat")}>
-          💬 Chat
-        </button>
-      </div>
+  const sym = pic.currencySymbol || state?.currencySymbol || "$";
 
-      {/* Content */}
-      {tab === "picture" ? (
-        <PicturePanel pic={pic} state={state} loading={loading} onRefresh={fetchPic} />
-      ) : (
-        <ChatPanel telegramId={telegramId} onPicUpdate={onPicUpdate} />
-      )}
-    </div>
+  // Separate envelopes by type
+  const allEnvs = pic.envelopes || [];
+  const dueEnvs = allEnvs.filter(e => e.isDue);
+  const budgetEnvs = allEnvs.filter(e =>
+    !e.isDue && ["daily", "weekly", "monthly", "on_income"].includes(e.rhythm)
+  );
+  const recurringEnvs = allEnvs.filter(e =>
+    !e.isDue && !["daily", "weekly", "monthly", "on_income", "ongoing"].includes(e.rhythm) && e.rhythm !== "once"
+  );
+  const onceEnvs = allEnvs.filter(e => !e.isDue && e.rhythm === "once");
+  const goalEnvs = allEnvs.filter(e => e.rhythm === "ongoing");
+
+  // Recent transactions (spending only, last 7 days)
+  const now = new Date();
+  const weekAgo = new Date(now);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const weekAgoStr = weekAgo.toISOString().slice(0, 10);
+  const recentTxs = (state?.transactions || [])
+    .filter(tx => tx.date >= weekAgoStr && (tx.type === "spend" || tx.type === "refund"))
+    .slice(-20).reverse();
+  const txGroups = groupByDay(recentTxs);
+
+  // Show more toggle
+  const [showAllEnvs, setShowAllEnvs] = useState(false);
+  const activeEnvs = [...dueEnvs, ...budgetEnvs, ...recurringEnvs, ...onceEnvs];
+  const visibleEnvs = showAllEnvs ? activeEnvs : activeEnvs.slice(0, 5);
+
+  return React.createElement("div", { style: styles.page },
+    // ── Fuel Gauge ──
+    React.createElement(FuelGauge, { pic, sym }),
+
+    // ── Balance context ──
+    React.createElement("div", {
+      style: {
+        ...styles.card, display: "flex", justifyContent: "space-around",
+        textAlign: "center",
+      },
+    },
+      React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 11, color: C.sub } }, "Balance"),
+        React.createElement("div", {
+          style: { fontSize: 16, fontFamily: "'Lora', serif", fontWeight: 500 },
+        }, fmtMoney(pic.balanceCents, sym)),
+      ),
+      React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 11, color: C.sub } }, "Reserved"),
+        React.createElement("div", {
+          style: { fontSize: 16, fontFamily: "'Lora', serif", fontWeight: 500, color: C.amber },
+        }, fmtMoney(pic.totalReservedCents, sym)),
+      ),
+      React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 11, color: C.sub } }, "Free"),
+        React.createElement("div", {
+          style: {
+            fontSize: 16, fontFamily: "'Lora', serif", fontWeight: 500,
+            color: (pic.freeCents || 0) < 0 ? C.red : C.green,
+          },
+        }, fmtMoney(pic.freeCents, sym)),
+      ),
+    ),
+
+    // ── Envelopes ──
+    activeEnvs.length > 0 ? React.createElement("div", { style: styles.section },
+      React.createElement("div", { style: styles.sectionTitle }, "Envelopes"),
+      visibleEnvs.map((env, i) =>
+        React.createElement(EnvelopeCard, { key: env.key || i, env, sym })
+      ),
+      activeEnvs.length > 5 && !showAllEnvs ? React.createElement("div", {
+        style: {
+          textAlign: "center", color: C.sub, fontSize: 12,
+          cursor: "pointer", padding: 8,
+        },
+        onClick: () => setShowAllEnvs(true),
+      }, "Show all " + activeEnvs.length + " envelopes") : null,
+    ) : null,
+
+    // ── Savings/Goals ──
+    goalEnvs.length > 0 ? React.createElement("div", { style: styles.section },
+      React.createElement("div", { style: styles.sectionTitle }, "Savings & Goals"),
+      goalEnvs.map((env, i) =>
+        React.createElement(EnvelopeCard, { key: env.key || i, env, sym })
+      ),
+      pic.totalSavedCents > 0 ? React.createElement("div", {
+        style: {
+          textAlign: "center", fontSize: 12, color: C.sub, marginTop: 4,
+        },
+      }, "Total saved: " + fmtMoney(pic.totalSavedCents, sym)) : null,
+    ) : null,
+
+    // ── Recent Transactions ──
+    recentTxs.length > 0 ? React.createElement("div", { style: styles.section },
+      React.createElement("div", { style: styles.sectionTitle }, "Recent"),
+      txGroups.map(([date, txs]) =>
+        React.createElement("div", { key: date },
+          React.createElement("div", {
+            style: { fontSize: 11, color: C.muted, marginTop: 8, marginBottom: 4 },
+          }, formatDate(date)),
+          txs.map((tx, i) =>
+            React.createElement(TxRow, { key: tx.id || i, tx, sym })
+          ),
+        )
+      ),
+    ) : null,
+
+    // ── Cycle Stats ──
+    pic.cycleStats ? React.createElement("div", {
+      style: { ...styles.card, marginTop: 8 },
+    },
+      React.createElement("div", { style: styles.row },
+        React.createElement("span", { style: { fontSize: 12, color: C.sub } }, "This cycle"),
+        React.createElement("span", {
+          style: { fontSize: 13, fontFamily: "'Lora', serif" },
+        }, fmtMoney(pic.cycleStats.totalSpent, sym) + " spent"),
+      ),
+      React.createElement("div", {
+        style: { fontSize: 11, color: C.muted, marginTop: 4 },
+      }, "Avg " + fmtMoney(pic.cycleStats.dailyAvg, sym) + "/day · " +
+        pic.cycleStats.daysInCycle + " days in"),
+    ) : null,
   );
 }
 
-// Mount
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(App));
+// ── MOUNT ────────────────────────────────────
+ReactDOM.createRoot(document.getElementById("root")).render(
+  React.createElement(App)
+);
