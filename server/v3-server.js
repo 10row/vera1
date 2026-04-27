@@ -243,4 +243,15 @@ app.listen(PORT, async () => {
       await runDailyBriefings();
     }
     // Envelope alerts every 6 hours
-    if (h % 6 =
+    if (h % 6 === 0) await runEnvelopeAlerts();
+    // Weekly reconciliation on Sundays at 18:00 UTC
+    if (dow === 0 && h === 18 && day !== lastRecon) {
+      lastRecon = day;
+      await runReconciliation();
+    }
+  }, 3600000);
+
+  console.log("  Scheduler: briefings 8AM UTC, alerts q6h, reconciliation Sun 6PM UTC");
+  console.log("  Admin dashboard: /admin");
+  console.log("  Mini App: /miniapp");
+});

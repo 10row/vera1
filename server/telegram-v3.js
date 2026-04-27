@@ -581,4 +581,14 @@ async function runReconciliation() {
         reply_markup: fmt.mainKeyboard(lang, miniAppUrl),
       });
     }
-  } catch (e) { console.error("Reconcilia
+  } catch (e) { console.error("Reconciliation err:", e); }
+}
+
+module.exports = {
+  bot,
+  sendMorningBriefing,
+  sendEnvelopeAlert,
+  runDailyBriefings,
+  runEnvelopeAlerts,
+  runReconciliation,
+};

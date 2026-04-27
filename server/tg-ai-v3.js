@@ -117,4 +117,4 @@ RULES:
   return response.choices?.[0]?.message?.content ?? "...";
 }
 
-module.expo
+module.exports = { callSpendYes, callReview };
