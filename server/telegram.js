@@ -54,7 +54,7 @@ const S = {
     setupFirst: "Set yourself up first. Send me your balance and payday.",
     setupFirstReview: "Set yourself up first and log a few things — then I'll have something to tell you.",
     error: "Something went wrong. Try again.",
-    welcome: "Hey — I'm SpendYes.\n\nI don't track budgets or nag you about spending. I show you what you *can* spend, freely, with everything accounted for.\n\nTo get started, just tell me two things:\n• What's your bank balance right now?\n• When do you next get paid?\n\nJust type it naturally. Like talking to a friend.",
+    welcome: "Hey — I'm SpendYes.\n\nI don't track budgets or nag you about spending. I show you what you *can* spend, freely, with everything accounted for.\n\nLet's get you set up. What's your current bank balance?",
     billsPrompt: "Now — any regular bills I should know about? Rent, subscriptions, gym, anything recurring.\n\nJust tell me in plain English. Or say *skip* and we're done.",
     nudge3: "\n\n_Tip: you can ask me anything — \"can I afford dinner out?\", \"where's my money going?\", \"what should I cut?\" Or just snap a receipt 📸_",
     nudge5: "\n\n_Try asking \"how'm I doing?\" or \"what did I spend this week?\" I can see patterns you might not._",
@@ -71,7 +71,7 @@ const S = {
     daysWord: "days",
     paidConfirm: "✓ *NAME* paid.",
     skippedConfirm: "Skipped *NAME* — next date advanced.",
-    resetConfirm: "Everything wiped. Let's start fresh.\n\nTell me your bank balance and when you next get paid.",
+    resetConfirm: "Everything wiped. Let's start fresh!\n\nWhat's your current bank balance?",
     resetFail: "Couldn't reset. Try again.",
   },
   ru: {
@@ -96,7 +96,7 @@ const S = {
     setupFirst: "Сначала настройтесь. Отправьте баланс и дату зарплаты.",
     setupFirstReview: "Сначала настройтесь и запишите несколько расходов — тогда скажу.",
     error: "Что-то пошло не так. Попробуйте ещё.",
-    welcome: "Привет — я SpendYes.\n\nЯ не слежу за бюджетом и не читаю нотации. Я показываю сколько ты *можешь* тратить свободно.\n\nДля начала скажите:\n• Сколько сейчас на счёту?\n• Когда следующая зарплата?\n\nПишите как другу.",
+    welcome: "Привет — я SpendYes.\n\nЯ не слежу за бюджетом и не читаю нотации. Я показываю сколько ты *можешь* тратить свободно.\n\nДавай настроим. Сколько сейчас на счёту?",
     billsPrompt: "Теперь — есть регулярные платежи? Аренда, подписки, спортзал?\n\nПросто напишите или *пропустить*.",
     nudge3: "\n\n_Совет: можете спросить что угодно — \"могу ли я пойти в ресторан?\", \"куда уходят деньги?\" Или сфоткайте чек 📸_",
     nudge5: "\n\n_Попробуйте \"как дела?\" или \"что я потратил за неделю?\" Я вижу паттерны._",
@@ -113,7 +113,7 @@ const S = {
     daysWord: "дн.",
     paidConfirm: "✓ *NAME* оплачено.",
     skippedConfirm: "*NAME* пропущено — дата сдвинута.",
-    resetConfirm: "Всё сброшено. Начнём заново.\n\nСкажите баланс и когда следующая зарплата.",
+    resetConfirm: "Всё сброшено. Начнём заново!\n\nСколько сейчас на счёту?",
     resetFail: "Не удалось сбросить. Попробуйте ещё.",
   }
 };
@@ -373,10 +373,6 @@ async function processMessage(ctx, telegramId, text) {
     if (hasSetup || hasTx) {
       const msg = (parsed.message || "Got it.") + "\n\n" + formatActionReply(pic, lang) + nudge;
       await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: mainKeyboard(lang) });
-      if (hasSetup && !state.setup) {
-        const bp = t(lang, "billsPrompt");
-        setTimeout(() => ctx.reply(bp, { parse_mode: "Markdown" }), 800);
-      }
     } else {
       await ctx.reply(parsed.message || "Got it.", { parse_mode: "Markdown", reply_markup: newState.setup ? mainKeyboard(lang) : undefined });
     }
