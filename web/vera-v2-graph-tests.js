@@ -180,12 +180,12 @@ assertTrue("Picture has checksumOk", pic.checksumOk);
 // == 5. SYSTEM PROMPT ==
 console.log("\n-- 5. SYSTEM PROMPT --");
 const prompt = v2.buildSystemPrompt(s);
-assertTrue("Prompt includes queries", prompt.includes("QUERIES"));
-assertTrue("Prompt includes pool_spend", prompt.includes("pool_spend"));
-assertTrue("Prompt includes search_spend", prompt.includes("search_spend"));
-assertTrue("Prompt includes projection", prompt.includes("projection"));
+assertTrue("Prompt includes state", prompt.includes("STATE"));
+assertTrue("Prompt includes setup instructions", prompt.includes("setup"));
+assertTrue("Prompt includes transaction", prompt.includes("transaction"));
 assertTrue("Prompt includes cycleStats", prompt.includes("cycleStats"));
 assertTrue("Prompt includes NEVER calculate", prompt.includes("NEVER calculate"));
+assertTrue("Prompt includes WATERFALL", prompt.includes("WATERFALL"));
 
 
 // == 6. EDGE CASES ==

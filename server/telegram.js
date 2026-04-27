@@ -10,6 +10,7 @@ const { Bot, InlineKeyboard } = require("grammy");
 const prisma = require("./db/client");
 const db = require("./db/queries");
 const v2 = require("./vera-v2");
+const { responseSchema } = require("./openai-schema");
 
 const anthropic = new Anthropic();
 const openai = new OpenAI();
@@ -45,19 +46,19 @@ const S = {
     receiptReading: "_reading receipt…_",
     receiptRead: "📄 I read: *DESC* — AMT\n\nLog this?",
     receiptLogged: "✓ Logged *DESC* — AMT",
-    receiptCancelled: "Cancelled. Type it manually if you want.",
-    receiptFailed: "Couldn't read that receipt. Type it manually.",
-    receiptEdit: "What's the right amount and description? e.g. _\"coffee $4.50\"_",
-    spentPrompt: "What did you spend? Just type it — _\"lunch $12\"_ or _\"uber home $23\"_\n\nOr snap a receipt 📸",
-    receivedPrompt: "What came in? — _\"got paid $3,200\"_ or _\"friend paid me back $50\"_",
-    notSetup: "Not set up yet. Send me your balance and payday to get started.",
-    setupFirst: "Set yourself up first. Send me your balance and payday.",
-    setupFirstReview: "Set yourself up first and log a few things — then I'll have something to tell you.",
+    receiptCancelled: "Cancelled. Type it manually.",
+    receiptFailed: "Couldn't read that. Type it manually.",
+    receiptEdit: "What's the right amount? e.g. _\"coffee $4.50\"_",
+    spentPrompt: "What did you spend? _\"lunch $12\"_ or snap a receipt 📸",
+    receivedPrompt: "What came in? _\"got paid $3,200\"_",
+    notSetup: "Not set up yet. Tell me your balance to get started.",
+    setupFirst: "Set up first — tell me your balance.",
+    setupFirstReview: "Set up first and log a few things — then I'll have something to say.",
     error: "Something went wrong. Try again.",
-    welcome: "Hey — I'm SpendYes.\n\nI don't track budgets or nag you about spending. I show you what you *can* spend, freely, with everything accounted for.\n\nLet's get you set up. What's your current bank balance?",
-    billsPrompt: "Now — any regular bills I should know about? Rent, subscriptions, gym, anything recurring.\n\nJust tell me in plain English. Or say *skip* and we're done.",
-    nudge3: "\n\n_Tip: you can ask me anything — \"can I afford dinner out?\", \"where's my money going?\", \"what should I cut?\" Or just snap a receipt 📸_",
-    nudge5: "\n\n_Try asking \"how'm I doing?\" or \"what did I spend this week?\" I can see patterns you might not._",
+    welcome: "Hey — I'm SpendYes.\n\nI show you what you *can* spend freely.\n\nWhat's your current bank balance?",
+    billsPrompt: "Any regular bills? Rent, subscriptions, gym?\n\nJust tell me or say *skip*.",
+    nudge3: "\n\n_Tip: ask me anything — \"can I afford dinner out?\" Or snap a receipt 📸_",
+    nudge5: "\n\n_Try \"how'm I doing?\" — I can spot patterns._",
     balance: "Balance",
     bills: "Bills",
     planned: "Planned",
@@ -87,19 +88,19 @@ const S = {
     receiptReading: "_читаю чек…_",
     receiptRead: "📄 Я прочитал: *DESC* — AMT\n\nЗаписать?",
     receiptLogged: "✓ Записано *DESC* — AMT",
-    receiptCancelled: "Отменено. Можете ввести вручную.",
+    receiptCancelled: "Отменено. Введите вручную.",
     receiptFailed: "Не удалось прочитать. Введите вручную.",
-    receiptEdit: "Что правильно? Например: _\"кофе $4.50\"_",
-    spentPrompt: "Что потратили? Просто напишите — _\"обед $12\"_ или _\"такси $23\"_\n\nИли сфоткайте чек 📸",
-    receivedPrompt: "Что поступило? — _\"зарплата $3,200\"_ или _\"друг вернул $50\"_",
-    notSetup: "Ещё не настроено. Отправьте баланс и дату зарплаты.",
-    setupFirst: "Сначала настройтесь. Отправьте баланс и дату зарплаты.",
-    setupFirstReview: "Сначала настройтесь и запишите несколько расходов — тогда скажу.",
+    receiptEdit: "Что правильно? _\"кофе $4.50\"_",
+    spentPrompt: "Что потратили? _\"обед $12\"_ или чек 📸",
+    receivedPrompt: "Что поступило? _\"зарплата $3,200\"_",
+    notSetup: "Не настроено. Скажите баланс.",
+    setupFirst: "Сначала настройтесь — скажите баланс.",
+    setupFirstReview: "Сначала настройтесь и запишите расходы — тогда скажу.",
     error: "Что-то пошло не так. Попробуйте ещё.",
-    welcome: "Привет — я SpendYes.\n\nЯ не слежу за бюджетом и не читаю нотации. Я показываю сколько ты *можешь* тратить свободно.\n\nДавай настроим. Сколько сейчас на счёту?",
-    billsPrompt: "Теперь — есть регулярные платежи? Аренда, подписки, спортзал?\n\nПросто напишите или *пропустить*.",
-    nudge3: "\n\n_Совет: можете спросить что угодно — \"могу ли я пойти в ресторан?\", \"куда уходят деньги?\" Или сфоткайте чек 📸_",
-    nudge5: "\n\n_Попробуйте \"как дела?\" или \"что я потратил за неделю?\" Я вижу паттерны._",
+    welcome: "Привет — я SpendYes.\n\nПоказываю сколько *можешь* тратить свободно.\n\nСколько сейчас на счёту?",
+    billsPrompt: "Есть регулярные платежи? Аренда, подписки?\n\nНапишите или *пропустить*.",
+    nudge3: "\n\n_Совет: спросите что угодно или сфоткайте чек 📸_",
+    nudge5: "\n\n_Попробуйте \"как дела?\" — я вижу паттерны._",
     balance: "Баланс",
     bills: "Счета",
     planned: "Планы",
@@ -245,7 +246,7 @@ function formatBillAlert(drain, pic, lang) {
   return "⚠ *" + drain.name + "* " + when + "\n\n```\n" + fmt(drain.amountCents) + "\n```";
 }
 
-// -- CALL SPENDYES (GPT-4o-mini, JSON format)
+// -- CALL SPENDYES (GPT-4o-mini, Structured Outputs)
 async function callSpendYes(state, userMessage) {
   const history = (state.conversationHistory || []).slice(-10);
   history.push({ role: "user", content: userMessage });
@@ -253,7 +254,7 @@ async function callSpendYes(state, userMessage) {
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     max_tokens: 1024,
-    response_format: { type: "json_object" },
+    response_format: { type: "json_schema", json_schema: responseSchema },
     messages: [
       { role: "system", content: v2.buildSystemPrompt(state) + langNote },
       ...history,
@@ -262,7 +263,7 @@ async function callSpendYes(state, userMessage) {
   const text = response.choices?.[0]?.message?.content ?? "";
   let parsed;
   try { parsed = JSON.parse(text); }
-  catch { parsed = { message: text, actions: [{ type: "none" }] }; }
+  catch { parsed = { message: text, actions: [{ type: "none", data: {} }] }; }
   return { text, parsed };
 }
 
