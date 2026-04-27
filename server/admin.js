@@ -86,6 +86,37 @@ router.get("/api/users", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.get("/api/users/:id/detail", async (req, res) => {
+  try {
+    const v2 = require("./vera-v2");
+    const db = require("./db/queries");
+    const user = await prisma.user.findUnique({ where:{id:req.params.id} });
+    if (!user) return res.status(404).json({error:"Not found"});
+    const state = await db.loadState(prisma, user.id);
+    const pic = v2.computePicture(state);
+    const sym = state.currencySymbol || "$";
+    const M = c => v2.toMoney(c, sym);
+    const txs = (state.transactions||[]).slice(-20).reverse().map(tx=>({
+      id:tx.id, type:tx.type, amount:M(tx.amountCents),
+      desc:tx.description||"", date:tx.date, node:tx.node||"free",
+    }));
+    const drains = Object.values(state.drains).filter(d=>d.active).map(d=>({
+      name:d.name, amount:M(d.amountCents), next:d.nextDate, interval:d.intervalDays,
+    }));
+    res.json({
+      id:user.id, telegramId:user.telegramId, setup:state.setup,
+      currency:state.currency||"USD", symbol:sym,
+      balance:M(state.balanceCents), income:M(state.incomeCents),
+      savings:M(state.savingsCents), savingRate:(state.savingRateBps/100).toFixed(1)+"%",
+      free:pic.trulyFreeUSD||M(0), freeToday:pic.freeRemainingTodayUSD||M(0),
+      dailyPace:pic.dailyFreePaceUSD||M(0), weeklyPace:pic.weeklyFreePaceUSD||M(0),
+      daysLeft:pic.daysLeft||0, payday:state.payday,
+      thisWeekSpent:pic.thisWeekSpentUSD||M(0), thisMonthSpent:pic.thisMonthSpentUSD||M(0),
+      transactions:txs, drains,
+    });
+  } catch (e) { res.status(500).json({error:e.message}); }
+});
+
 router.get("/api/costs", async (req, res) => {
   try {
     const now = new Date();
@@ -130,14 +161,18 @@ router.get("/api/financial", async (req, res) => {
     let tB=0,tS=0,tI=0,tR=0;
     for (const u of users) { tB+=u.balanceCents; tS+=u.savingsCents; tI+=u.incomeCents; tR+=u.savingRateBps; }
     const n = users.length||1;
-    const topP = await prisma.pool.groupBy({ by:["name"], where:{active:true}, _sum:{spentCents:true}, _count:true, orderBy:{_sum:{spentCents:"desc"}}, take:10 });
-    const topD = await prisma.drain.groupBy({ by:["name"], where:{active:true}, _sum:{amountCents:true}, _count:true, orderBy:{_count:{_all:"desc"}}, take:10 });
+    const pools = await prisma.pool.findMany({ where:{active:true}, select:{name:true,spentCents:true} });
+    const pm = {};
+    for (const p of pools) { if (!pm[p.name]) pm[p.name]={s:0,c:0}; pm[p.name].s+=p.spentCents; pm[p.name].c++; }
+    const topP = Object.entries(pm).map(([n,v])=>({name:n,spentUSD:(v.s/100).toFixed(2),users:v.c})).sort((a,b)=>b.spentUSD-a.spentUSD).slice(0,10);
+    const drains = await prisma.drain.findMany({ where:{active:true}, select:{name:true,amountCents:true} });
+    const dm = {};
+    for (const d of drains) { if (!dm[d.name]) dm[d.name]={a:0,c:0}; dm[d.name].a+=d.amountCents; dm[d.name].c++; }
+    const topD = Object.entries(dm).map(([n,v])=>({name:n,amountUSD:(v.a/100).toFixed(2),users:v.c})).sort((a,b)=>b.c-a.c).slice(0,10);
     res.json({
       totalBalanceUSD:(tB/100).toFixed(2), totalSavingsUSD:(tS/100).toFixed(2),
       avgIncomeUSD:(tI/n/100).toFixed(2), avgSavingRate:(tR/n/100).toFixed(1)+"%",
-      userCount:users.length,
-      topPools: topP.map(p=>({name:p.name,spentUSD:((p._sum.spentCents||0)/100).toFixed(2),users:p._count})),
-      topDrains: topD.map(d=>({name:d.name,amountUSD:((d._sum.amountCents||0)/100).toFixed(2),users:d._count})),
+      userCount:users.length, topPools:topP, topDrains:topD,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
