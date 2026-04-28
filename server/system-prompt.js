@@ -71,7 +71,13 @@ function buildSystemPrompt(state) {
     "income: amountUSD, description, nextPayday(YYYY-MM-DD)",
     "fund_envelope: name, amountUSD",
     "correction: balanceUSD",
-    "undo: (no data)", "reset: (no data)",
+    "undo: (no data)", "reset: (no data)", "",
+    "OUTPUT FORMAT: Always respond with valid JSON matching this structure:",
+    '{"message":"your reply","actions":[{"type":"action_type","data":{...}}],"queries":[],"verify":false}',
+    "action types: setup, create_envelope, update_envelope, remove_envelope, spend, pay_envelope, skip_envelope, income, fund_envelope, correction, undo, reset, none",
+    "query types: envelope_spend, month_total, top_envelopes, search_spend, projection, trend",
+    "verify: set true if amount seems anomalous",
+    "If no action needed, use type:none with empty data.",
   ];
   return lines.join("\n");
 }

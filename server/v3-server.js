@@ -6,7 +6,7 @@ const OpenAI = require("openai");
 const v3 = require("./vera-v3");
 const { runQuery } = require("./vera-v3-query");
 const { buildSystemPrompt } = require("./system-prompt");
-const { responseSchema } = require("./openai-schema-v3");
+// Schema file kept for reference but not used in API calls
 const prisma = require("./db/client");
 const db = require("./db/queries");
 const { router: adminRouter, logApiCall } = require("./admin");
@@ -88,7 +88,7 @@ app.post("/api/v3/chat/:sid", async (req, res) => {
       const resp = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         max_tokens: 1024,
-        response_format: { type: "json_schema", json_schema: responseSchema },
+        response_format: { type: "json_object" },
         messages: [{ role: "system", content: buildSystemPrompt(st) }, ...hist],
       });
       const text = resp.choices?.[0]?.message?.content ?? "";

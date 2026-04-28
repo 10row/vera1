@@ -4,7 +4,7 @@
 const OpenAI = require("openai");
 const v3 = require("./vera-v3");
 const { buildSystemPrompt } = require("./system-prompt");
-const { responseSchema } = require("./openai-schema-v3");
+
 
 const openai = new OpenAI();
 
@@ -29,7 +29,7 @@ async function callSpendYes(state, userMessage, userId) {
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     max_tokens: 1024,
-    response_format: { type: "json_schema", json_schema: responseSchema },
+    response_format: { type: "json_object" },
     messages: [
       { role: "system", content: buildSystemPrompt(state) + langNote },
       ...history,
