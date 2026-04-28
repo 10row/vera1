@@ -30,6 +30,12 @@ model User {
   language       String  @default("en")
   timezone       String  @default("UTC")
 
+  // v4 — safe-core rebuild. Independent of v3 columns above.
+  // v4State holds the full domain state (balance, envelopes, txs, events).
+  // v4History is recent conversation for the AI (last N messages).
+  v4State   Json?
+  v4History Json   @default("[]")
+
   // Relations
   envelopes    Envelope[]
   transactions Transaction[]
