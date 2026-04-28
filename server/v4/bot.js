@@ -11,6 +11,7 @@ const { applyIntent } = require("./engine");
 const { compute, heroLine: viewHeroLine } = require("./view");
 const { processMessage } = require("./pipeline");
 const tts = require("./tts");
+const proactive = require("./proactive");
 const db = require("./db");
 
 // Trim BOT_TOKEN — Railway/.env paste often leaves a trailing newline which
@@ -345,6 +346,58 @@ function attach(prisma) {
     }
   });
 
+  bot.command("mute", async (ctx) => {
+    try {
+      const arg = (ctx.match || "").toString().trim().toLowerCase();
+      const valid = ["bills", "pace", "milestones", "all"];
+      if (!valid.includes(arg)) {
+        await ctx.reply("Use `/mute bills`, `/mute pace`, `/mute milestones`, or `/mute all`.", { parse_mode: "Markdown" });
+        return;
+      }
+      const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+      await db.withUserLock(u.id, async () => {
+        const state = await db.loadState(prisma, u.id);
+        if (!state.mute) state.mute = {};
+        if (arg === "all") {
+          state.mute.bills = state.mute.pace = state.mute.milestones = true;
+        } else {
+          state.mute[arg] = true;
+        }
+        await db.saveState(prisma, u.id, state);
+        await ctx.reply("✓ Muted " + arg + ". Use `/unmute " + arg + "` to turn back on.", { parse_mode: "Markdown" });
+      });
+    } catch (e) {
+      console.error("[v4 /mute]", e);
+      await ctx.reply("Couldn't update mute setting.").catch(() => {});
+    }
+  });
+
+  bot.command("unmute", async (ctx) => {
+    try {
+      const arg = (ctx.match || "").toString().trim().toLowerCase();
+      const valid = ["bills", "pace", "milestones", "all"];
+      if (!valid.includes(arg)) {
+        await ctx.reply("Use `/unmute bills`, `/unmute pace`, `/unmute milestones`, or `/unmute all`.", { parse_mode: "Markdown" });
+        return;
+      }
+      const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+      await db.withUserLock(u.id, async () => {
+        const state = await db.loadState(prisma, u.id);
+        if (!state.mute) state.mute = {};
+        if (arg === "all") {
+          state.mute.bills = state.mute.pace = state.mute.milestones = false;
+        } else {
+          state.mute[arg] = false;
+        }
+        await db.saveState(prisma, u.id, state);
+        await ctx.reply("✓ Unmuted " + arg + ".");
+      });
+    } catch (e) {
+      console.error("[v4 /unmute]", e);
+      await ctx.reply("Couldn't update mute setting.").catch(() => {});
+    }
+  });
+
   bot.command("voice", async (ctx) => {
     try {
       const arg = (ctx.match || "").toString().trim().toLowerCase();
@@ -591,4 +644,58 @@ function attach(prisma) {
   });
 }
 
-module.exports = { bot, attach };
+// ── PROACTIVE SCHEDULER ─────────────────────────────────
+// Runs every hour. Fires only at 9 AM user-local. Hard rate-limit: 1
+// proactive message per user per ~24 hours, even if multiple eligible.
+const PROACTIVE_HOUR = 9;
+const PROACTIVE_MIN_INTERVAL_MS = 23 * 60 * 60 * 1000;
+
+async function runProactive(prisma) {
+  if (!bot) return;
+  let users;
+  try {
+    users = await prisma.user.findMany({
+      where: { telegramId: { not: null } },
+      select: { id: true, telegramId: true },
+    });
+  } catch (e) {
+    console.error("[v4 proactive] user fetch failed:", e.message);
+    return;
+  }
+  let sent = 0;
+  for (const u of users) {
+    if (!u.telegramId) continue;
+    try {
+      await db.withUserLock(u.id, async () => {
+        const state = await db.loadState(prisma, u.id);
+        if (!state.setup) return;
+        const tz = state.timezone || "UTC";
+        const hour = proactive.localHour(tz);
+        if (hour !== PROACTIVE_HOUR) return;
+        // Hard rate limit
+        const lastAt = state.proactiveLastSentAt || 0;
+        if (Date.now() - lastAt < PROACTIVE_MIN_INTERVAL_MS) return;
+        const all = proactive.decideProactive(state, m.today(tz));
+        const pick = proactive.pickMostImportant(all);
+        if (!pick) return;
+        try {
+          await bot.api.sendMessage(u.telegramId, pick.text + "\n" + heroLine(state), {
+            parse_mode: "Markdown",
+            reply_markup: mainKeyboard(),
+          });
+          let next = proactive.markSent(state, [pick]);
+          next.proactiveLastSentAt = Date.now();
+          await db.saveState(prisma, u.id, next);
+          sent++;
+        } catch (e) {
+          console.error("[v4 proactive send]", u.telegramId, e.message);
+        }
+      });
+    } catch (e) {
+      console.error("[v4 proactive user loop]", e.message);
+    }
+  }
+  if (sent > 0) console.log("[v4 proactive] sent " + sent + " messages");
+}
+
+module.exports = { bot, attach, runProactive };
