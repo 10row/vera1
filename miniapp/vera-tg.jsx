@@ -2,7 +2,7 @@
 // Envelope-based dashboard + chat. Dark theme. Fuel gauge.
 "use strict";
 
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef } = React;
 
 const API_BASE = "";
 const C = {
@@ -104,8 +104,8 @@ function Dashboard({ pic, loading, onRefresh }) {
   if (loading && !pic) return <div style={{ ...S.scroll, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ color:C.sub }}>Loading…</div></div>;
   if (!pic || !pic.setup) return (
     <div style={{ ...S.scroll, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:12 }}>
-      <div style={{ fontSize:32 }}>💬</div>
-      <div style={{ color:C.sub, textAlign:"center" }}>Say hi in the Chat tab to get started</div>
+      <div style={{ fontSize:32 }}>👋</div>
+      <div style={{ color:C.sub, textAlign:"center" }}>Send a message in the chat to get started</div>
     </div>
   );
   const freeRatio = pic.balanceCents > 0 ? Math.max(0, pic.freeCents / pic.balanceCents) : 0;
@@ -202,66 +202,16 @@ function Dashboard({ pic, loading, onRefresh }) {
   );
 }
 
-// ── CHAT ────────────────────────────────────────────────────────
-function Chat({ sid, onStateUpdate }) {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const bottomRef = useRef(null);
-  const scroll = () => setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 50);
-  const send = useCallback(async () => {
-    const text = input.trim();
-    if (!text || sending) return;
-    setInput(""); setSending(true);
-    setMessages(m => [...m, { role:"user", text }]);
-    scroll();
-    try {
-      const r = await fetch(`${API_BASE}/api/v3/chat/${sid}`, {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ message: text }),
-      });
-      const d = await r.json();
-      if (d.error) { setMessages(m => [...m, { role:"assistant", text:"Error: " + d.error }]); }
-      else {
-        setMessages(m => [...m, { role:"assistant", text: d.message || "Got it." }]);
-        if (d.pic) onStateUpdate(d.pic);
-      }
-    } catch (e) { setMessages(m => [...m, { role:"assistant", text:"Connection error." }]); }
-    setSending(false); scroll();
-  }, [input, sending, sid, onStateUpdate]);
-  return (
-    <div style={S.chatWrap}>
-      <div style={S.messages}>
-        {messages.length === 0 && <div style={{ color:C.sub, textAlign:"center", marginTop:40 }}>Say hi to get started</div>}
-        {messages.map((m, i) => <div key={i} style={S.bubble(m.role === "user")}>{m.text}</div>)}
-        <div ref={bottomRef} />
-      </div>
-      <div style={S.inputRow}>
-        <textarea style={S.input} rows={1} value={input} placeholder="Type a message…"
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-        <button style={S.sendBtn(sending || !input.trim())} onClick={send} disabled={sending || !input.trim()}>↑</button>
-      </div>
-    </div>
-  );
-}
-
 // ── APP ─────────────────────────────────────────────────────────
 function App() {
-  const [tab, setTab] = useState("dashboard");
   const [pic, setPic] = useState(null);
   const [loading, setLoading] = useState(true);
   const sid = useRef(null);
 
-  // Resolve session ID from Telegram user ID
   useEffect(() => {
     const tid = window.TELEGRAM_USER_ID;
     if (!tid || tid === "dev") {
-      // Dev mode: use localStorage token
-      let token = null;
-      try { token = localStorage.getItem("vera_sid"); } catch {}
-      if (!token) { token = "dev_" + Math.random().toString(36).slice(2); try { localStorage.setItem("vera_sid", token); } catch {} }
-      sid.current = token;
+      sid.current = "dev_fallback";
     } else {
       sid.current = "tg_" + tid;
     }
@@ -279,20 +229,9 @@ function App() {
     setLoading(false);
   };
 
-  const handleStateUpdate = useCallback((newPic) => {
-    setPic(newPic);
-  }, []);
-
   return (
     <div style={S.page}>
-      <div style={S.tab}>
-        <button style={S.tabBtn(tab === "dashboard")} onClick={() => { setTab("dashboard"); loadPicture(); }}>Dashboard</button>
-        <button style={S.tabBtn(tab === "chat")} onClick={() => setTab("chat")}>Chat</button>
-      </div>
-      {tab === "dashboard"
-        ? <Dashboard pic={pic} loading={loading} onRefresh={loadPicture} />
-        : <Chat sid={sid.current} onStateUpdate={handleStateUpdate} />
-      }
+      <Dashboard pic={pic} loading={loading} onRefresh={loadPicture} />
     </div>
   );
 }

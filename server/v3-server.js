@@ -20,14 +20,22 @@ const openai = new OpenAI();
 const tokenCache = new Map();
 const TOKEN_CACHE_MAX = 500;
 
-async function resolveUser(wt) {
-  if (tokenCache.has(wt)) return tokenCache.get(wt);
-  const u = await db.getOrCreateWebUser(prisma, wt);
+async function resolveUser(sid) {
+  if (tokenCache.has(sid)) return tokenCache.get(sid);
+  let u;
+  if (sid.startsWith("tg_")) {
+    // Mini app: look up by Telegram user ID (same user as the bot)
+    const telegramId = sid.slice(3);
+    u = await prisma.user.findUnique({ where: { telegramId } });
+    if (!u) u = await prisma.user.create({ data: { telegramId } });
+  } else {
+    u = await db.getOrCreateWebUser(prisma, sid);
+  }
   if (tokenCache.size >= TOKEN_CACHE_MAX) {
     const first = tokenCache.keys().next().value;
     tokenCache.delete(first);
   }
-  tokenCache.set(wt, u.id);
+  tokenCache.set(sid, u.id);
   return u.id;
 }
 

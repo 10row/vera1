@@ -10,10 +10,10 @@ const S = {
     receiptReading: "_Reading your receipt..._",
     receiptFailed: "Couldn't read that receipt. Try typing it instead.",
     receiptEdit: "No problem — what's the correct amount?",
-    notSetup: "I'm not set up yet. Send me a voice note about your situation — what's in your account, when you get paid, any regular bills.",
+    notSetup: "Hold the mic and tell me about your situation — I'll set everything up from your voice.\n\n🎙 _\"I have about two thousand in my account, I get paid on the 15th, rent is 1400 on the first\"_",
     error: "Something went wrong — try sending that again.",
-    welcome: "Hey — I'm SpendYes! \u{1F44B}\n\nI show you what you *can* spend freely, so you never have to wonder.\n\nSend me a voice note about your situation — what's in your account, when you get paid, any regular bills. I'll handle the rest.",
-    resetConfirm: "Everything's been wiped clean. Let's start fresh!\n\nSend me a voice note about your situation.",
+    welcome: "Hey — I'm SpendYes! \u{1F44B}\n\nI show you what you *can* spend freely, so you never have to wonder.\n\n🎙 *Hold the mic* and tell me about your money situation. For example:\n\n_\"I've got about three thousand in my account, I get paid every two weeks, rent is 1400, and I spend maybe fifty bucks a week on groceries\"_\n\nJust talk naturally — I'll figure out the rest.",
+    resetConfirm: "Clean slate! 🎙 Hold the mic and tell me your situation — balance, payday, any bills.",
     paidConfirm: "✓ *NAME* paid.", skippedConfirm: "Skipped *NAME* — next date moved forward.",
     undone: "Done — last action undone.", freeToday: "Free today",
     days: "d", daysWord: "days", due: "due",
@@ -25,10 +25,10 @@ const S = {
     receiptReading: "_Читаю чек…_",
     receiptFailed: "Не смог прочитать. Напишите сами.",
     receiptEdit: "Какая правильная сумма?",
-    notSetup: "Я ещё не настроен. Отправьте голосовое сообщение о вашей ситуации.",
+    notSetup: "Зажми микрофон и расскажи о своей ситуации — я всё настрою.\n\n🎙 _\"У меня около ста тысяч на счету, зарплата 15-го, аренда 45 тысяч первого числа\"_",
     error: "Что-то пошло не так. Попробуйте ещё.",
-    welcome: "Привет — я SpendYes! \u{1F44B}\n\nПоказываю сколько *можешь* тратить свободно.\n\nОтправьте голосовое сообщение о вашей ситуации.",
-    resetConfirm: "Всё сброшено. Начнём заново!",
+    welcome: "Привет — я SpendYes! \u{1F44B}\n\nПоказываю сколько *можешь* тратить свободно.\n\n🎙 *Зажми микрофон* и расскажи про свои деньги. Например:\n\n_\"У меня тысяч сто на карте, зарплата раз в две недели, аренда 45 тысяч, на продукты трачу тысяч пять в неделю\"_\n\nПросто говори — я разберусь.",
+    resetConfirm: "Чистый лист! 🎙 Зажми микрофон и расскажи — баланс, зарплата, счета.",
     paidConfirm: "✓ *NAME* оплачено.", skippedConfirm: "*NAME* пропущено — дата сдвинута.",
     undone: "Готово — последнее действие отменено.", freeToday: "Сегодня",
     days: "д", daysWord: "дн.", due: "к оплате",
@@ -55,6 +55,7 @@ function formatBriefing(pic, lang) {
     const amt = d.amountFormatted||M(d.amountCents||0);
     lines.push("⚠ *"+d.name+"* "+t(lang,"due")+" — "+amt);
   }
+  lines.push(lang==="ru"?"\n🎙 Расскажи если что-то потратил":"\n🎙 Tell me if you spent anything");
   return lines.join("\n");
 }
 function formatEnvelopeAlert(envelope, pic, lang) {
@@ -63,9 +64,10 @@ function formatEnvelopeAlert(envelope, pic, lang) {
   const when = days<0?(lang==="ru"?"просрочено":"overdue"):days===0?(lang==="ru"?"к оплате сегодня":"due today"):(lang==="ru"?"к оплате завтра":"due tomorrow");
   return "⚠ *"+envelope.name+"* "+when+" — "+M(envelope.amountCents);
 }
+function isValidUrl(s) { try { const u = new URL(s); return u.protocol === "https:"; } catch { return false; } }
 function mainKeyboard(lang, miniAppUrl) {
   const kb = { keyboard: [[{ text: t(lang,"review") }]], resize_keyboard: true };
-  if (miniAppUrl) kb.keyboard[0].push({ text: t(lang,"dashboard"), web_app: { url: miniAppUrl } });
+  if (miniAppUrl && isValidUrl(miniAppUrl)) kb.keyboard[0].push({ text: t(lang,"dashboard"), web_app: { url: miniAppUrl } });
   return kb;
 }
 function dueButtons(envelopeName, lang) {
