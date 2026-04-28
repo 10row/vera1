@@ -266,6 +266,7 @@ function applyIntent(state, intent) {
         const np = m.normalizeDate(p.payday);
         if (np) s.payday = np;
       }
+      if (typeof p.voiceReplies === "boolean") s.voiceReplies = p.voiceReplies;
       event = makeEvent(intent, prevBalance, s.balanceCents);
       break;
     }

@@ -140,6 +140,7 @@ function createFreshState() {
     envelopes: {},        // keyed by ekey(name)
     transactions: [],     // append-only [{ id, ts, kind, amountCents, note, envelopeKey, date }]
     events: [],           // append-only audit log [{ id, ts, intent, prevBalance, newBalance, ... }]
+    voiceReplies: false,  // when true and incoming message was voice, also send a voice reply
   };
 }
 

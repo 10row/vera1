@@ -10,6 +10,7 @@ const m = require("./model");
 const { applyIntent } = require("./engine");
 const { compute, heroLine: viewHeroLine } = require("./view");
 const { processMessage } = require("./pipeline");
+const tts = require("./tts");
 const db = require("./db");
 
 // Trim BOT_TOKEN — Railway/.env paste often leaves a trailing newline which
@@ -150,14 +151,30 @@ function confirmCard(token, opts) {
   };
 }
 
+// Send a text reply, and if the incoming was voice + user opted in,
+// also send a voice synth. TTS failure is invisible (no error to user).
+async function sayMaybeVoice(ctx, text, options, voiceMode) {
+  const sent = await ctx.reply(text, options || {});
+  if (voiceMode && text) {
+    const audio = await tts.synthesize(text);
+    if (audio) {
+      try { await ctx.replyWithVoice(new (require("grammy").InputFile)(audio, "reply.opus")); }
+      catch (e) { console.warn("[v4 voice send]", e.message); }
+    }
+  }
+  return sent;
+}
+
 // ── PROCESS A USER TEXT MESSAGE ────────────────────────
-async function processText(prisma, ctx, telegramId, text) {
+async function processText(prisma, ctx, telegramId, text, opts) {
+  const isVoice = !!(opts && opts.isVoice);
   const u = await db.resolveUser(prisma, "tg_" + telegramId);
   await ctx.replyWithChatAction("typing");
 
   await db.withUserLock(u.id, async () => {
     const state = await db.loadState(prisma, u.id);
     const history = await db.loadHistory(prisma, u.id);
+    const voiceMode = isVoice && !!state.voiceReplies;
 
     const result = await processMessage(state, text, history);
 
@@ -166,10 +183,10 @@ async function processText(prisma, ctx, telegramId, text) {
     if (result.message) await db.appendHistory(prisma, u.id, "assistant", result.message);
 
     if (result.kind === "talk") {
-      await ctx.reply(result.message || "…", {
+      await sayMaybeVoice(ctx, result.message || "…", {
         parse_mode: "Markdown",
         reply_markup: mainKeyboard(),
-      });
+      }, voiceMode);
       return;
     }
 
@@ -272,7 +289,7 @@ async function processText(prisma, ctx, telegramId, text) {
         const undoTok = setUndoToken(lastEventId, u.id);
         opts.reply_markup = undoButton(undoTok).reply_markup;
       }
-      await ctx.reply(lines.join("\n"), opts);
+      await sayMaybeVoice(ctx, lines.join("\n"), opts, voiceMode);
     }
 
     if (toConfirm.length === 1) {
@@ -328,6 +345,32 @@ function attach(prisma) {
     }
   });
 
+  bot.command("voice", async (ctx) => {
+    try {
+      const arg = (ctx.match || "").toString().trim().toLowerCase();
+      const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+      await db.withUserLock(u.id, async () => {
+        const state = await db.loadState(prisma, u.id);
+        if (arg === "on") {
+          state.voiceReplies = true;
+          await db.saveState(prisma, u.id, state);
+          await ctx.reply("✓ Voice replies on. I'll speak when you speak.", { reply_markup: mainKeyboard() });
+        } else if (arg === "off") {
+          state.voiceReplies = false;
+          await db.saveState(prisma, u.id, state);
+          await ctx.reply("✓ Voice replies off.", { reply_markup: mainKeyboard() });
+        } else {
+          await ctx.reply("Voice replies are " + (state.voiceReplies ? "on" : "off") + ". Use `/voice on` or `/voice off`.", {
+            parse_mode: "Markdown", reply_markup: mainKeyboard(),
+          });
+        }
+      });
+    } catch (e) {
+      console.error("[v4 /voice]", e);
+      await ctx.reply("Couldn't update voice setting.").catch(() => {});
+    }
+  });
+
   bot.command("today", async (ctx) => {
     try {
       const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
@@ -354,6 +397,7 @@ function attach(prisma) {
       "/today — just the hero number\n" +
       "/app — open your dashboard\n" +
       "/undo — roll back my last action\n" +
+      "/voice on|off — talk back when you talk to me\n" +
       "/reset — wipe everything (asks first)",
       { parse_mode: "Markdown", reply_markup: mainKeyboard() }
     );
@@ -445,7 +489,7 @@ function attach(prisma) {
       const text = (tr.text || "").slice(0, 2000);
       if (statusMsg) ctx.api.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
       if (!text) return ctx.reply("Couldn't catch that — try again?");
-      await processText(prisma, ctx, ctx.from.id, text);
+      await processText(prisma, ctx, ctx.from.id, text, { isVoice: true });
     } catch (e) {
       console.error("[v4 voice]", e);
       if (statusMsg) ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, "Couldn't process voice — try again?").catch(() => {});
