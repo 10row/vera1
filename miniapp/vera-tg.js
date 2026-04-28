@@ -118,6 +118,8 @@ function timeAgo(ts) {
 function authHeaders() {
   var initData = window.Telegram && window.Telegram.WebApp
     ? window.Telegram.WebApp.initData : null;
+  // Fall back to the snapshot captured at load time (survives SDK state changes)
+  if (!initData && window.TG_INIT_DATA) initData = window.TG_INIT_DATA;
   var headers = {};
   if (initData) headers["X-Telegram-Init-Data"] = initData;
   return headers;
@@ -606,6 +608,23 @@ function SummaryFooter(props) {
 
 // ── ERROR STATE ─────────────────────────────────────────────────
 function ErrorState(props) {
+  var diagState = useState(null);
+  var diag = diagState[0], setDiag = diagState[1];
+
+  function runDiagnostic() {
+    setDiag("Checking…");
+    fetch(API_BASE + "/api/v3/whoami", { headers: authHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var line = "[" + (d.status || "?") + "] " + (d.hint || "");
+        if (d.user) line += " user=" + d.user.id + " (" + (d.user.first_name || "") + ")";
+        line += " | initData=" + d.initDataLength + "B age=" + (d.ageSeconds != null ? d.ageSeconds + "s" : "?");
+        line += " botToken=" + (d.hasBotToken ? "yes" : "MISSING");
+        setDiag(line);
+      })
+      .catch(function(e) { setDiag("whoami failed: " + e.message); });
+  }
+
   return h("div", {
     style: {
       display: "flex", flexDirection: "column", alignItems: "center",
@@ -622,12 +641,27 @@ function ErrorState(props) {
         borderRadius: 8, padding: "10px 24px", fontSize: 14,
         fontWeight: 500, cursor: "pointer", fontFamily: "'Inter',sans-serif",
       },
-    }, "Tap to retry")
+    }, "Tap to retry"),
+    h("button", {
+      onClick: runDiagnostic,
+      style: {
+        background: "transparent", color: C.sub, border: "1px solid " + C.border,
+        borderRadius: 8, padding: "6px 16px", fontSize: 12, marginTop: 10,
+        cursor: "pointer", fontFamily: "'Inter',sans-serif",
+      },
+    }, "Why?"),
+    props.errMsg ? h("div", {
+      style: { color: C.muted, fontSize: 10, marginTop: 12, wordBreak: "break-all", maxWidth: 320, textAlign: "center" },
+    }, props.errMsg) : null,
+    diag ? h("div", {
+      style: { color: C.amber, fontSize: 10, marginTop: 8, wordBreak: "break-all", maxWidth: 320, textAlign: "center" },
+    }, diag) : null
   );
 }
 
 // ── NOT SET UP STATE ────────────────────────────────────────────
-function NotSetUpState() {
+function NotSetUpState(props) {
+  var debugInfo = props && props.debug;
   return h("div", {
     style: {
       display: "flex", flexDirection: "column", alignItems: "center",
@@ -639,7 +673,10 @@ function NotSetUpState() {
     }, "👋"),
     h("div", {
       style: { color: C.sub, textAlign: "center", fontSize: 15, lineHeight: 1.5 },
-    }, "Welcome! Send a message in the chat to get started.")
+    }, "Welcome! Send a message in the chat to get started."),
+    debugInfo ? h("div", {
+      style: { color: C.muted, textAlign: "center", fontSize: 10, marginTop: 20, wordBreak: "break-all", maxWidth: 300 },
+    }, debugInfo) : null
   );
 }
 
@@ -809,6 +846,9 @@ function App() {
   var lastUpdatedState = useState(null);
   var lastUpdated = lastUpdatedState[0], setLastUpdated = lastUpdatedState[1];
 
+  var lastErrState = useState("");
+  var lastErr = lastErrState[0], setLastErr = lastErrState[1];
+
   var sid = useRef(null);
   var scrollRef = useRef(null);
 
@@ -839,6 +879,7 @@ function App() {
       })
       .catch(function(err) {
         console.error("[SpendYes] loadPicture error:", err.message);
+        setLastErr(err.message);
         if (!pic) setError(true);
       })
       .finally(function() {
@@ -847,11 +888,43 @@ function App() {
       });
   }, [pic]);
 
-  // Initial load
+  // Initial load — retry identity read briefly in case the Telegram SDK
+  // populates initDataUnsafe a tick after page load (some clients do).
   useEffect(function() {
-    var tid = window.TELEGRAM_USER_ID;
-    sid.current = (!tid || tid === "dev") ? "dev_fallback" : "tg_" + tid;
-    loadPicture();
+    var cancelled = false;
+    var attempts = 0;
+    var maxAttempts = 6; // ~1.5s total
+
+    function tryStart() {
+      if (cancelled) return;
+      var tid = window.TELEGRAM_USER_ID;
+      var hasInit = !!window.TG_INIT_DATA;
+      if ((!tid || tid === "dev") && typeof window.refreshTgIdentity === "function") {
+        var snap = window.refreshTgIdentity();
+        tid = snap.id || tid;
+        hasInit = !!snap.initData;
+      }
+      if (tid && tid !== "dev") {
+        sid.current = "tg_" + tid;
+        loadPicture();
+        return;
+      }
+      attempts++;
+      if (attempts < maxAttempts) {
+        setTimeout(tryStart, 250);
+        return;
+      }
+      // Gave up — surface the failure visibly with diagnostics.
+      console.error("[SpendYes] No Telegram user ID after " + attempts + " tries. "
+        + "platform=" + window.TG_PLATFORM
+        + " initData=" + (hasInit ? "present" : "EMPTY"));
+      setLastErr("No Telegram identity. platform=" + window.TG_PLATFORM
+        + " initData=" + (hasInit ? "present-but-no-user" : "missing"));
+      setLoading(false);
+      setError(true);
+    }
+    tryStart();
+    return function() { cancelled = true; };
   }, []);
 
   // Visibility change auto-refresh
@@ -879,9 +952,14 @@ function App() {
   if (loading && !pic) {
     content = h(Skeleton, null);
   } else if (error && !pic) {
-    content = h(ErrorState, { onRetry: function() { loadPicture(); } });
+    content = h(ErrorState, { onRetry: function() { loadPicture(); }, errMsg: lastErr });
   } else if (!pic || !pic.setup) {
-    content = h(NotSetUpState, null);
+    var dbg = "sid=" + (sid.current || "none")
+      + " tgId=" + window.TELEGRAM_USER_ID
+      + " platform=" + window.TG_PLATFORM
+      + " initData=" + (window.TG_INIT_DATA ? "yes(" + window.TG_INIT_DATA.length + ")" : "EMPTY")
+      + (pic ? " setup=" + pic.setup : " pic=null");
+    content = h(NotSetUpState, { debug: dbg });
   } else {
     content = h(Dashboard, { pic: pic, lastUpdated: lastUpdated });
   }

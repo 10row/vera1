@@ -461,6 +461,26 @@ if (bot) bot.command("start", async (ctx) => {
   } catch (err) { console.error("Start err:", err); }
 });
 
+// ── /app COMMAND ──────────────────────────────
+// Inline-keyboard `web_app` button is the most reliable Mini App launch
+// for surfacing initData on every Telegram client.
+if (bot) bot.command("app", async (ctx) => {
+  try {
+    const miniAppUrl = process.env.MINIAPP_URL;
+    if (!miniAppUrl) {
+      await ctx.reply("Mini App is not configured (MINIAPP_URL is missing on the server).");
+      return;
+    }
+    const lang = fmt.detectLang(ctx);
+    const label = lang === "ru" ? "Открыть приложение" : "Open Dashboard";
+    await ctx.reply(lang === "ru" ? "Открой свою панель:" : "Open your dashboard:", {
+      reply_markup: {
+        inline_keyboard: [[{ text: label, web_app: { url: miniAppUrl } }]],
+      },
+    });
+  } catch (err) { console.error("/app err:", err); }
+});
+
 // ── /reset COMMAND ────────────────────────────
 if (bot) bot.command("reset", async (ctx) => {
   try {

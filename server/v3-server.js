@@ -29,9 +29,10 @@ function validateTelegramInitData(initData) {
     const secretKey = crypto.createHmac("sha256", "WebAppData").update(process.env.BOT_TOKEN).digest();
     const checkHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
     if (checkHash !== hash) return null;
-    // Check auth_date is not too old (24 hours)
+    // Check auth_date is not too old (7 days — generous for Mini Apps
+    // that users may leave open or revisit without full SDK refresh)
     const authDate = parseInt(params.get("auth_date") || "0");
-    if (Date.now() / 1000 - authDate > 86400) return null;
+    if (Date.now() / 1000 - authDate > 604800) return null;
     const user = params.get("user");
     return user ? JSON.parse(user) : null;
   } catch { return null; }
@@ -46,7 +47,10 @@ function requireTelegramAuth(req, res, next) {
   if (initData) {
     // If initData is present, always validate it and attach the authenticated user
     const user = validateTelegramInitData(initData);
-    if (!user) return res.status(401).json({ error: "Invalid Telegram auth" });
+    if (!user) {
+      console.warn("[Auth] initData validation failed for sid=" + sid + " initData=" + initData.slice(0, 60) + "...");
+      return res.status(401).json({ error: "Invalid Telegram auth" });
+    }
 
     if (sid && sid.startsWith("tg_")) {
       // Ensure the authenticated user matches the requested session
@@ -63,6 +67,10 @@ function requireTelegramAuth(req, res, next) {
   if (sid && sid.startsWith("tg_")) {
     // tg_ requests MUST have initData
     return res.status(401).json({ error: "Missing Telegram auth" });
+  }
+  // Block dev_fallback and similar non-telegram sessions in production
+  if (sid === "dev_fallback" && process.env.NODE_ENV === "production") {
+    return res.status(401).json({ error: "Telegram auth required" });
   }
   // Non-telegram requests pass through
   next();
@@ -103,12 +111,75 @@ function sanitise(st) {
 // ── STATIC FILES ──────────────────────────────
 app.use("/miniapp", express.static(path.join(__dirname, "../miniapp")));
 
+// ── DIAGNOSTIC: check user by telegramId ──────
+app.get("/api/v3/debug/:telegramId", async (req, res) => {
+  try {
+    const tid = req.params.telegramId;
+    const user = await prisma.user.findUnique({ where: { telegramId: tid } });
+    if (!user) return res.json({ found: false, telegramId: tid });
+    const st = await db.loadState(prisma, user.id);
+    res.json({ found: true, telegramId: tid, userId: user.id, setup: st && st.setup, hasBotToken: !!process.env.BOT_TOKEN });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── DIAGNOSTIC: validate initData and report exactly what's wrong ─────
+// Mini App calls this to surface auth issues to the user without exposing
+// secrets. Useful when the chat works (BOT_TOKEN is fine) but the Mini App
+// can't connect — the response says whether initData is missing, malformed,
+// signed by a different bot, or stale.
+app.get("/api/v3/whoami", (req, res) => {
+  const initData = req.headers["x-telegram-init-data"];
+  const result = {
+    hasBotToken: !!process.env.BOT_TOKEN,
+    miniAppUrlSet: !!process.env.MINIAPP_URL,
+    nodeEnv: process.env.NODE_ENV || "unset",
+    receivedInitData: !!initData,
+    initDataLength: initData ? initData.length : 0,
+  };
+  if (!initData) return res.json({ ...result, status: "no-init-data",
+    hint: "Mini App did not send X-Telegram-Init-Data. Either it was launched outside Telegram, or the SDK didn't populate initData (try the bot's Menu button instead of the keyboard button)." });
+  if (!process.env.BOT_TOKEN) return res.json({ ...result, status: "no-bot-token",
+    hint: "Server has no BOT_TOKEN env var. Set it in Railway." });
+  try {
+    const params = new URLSearchParams(initData);
+    const hash = params.get("hash");
+    const authDate = parseInt(params.get("auth_date") || "0");
+    const userStr = params.get("user");
+    const userParsed = userStr ? JSON.parse(userStr) : null;
+    if (!hash) return res.json({ ...result, status: "malformed", hint: "initData has no hash field" });
+    params.delete("hash");
+    const dcs = [...params.entries()].sort(([a],[b]) => a.localeCompare(b)).map(([k,v]) => k+"="+v).join("\n");
+    const secretKey = crypto.createHmac("sha256", "WebAppData").update(process.env.BOT_TOKEN).digest();
+    const checkHash = crypto.createHmac("sha256", secretKey).update(dcs).digest("hex");
+    const sigOk = checkHash === hash;
+    const ageSec = Math.floor(Date.now() / 1000 - authDate);
+    return res.json({
+      ...result,
+      status: sigOk ? (ageSec > 604800 ? "stale" : "ok") : "bad-signature",
+      sigOk,
+      ageSeconds: ageSec,
+      authDate,
+      user: userParsed ? { id: userParsed.id, username: userParsed.username, first_name: userParsed.first_name } : null,
+      hint: sigOk
+        ? (ageSec > 604800 ? "initData is older than 7 days — relaunch the Mini App from Telegram." : "Auth is valid.")
+        : "HMAC mismatch. The BOT_TOKEN on this server does not match the bot that signed initData. Check Railway env vars.",
+    });
+  } catch (e) {
+    return res.json({ ...result, status: "parse-error", error: e.message });
+  }
+});
+
 // ── API: PICTURE ──────────────────────────────
 app.get("/api/v3/picture/:sid", requireTelegramAuth, async (req, res) => {
   try {
-    const uid = await resolveUser(req.params.sid);
+    const sid = req.params.sid;
+    const uid = await resolveUser(sid);
     const st = await db.loadState(prisma, uid);
-    res.json({ pic: v3.computePicture(st), state: sanitise(st) });
+    const pic = v3.computePicture(st);
+    console.log("[Picture] sid=" + sid + " uid=" + uid + " setup=" + (st && st.setup) + " payday=" + (st && st.payday));
+    res.json({ pic, state: sanitise(st) });
   } catch (e) {
     console.error("Picture err:", e.message);
     res.status(500).json({ error: e.message });
@@ -286,6 +357,24 @@ app.listen(PORT, async () => {
       } catch (e) { console.error("  Webhook err:", e.message); }
     } else {
       bot.start({ onStart: () => console.log("  Telegram bot polling...") });
+    }
+
+    // Register the persistent Mini App menu button (the ≡ button next to
+    // the message input). This is the canonical Mini App launch and is the
+    // most reliable way to pass initData to the Mini App.
+    if (process.env.MINIAPP_URL) {
+      try {
+        await bot.api.setChatMenuButton({
+          menu_button: {
+            type: "web_app",
+            text: "Dashboard",
+            web_app: { url: process.env.MINIAPP_URL },
+          },
+        });
+        console.log("  Mini App menu button set: " + process.env.MINIAPP_URL);
+      } catch (e) { console.error("  Menu button err:", e.message); }
+    } else {
+      console.warn("  MINIAPP_URL not set — Mini App menu button skipped");
     }
   }
 

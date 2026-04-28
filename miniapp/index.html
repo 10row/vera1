@@ -28,30 +28,59 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
   <script>
-    var tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
-    tg.setHeaderColor('#0F0F0F');
-    tg.setBackgroundColor('#0F0F0F');
-
-    // Extract user ID: prefer initDataUnsafe, fall back to parsing initData string
-    var _tgUserId = tg.initDataUnsafe?.user?.id;
-    if (!_tgUserId && tg.initData) {
-      try {
-        var _params = new URLSearchParams(tg.initData);
-        var _userStr = _params.get('user');
-        if (_userStr) {
-          var _parsed = JSON.parse(_userStr);
-          _tgUserId = _parsed.id;
-        }
-      } catch (e) {
-        console.warn('[SpendYes] Failed to parse initData user:', e);
-      }
+    // Snapshot Telegram WebApp state. The SDK populates initData synchronously
+    // on a normal Mini App launch, but we re-read on retry in case of an odd
+    // client. We also expose a refresh() helper for the React app to call.
+    var tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+    if (tg) {
+      try { tg.ready(); } catch (e) {}
+      try { tg.expand(); } catch (e) {}
+      try { tg.setHeaderColor('#0F0F0F'); } catch (e) {}
+      try { tg.setBackgroundColor('#0F0F0F'); } catch (e) {}
     }
-    window.TELEGRAM_USER_ID = _tgUserId || 'dev';
-    window.TELEGRAM_USER_NAME = tg.initDataUnsafe?.user?.first_name || 'User';
-    window.TG_INIT_DATA = tg.initData || '';
-    console.log('[SpendYes] user_id=' + window.TELEGRAM_USER_ID + ' initData=' + (tg.initData ? tg.initData.slice(0, 40) + '...' : 'EMPTY'));
+
+    function readTgUser() {
+      if (!tg) return { id: null, name: null, initData: '' };
+      var id = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : null;
+      var name = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.first_name : null;
+      var raw = tg.initData || '';
+      if (!id && raw) {
+        try {
+          var p = new URLSearchParams(raw);
+          var us = p.get('user');
+          if (us) {
+            var u = JSON.parse(us);
+            id = u && u.id;
+            name = name || (u && u.first_name);
+          }
+        } catch (e) {
+          console.warn('[SpendYes] parse initData failed:', e && e.message);
+        }
+      }
+      return { id: id || null, name: name || 'User', initData: raw };
+    }
+
+    function applyTg(snap) {
+      window.TELEGRAM_USER_ID = snap.id || 'dev';
+      window.TELEGRAM_USER_NAME = snap.name || 'User';
+      window.TG_INIT_DATA = snap.initData || '';
+    }
+
+    applyTg(readTgUser());
+
+    // Some Telegram clients (older Android, embedded webviews) populate
+    // initData a beat after page load. Expose a helper the app can poll.
+    window.refreshTgIdentity = function() {
+      var snap = readTgUser();
+      applyTg(snap);
+      return snap;
+    };
+
+    window.TG_PLATFORM = tg ? (tg.platform || 'unknown') : 'no-sdk';
+    window.TG_VERSION = tg ? (tg.version || 'unknown') : 'no-sdk';
+    console.log('[SpendYes] platform=' + window.TG_PLATFORM + ' v=' + window.TG_VERSION
+      + ' user_id=' + window.TELEGRAM_USER_ID
+      + ' initData=' + (window.TG_INIT_DATA ? window.TG_INIT_DATA.length + ' bytes' : 'EMPTY'));
   </script>
 
   <script src="vera-tg.js"></script>
