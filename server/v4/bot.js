@@ -177,6 +177,55 @@ async function processText(prisma, ctx, telegramId, text) {
       return;
     }
 
+    // DECISION SUPPORT: read-only simulate. Show projected hero + delta,
+    // offer "Log it now" button that converts to a real record_spend confirm.
+    if (result.kind === "decision") {
+      const sym = state.currencySymbol || "$";
+      const sim = result.simulate;
+      const proj = sim.projected;
+      const cur = sim.current;
+      const M = c => m.toMoney(c, sym);
+      const amt = result.intent.params.amountCents;
+
+      let verdict;
+      if (proj.state === "over") {
+        verdict = "*Over.* That'd put you " + M(proj.deficitCents) + " over for the cycle.";
+      } else if (proj.state === "tight") {
+        verdict = "*Tight.* You'd drop to " + proj.dailyPaceFormatted + "/day for " + proj.daysToPayday + " days.";
+      } else if (cur.state !== "green") {
+        verdict = "*Green.* You'd jump from " + cur.dailyPaceFormatted + "/day up to " + proj.dailyPaceFormatted + "/day.";
+      } else {
+        verdict = "*Easy.* You'd still have " + proj.dailyPaceFormatted + "/day for " + proj.daysToPayday + " days.";
+      }
+
+      const lines = [];
+      if (result.message) lines.push(result.message);
+      lines.push("");
+      lines.push(verdict);
+      lines.push("_Spend: " + M(amt) + (result.intent.params.note ? " on " + result.intent.params.note : "") + "_");
+
+      // Offer to log it now: token holds the equivalent record_spend intent.
+      const recordIntent = {
+        kind: "record_spend",
+        params: {
+          amountCents: amt,
+          note: result.intent.params.note || "",
+          envelopeKey: result.intent.params.envelopeKey || null,
+        },
+      };
+      const token = setPending([recordIntent], u.id);
+      await ctx.reply(lines.join("\n"), {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "Log it now", callback_data: "yes:" + token },
+            { text: "Skip", callback_data: "no:" + token },
+          ]],
+        },
+      });
+      return;
+    }
+
     // DO mode: bucket decisions by severity.
     // - auto    → apply immediately (we'll send one summary at the end)
     // - confirm → collect into a single batch confirm card

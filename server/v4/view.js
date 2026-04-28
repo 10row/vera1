@@ -140,4 +140,40 @@ function compute(state, todayStr) {
   };
 }
 
-module.exports = { compute };
+// simulate(state, simulatedSpend) returns the view AS IF the simulated
+// spend had been applied — without mutating state. Used by Decision
+// Support: "Can I afford $200 shoes?" → simulate, show the new view,
+// offer to record it.
+//
+// simulatedSpend: { amountCents, envelopeKey?, note? }
+// Returns: { current, projected, delta }
+//   current   — view of the real state today
+//   projected — view as if the spend had happened
+//   delta     — { dailyPaceDelta, disposableDelta, stateChange }
+function simulate(state, simulatedSpend, todayStr) {
+  const current = compute(state, todayStr);
+  if (!current.setup) return { current, projected: current, delta: null };
+
+  // Apply the spend to a clone WITHOUT going through engine — pure read.
+  const clone = JSON.parse(JSON.stringify(state));
+  const amt = Math.round(simulatedSpend && simulatedSpend.amountCents || 0);
+  if (amt > 0) {
+    clone.balanceCents -= amt;
+    const ek = simulatedSpend.envelopeKey ? simulatedSpend.envelopeKey : null;
+    if (ek && clone.envelopes[ek] && clone.envelopes[ek].active) {
+      clone.envelopes[ek].spentCents += amt;
+    }
+  }
+  const projected = compute(clone, todayStr);
+  return {
+    current,
+    projected,
+    delta: {
+      dailyPaceDelta: projected.dailyPaceCents - current.dailyPaceCents,
+      disposableDelta: projected.disposableCents - current.disposableCents,
+      stateChange: current.state !== projected.state ? { from: current.state, to: projected.state } : null,
+    },
+  };
+}
+
+module.exports = { compute, simulate };

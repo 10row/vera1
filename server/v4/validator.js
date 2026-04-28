@@ -145,6 +145,18 @@ function validateIntent(state, intent, todayStr) {
       return confirm("Confirm spend?");
     }
 
+    case "simulate_spend": {
+      // READ-ONLY decision support. Auto severity because it doesn't mutate.
+      // The pipeline routes this away from the engine to view.simulate().
+      if (!state.setup) return reject("Set up your account first");
+      if (!isPositiveCents(p.amountCents)) return reject("Amount must be positive");
+      if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("Amount looks unreasonable");
+      if (p.envelopeKey && !state.envelopes[m.ekey(p.envelopeKey)]) {
+        return reject("Envelope not found");
+      }
+      return auto("Simulated");
+    }
+
     case "undo_last": {
       // Undo is the user's explicit action — auto-severity. The bot routes
       // /undo and the inline ↶ Undo button straight through.
