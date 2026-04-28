@@ -16,7 +16,7 @@ const responseSchema = {
           properties: {
             type: { type: "string", enum: ["setup","create_envelope","update_envelope","remove_envelope","spend","pay_envelope","skip_envelope","income","fund_envelope","correction","undo","reset","none"] },
             data: {
-              type: "object", required: [], additionalProperties: false,
+              type: "object", required: ["balanceUSD","payday","currency","symbol","cycleStart","name","amountUSD","rhythm","intervalDays","nextDate","keywords","targetUSD","fundRate","fundAmountUSD","fundedUSD","addFundedUSD","priority","active","description","envelope","nextPayday"], additionalProperties: false,
               properties: {
                 balanceUSD: { type: ["number","null"] }, payday: { type: ["string","null"] },
                 currency: { type: ["string","null"] }, symbol: { type: ["string","null"] },
@@ -40,7 +40,7 @@ const responseSchema = {
       queries: {
         type: "array",
         items: {
-          type: "object", required: ["type"], additionalProperties: false,
+          type: "object", required: ["type","envelope","month","keyword","days"], additionalProperties: false,
           properties: {
             type: { type: "string", enum: ["envelope_spend","month_total","top_envelopes","search_spend","projection","trend"] },
             envelope: { type: ["string","null"] }, month: { type: ["string","null"] },
