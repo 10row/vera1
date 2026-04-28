@@ -12,7 +12,14 @@ const { compute } = require("./view");
 const { processMessage } = require("./pipeline");
 const db = require("./db");
 
-const bot = process.env.BOT_TOKEN ? new Bot(process.env.BOT_TOKEN) : null;
+// Trim BOT_TOKEN — Railway/.env paste often leaves a trailing newline which
+// silently breaks initData HMAC validation while still working for API calls.
+const BOT_TOKEN_RAW = BOT_TOKEN || "";
+const BOT_TOKEN = BOT_TOKEN_RAW.trim();
+if (BOT_TOKEN_RAW && BOT_TOKEN_RAW !== BOT_TOKEN) {
+  console.warn("[v4] BOT_TOKEN had trailing whitespace — trimmed");
+}
+const bot = BOT_TOKEN ? new Bot(BOT_TOKEN) : null;
 const openai = new OpenAI();
 
 // In-memory pending intents store: { token → { userId, intent, expires } }.
@@ -252,7 +259,7 @@ function attach(prisma) {
     const typing = setInterval(() => ctx.replyWithChatAction("typing").catch(() => {}), 4000);
     try {
       const file = await ctx.getFile();
-      const url = "https://api.telegram.org/file/bot" + process.env.BOT_TOKEN + "/" + file.file_path;
+      const url = "https://api.telegram.org/file/bot" + BOT_TOKEN + "/" + file.file_path;
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 10000);
       const resp = await fetch(url, { signal: ctrl.signal });

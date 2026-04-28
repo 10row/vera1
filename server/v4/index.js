@@ -20,15 +20,29 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: "16kb" }));
 
 // ── INITDATA VALIDATION ─────────────────────────
+// IMPORTANT: BOT_TOKEN env vars are commonly pasted with trailing whitespace
+// (newline / space / CR). The Telegram Bot API tolerates this on its URL,
+// but HMAC validation needs the EXACT bytes Telegram used to sign initData.
+// We trim aggressively here — this fixes the #1 cause of "bad-signature".
+function getBotToken() {
+  return (process.env.BOT_TOKEN || "").trim();
+}
+function getBotId() {
+  const t = getBotToken();
+  const colon = t.indexOf(":");
+  return colon > 0 ? t.slice(0, colon) : null;
+}
+
 function validateInitData(initData) {
-  if (!initData || !process.env.BOT_TOKEN) return null;
+  const token = getBotToken();
+  if (!initData || !token) return null;
   try {
     const params = new URLSearchParams(initData);
     const hash = params.get("hash");
     if (!hash) return null;
     params.delete("hash");
     const dcs = [...params.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => k + "=" + v).join("\n");
-    const secretKey = crypto.createHmac("sha256", "WebAppData").update(process.env.BOT_TOKEN).digest();
+    const secretKey = crypto.createHmac("sha256", "WebAppData").update(token).digest();
     const checkHash = crypto.createHmac("sha256", secretKey).update(dcs).digest("hex");
     if (checkHash !== hash) return null;
     const authDate = parseInt(params.get("auth_date") || "0");
@@ -63,8 +77,18 @@ app.get("/", (req, res) => res.redirect("/miniapp/"));
 // ── DIAGNOSTIC ──────────────────────────────────
 app.get("/api/v4/whoami", (req, res) => {
   const initData = req.headers["x-telegram-init-data"];
+  const rawToken = process.env.BOT_TOKEN || "";
+  const token = getBotToken();
+  // botId is the public integer prefix of the token (before the colon).
+  // Safe to expose: it's visible in any t.me/<bot>?start link via Telegram.
+  const serverBotId = getBotId();
+  // initData includes auth_date and user but NOT the signing bot id directly;
+  // however the URL params often include the launch context. We surface what
+  // we can to help diagnose multi-bot confusion.
   const out = {
-    hasBotToken: !!process.env.BOT_TOKEN,
+    hasBotToken: !!token,
+    botTokenHadWhitespace: rawToken !== token, // diagnostic: true if we trimmed something
+    serverBotId,
     miniAppUrlSet: !!process.env.MINIAPP_URL,
     miniAppUrl: process.env.MINIAPP_URL || null,
     nodeEnv: process.env.NODE_ENV || "unset",
@@ -73,7 +97,7 @@ app.get("/api/v4/whoami", (req, res) => {
   };
   if (!initData) return res.json({ ...out, status: "no-init-data",
     hint: "Mini App didn't send initData. Open from the bot's ≡ Dashboard menu button or send /app." });
-  if (!process.env.BOT_TOKEN) return res.json({ ...out, status: "no-bot-token",
+  if (!token) return res.json({ ...out, status: "no-bot-token",
     hint: "Server has no BOT_TOKEN — set it in Railway." });
   try {
     const params = new URLSearchParams(initData);
@@ -84,7 +108,7 @@ app.get("/api/v4/whoami", (req, res) => {
     if (!hash) return res.json({ ...out, status: "malformed", hint: "initData has no hash" });
     params.delete("hash");
     const dcs = [...params.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => k + "=" + v).join("\n");
-    const secretKey = crypto.createHmac("sha256", "WebAppData").update(process.env.BOT_TOKEN).digest();
+    const secretKey = crypto.createHmac("sha256", "WebAppData").update(token).digest();
     const checkHash = crypto.createHmac("sha256", secretKey).update(dcs).digest("hex");
     const sigOk = checkHash === hash;
     const ageSec = Math.floor(Date.now() / 1000 - authDate);
@@ -95,7 +119,7 @@ app.get("/api/v4/whoami", (req, res) => {
       user: userParsed ? { id: userParsed.id, username: userParsed.username, first_name: userParsed.first_name } : null,
       hint: sigOk
         ? (ageSec > 7 * 24 * 60 * 60 ? "Session older than 7 days — relaunch the Mini App." : "Auth is valid.")
-        : "HMAC mismatch. Either BOT_TOKEN here doesn't match the bot whose menu was tapped, or the Mini App was opened from a different bot's link.",
+        : "HMAC mismatch. Server bot id " + serverBotId + ". Compare to the bot you launched from (in BotFather, /mybots → token starts with this number). If they match: BOT_TOKEN env var likely has hidden whitespace.",
     });
   } catch (e) {
     return res.json({ ...out, status: "parse-error", error: e.message });
