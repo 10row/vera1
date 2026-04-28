@@ -7,6 +7,7 @@
     "start": "node server/migrate-v3.js && node server/v3-server.js",
     "dev": "node --watch server/v3-server.js",
     "test": "node web/vera-v2-tests.js && node web/vera-v2-edge-tests.js && node web/vera-v2-planned-tests.js && node web/vera-v2-graph-tests.js",
+    "test:v3": "node server/tests/v3-engine.test.js",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio"

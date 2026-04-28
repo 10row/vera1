@@ -8,6 +8,36 @@ const { buildSystemPrompt } = require("./system-prompt");
 
 const openai = new OpenAI();
 
+// ── RETRY WRAPPER WITH TIMEOUT ────────────────
+const RETRY_DELAYS = [1000, 2000, 4000]; // exponential backoff: 1s, 2s, 4s
+const TIMEOUT_MS = 30000; // 30 seconds per attempt
+
+async function withRetry(fn, label = "AI call") {
+  let lastErr;
+  for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const result = await fn(controller.signal);
+      clearTimeout(timer);
+      return result;
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = err;
+      const isLast = attempt === RETRY_DELAYS.length - 1;
+      if (isLast) break;
+      const isRetryable = err.name === "AbortError" ||
+        err.status === 429 || err.status === 500 || err.status === 502 ||
+        err.status === 503 || err.status === 504 ||
+        err.code === "ECONNRESET" || err.code === "ETIMEDOUT";
+      if (!isRetryable) break;
+      console.warn(`${label} attempt ${attempt + 1} failed (${err.message}), retrying in ${RETRY_DELAYS[attempt]}ms...`);
+      await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+    }
+  }
+  throw lastErr;
+}
+
 // Safe import of API logger
 let logApiCall = async () => {};
 try {
@@ -26,15 +56,20 @@ async function callSpendYes(state, userMessage, userId) {
   const langNote = state.language === "ru"
     ? "\n\nIMPORTANT: The user speaks Russian. Respond in Russian. All message text must be in Russian."
     : "";
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    max_tokens: 1024,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: buildSystemPrompt(state) + langNote },
-      ...history,
-    ],
-  });
+  const systemContent = buildSystemPrompt(state) + langNote;
+  const msgs = [
+    { role: "system", content: systemContent },
+    ...history,
+  ];
+  const response = await withRetry((signal) => openai.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      max_tokens: 1024,
+      response_format: { type: "json_object" },
+      messages: msgs,
+    },
+    { signal }
+  ), "callSpendYes");
   const text = response.choices?.[0]?.message?.content ?? "";
   const usage = response.usage || {};
   logApiCall(userId || null, "gpt-4o-mini", usage.prompt_tokens || 0, usage.completion_tokens || 0, "chat").catch(() => {});
@@ -104,14 +139,17 @@ RULES:
 
   const userMsg = lang === "ru" ? "Как у меня дела?" : "How am I doing?";
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    max_tokens: 300,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMsg },
-    ],
-  });
+  const response = await withRetry((signal) => openai.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      max_tokens: 300,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMsg },
+      ],
+    },
+    { signal }
+  ), "callReview");
   const usage = response.usage || {};
   logApiCall(userId || null, "gpt-4o-mini", usage.prompt_tokens || 0, usage.completion_tokens || 0, "review").catch(() => {});
   return response.choices?.[0]?.message?.content ?? "...";

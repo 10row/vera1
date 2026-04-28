@@ -26,12 +26,6 @@ const S = {
   small: { fontSize:13, color:C.sub },
   divider: { height:1, background:C.border, margin:"10px 0" },
   pill: c => ({ display:"inline-block", background:c+"22", color:c, borderRadius:20, padding:"2px 8px", fontSize:11, fontWeight:500, marginLeft:6 }),
-  chatWrap: { display:"flex", flexDirection:"column", height:"100%" },
-  messages: { flex:1, overflowY:"auto", padding:"12px 14px", display:"flex", flexDirection:"column", gap:8, WebkitOverflowScrolling:"touch" },
-  bubble: u => ({ maxWidth:"82%", padding:"10px 14px", borderRadius:u?"18px 18px 4px 18px":"18px 18px 18px 4px", background:u?C.green:C.card, color:u?"#fff":C.text, alignSelf:u?"flex-end":"flex-start", fontSize:14, lineHeight:1.45, border:u?"none":`1px solid ${C.border}` }),
-  inputRow: { display:"flex", gap:8, padding:"10px 12px", borderTop:`1px solid ${C.border}`, background:C.bg, flexShrink:0 },
-  input: { flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:22, padding:"10px 16px", color:C.text, fontFamily:"'Inter',sans-serif", fontSize:14, outline:"none", resize:"none", maxHeight:100, lineHeight:1.4 },
-  sendBtn: d => ({ width:40, height:40, borderRadius:"50%", border:"none", background:d?C.border:C.green, color:"#fff", fontSize:18, cursor:d?"default":"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }),
 };
 
 function colourFor(ratio) { return ratio >= 0.5 ? C.green : ratio >= 0.2 ? C.amber : C.red; }

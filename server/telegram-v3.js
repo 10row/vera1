@@ -181,33 +181,67 @@ async function processMessage(ctx, telegramId, text) {
 // ── REPLY KEYBOARD (review button) — must register BEFORE message:text ──
 if (bot) bot.hears(/How'm I doing|Как дела/i, async (ctx) => {
   try {
-    const { user, state } = await getUserAndState(ctx.from.id);
-    const lang = state.language || fmt.detectLang(ctx);
-    const miniAppUrl = process.env.MINIAPP_URL || null;
-    if (!state.setup) {
-      await ctx.reply(fmt.t(lang, "notSetup"));
-      return;
-    }
-    await ctx.replyWithChatAction("typing");
-    const rv = await callReview(state, user.id);
-    state.conversationHistory.push({
-      role: "user",
-      content: lang === "ru" ? "Как дела?" : "How'm I doing?",
-    });
-    state.conversationHistory.push({ role: "assistant", content: rv });
-    if (state.conversationHistory.length > 40) {
-      state.conversationHistory = state.conversationHistory.slice(-30);
-    }
-    await db.saveState(prisma, user.id, state);
-    await safeReply(ctx, rv, {
-      parse_mode: "Markdown",
-      reply_markup: fmt.mainKeyboard(lang, miniAppUrl),
+    const { user } = await getUserAndState(ctx.from.id);
+    await db.withUserLock(user.id, async () => {
+      const state = await db.loadState(prisma, user.id);
+      const lang = state.language || fmt.detectLang(ctx);
+      const miniAppUrl = process.env.MINIAPP_URL || null;
+      if (!state.setup) {
+        await ctx.reply(fmt.t(lang, "notSetup"));
+        return;
+      }
+      await ctx.replyWithChatAction("typing");
+      const rv = await callReview(state, user.id);
+      state.conversationHistory.push({
+        role: "user",
+        content: lang === "ru" ? "Как дела?" : "How'm I doing?",
+      });
+      state.conversationHistory.push({ role: "assistant", content: rv });
+      if (state.conversationHistory.length > 40) {
+        state.conversationHistory = state.conversationHistory.slice(-30);
+      }
+      await db.saveState(prisma, user.id, state);
+      await safeReply(ctx, rv, {
+        parse_mode: "Markdown",
+        reply_markup: fmt.mainKeyboard(lang, miniAppUrl),
+      });
     });
   } catch (err) {
     console.error("Review err:", err);
     await ctx.reply(fmt.t(fmt.detectLang(ctx), "error")).catch(() => {});
   }
 });
+
+// ── RESET INTERCEPT (text-level, before AI) ──────
+const RESET_PATTERNS = /^(reset|start over|wipe|clear everything|начать заново|сброс|очистить)$/i;
+
+async function handleResetDirect(ctx, telegramId) {
+  const tid = String(telegramId);
+  const user = await prisma.user.findUnique({ where: { telegramId: tid } });
+  const lang = user
+    ? (await db.loadState(prisma, user.id)).language || fmt.detectLang(ctx)
+    : fmt.detectLang(ctx);
+  if (user) {
+    await prisma.$transaction([
+      prisma.transaction.deleteMany({ where: { userId: user.id } }),
+      prisma.envelope.deleteMany({ where: { userId: user.id } }),
+      prisma.monthlySummary.deleteMany({ where: { userId: user.id } }),
+      prisma.cycleSummary.deleteMany({ where: { userId: user.id } }),
+      prisma.message.deleteMany({ where: { userId: user.id } }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: {
+          setup: false, balanceCents: 0, incomeCents: 0,
+          payday: null, cycleStart: null, language: lang,
+        },
+      }),
+    ]);
+  }
+  await ctx.reply(fmt.t(lang, "resetConfirm"));
+}
+
+// ── GREETING INTERCEPT (non-setup users) ─────────
+const GREETING_PATTERNS = /^(hi|hello|hey|yo|sup|start|привет|хай|здравствуйте|начать)$/i;
 
 // ── TEXT MESSAGES ──────────────────────────────
 if (bot) bot.on("message:text", async (ctx) => {
@@ -217,6 +251,23 @@ if (bot) bot.on("message:text", async (ctx) => {
       await ctx.reply("Message too long. Keep it under 2000 characters.");
       return;
     }
+
+    // Intercept reset keywords — bypass AI entirely
+    if (RESET_PATTERNS.test(text.trim())) {
+      await handleResetDirect(ctx, ctx.from.id);
+      return;
+    }
+
+    // Intercept greetings for non-setup users — show voice-first welcome
+    if (GREETING_PATTERNS.test(text.trim())) {
+      const { state } = await getUserAndState(ctx.from.id);
+      if (!state.setup) {
+        const lang = fmt.detectLang(ctx);
+        await ctx.reply(fmt.t(lang, "welcome"), { parse_mode: "Markdown" });
+        return;
+      }
+    }
+
     await processMessage(ctx, ctx.from.id, text);
   } catch (err) {
     console.error("Msg err:", err);
@@ -243,7 +294,8 @@ if (bot) bot.on("message:voice", async (ctx) => {
       await ctx.reply("Couldn't catch that.");
       return;
     }
-    await processMessage(ctx, ctx.from.id, tr.text);
+    const voiceText = tr.text.length > 2000 ? tr.text.slice(0, 2000) : tr.text;
+    await processMessage(ctx, ctx.from.id, voiceText);
   } catch (err) {
     console.error("Voice err:", err);
     await ctx.reply("Couldn't process voice.").catch(() => {});
@@ -406,20 +458,23 @@ if (bot) bot.on("callback_query:data", async (ctx) => {
         await ctx.reply(fmt.t(lang, "notSetup"));
         return;
       }
-      await ctx.replyWithChatAction("typing");
-      const rv = await callReview(state, user.id);
-      state.conversationHistory.push({
-        role: "user",
-        content: lang === "ru" ? "Как дела?" : "How'm I doing?",
-      });
-      state.conversationHistory.push({ role: "assistant", content: rv });
-      if (state.conversationHistory.length > 40) {
-        state.conversationHistory = state.conversationHistory.slice(-30);
-      }
-      await db.saveState(prisma, user.id, state);
-      await safeReply(ctx, rv, {
-        parse_mode: "Markdown",
-        reply_markup: fmt.mainKeyboard(lang, miniAppUrl),
+      await db.withUserLock(user.id, async () => {
+        const freshState = await db.loadState(prisma, user.id);
+        await ctx.replyWithChatAction("typing");
+        const rv = await callReview(freshState, user.id);
+        freshState.conversationHistory.push({
+          role: "user",
+          content: lang === "ru" ? "Как дела?" : "How'm I doing?",
+        });
+        freshState.conversationHistory.push({ role: "assistant", content: rv });
+        if (freshState.conversationHistory.length > 40) {
+          freshState.conversationHistory = freshState.conversationHistory.slice(-30);
+        }
+        await db.saveState(prisma, user.id, freshState);
+        await safeReply(ctx, rv, {
+          parse_mode: "Markdown",
+          reply_markup: fmt.mainKeyboard(lang, miniAppUrl),
+        });
       });
       return;
     }
