@@ -35,9 +35,12 @@ function makeToken() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-function setPending(intent, userId) {
+// Pending intents are now stored as an array so a batch card can apply
+// multiple intents on a single Yes. Single-intent callers pass [intent].
+function setPending(intents, userId) {
+  const arr = Array.isArray(intents) ? intents : [intents];
   const token = makeToken();
-  pending.set(token, { intent, userId, expires: Date.now() + PENDING_TTL_MS });
+  pending.set(token, { intents: arr, userId, expires: Date.now() + PENDING_TTL_MS });
   return token;
 }
 
@@ -110,7 +113,7 @@ function mainKeyboard() {
   return kb;
 }
 
-function confirmCard(intent, sym, token, opts) {
+function confirmCard(token, opts) {
   const yesLabel = (opts && opts.yesLabel) || "Yes, do it";
   const noLabel = (opts && opts.noLabel) || "Cancel";
   return {
@@ -146,41 +149,70 @@ async function processText(prisma, ctx, telegramId, text) {
       return;
     }
 
-    // DO mode: process each decision.
+    // DO mode: bucket decisions by severity.
+    // - auto    → apply immediately (we'll send one summary at the end)
+    // - confirm → collect into a single batch confirm card
+    // - reject  → send error inline (one combined message if multiple)
     let curState = state;
+    const sym = (curState.currencySymbol) || "$";
+    const autoApplied = [];
+    const toConfirm = [];
+    const rejections = [];
+
     for (const d of result.decisions) {
       if (!d.verdict.ok) {
-        await ctx.reply((result.message ? result.message + "\n\n" : "") + "_" + d.verdict.reason + "_", {
-          parse_mode: "Markdown",
-          reply_markup: mainKeyboard(),
-        });
+        rejections.push(d.verdict.reason);
         continue;
       }
       if (d.verdict.severity === "auto") {
-        // Apply now. Send a compact confirm with implicit Undo via "no" on a token.
         try {
           const r = applyIntent(curState, d.intent);
           curState = r.state;
-          await db.saveState(prisma, u.id, curState);
+          autoApplied.push(d.intent);
         } catch (e) {
-          await ctx.reply("Hmm — couldn't log that: " + e.message, { reply_markup: mainKeyboard() });
-          continue;
+          rejections.push("Couldn't log: " + e.message);
         }
-        const sym = curState.currencySymbol || "$";
-        const text = "✓ " + fmtIntent(d.intent, sym) + "\n" + heroLine(curState, sym);
-        await ctx.reply(text, { parse_mode: "Markdown", reply_markup: mainKeyboard() });
         continue;
       }
-      // CONFIRM tier — show card with Yes/No.
-      const sym = curState.currencySymbol || "$";
-      const token = setPending(d.intent, u.id);
-      const cardText = (result.message ? result.message + "\n\n" : "")
-        + "*" + fmtIntent(d.intent, sym) + "*"
-        + (d.verdict.reason && d.verdict.reason !== "Set up your account?" ? "\n_" + d.verdict.reason + "_" : "");
-      await ctx.reply(cardText, {
-        parse_mode: "Markdown",
-        ...confirmCard(d.intent, sym, token),
-      });
+      toConfirm.push({ intent: d.intent, verdict: d.verdict });
+    }
+
+    if (autoApplied.length > 0) await db.saveState(prisma, u.id, curState);
+
+    // Compose one outgoing message stack: rejections (if any), auto summary
+    // (if any), single batch confirm card (if any).
+    if (rejections.length > 0) {
+      const text = (result.message ? result.message + "\n\n" : "")
+        + rejections.map(r => "_" + r + "_").join("\n");
+      await ctx.reply(text, { parse_mode: "Markdown", reply_markup: mainKeyboard() });
+    }
+
+    if (autoApplied.length > 0) {
+      const lines = autoApplied.map(i => "✓ " + fmtIntent(i, sym));
+      lines.push(heroLine(curState, sym));
+      await ctx.reply(lines.join("\n"), { parse_mode: "Markdown", reply_markup: mainKeyboard() });
+    }
+
+    if (toConfirm.length === 1) {
+      const { intent, verdict } = toConfirm[0];
+      const token = setPending([intent], u.id); // store as array for unified apply path
+      const cardText = (result.message && rejections.length === 0 && autoApplied.length === 0 ? result.message + "\n\n" : "")
+        + "*" + fmtIntent(intent, sym) + "*"
+        + (verdict.reason && verdict.reason !== "Set up your account?" ? "\n_" + verdict.reason + "_" : "");
+      await ctx.reply(cardText, { parse_mode: "Markdown", ...confirmCard(token) });
+    } else if (toConfirm.length > 1) {
+      const intents = toConfirm.map(c => c.intent);
+      const token = setPending(intents, u.id);
+      const lines = ["*I'd like to:*"];
+      intents.forEach((i, idx) => lines.push((idx + 1) + ". " + fmtIntent(i, sym)));
+      lines.push("");
+      lines.push("_Confirm all?_");
+      await ctx.reply(lines.join("\n"), { parse_mode: "Markdown", ...confirmCard(token) });
+    }
+
+    if (rejections.length === 0 && autoApplied.length === 0 && toConfirm.length === 0 && result.message) {
+      // Edge case: AI in "do" mode but everything got dropped — fall back to talk.
+      await ctx.reply(result.message, { parse_mode: "Markdown", reply_markup: mainKeyboard() });
     }
   });
 }
@@ -225,14 +257,9 @@ function attach(prisma) {
 
   bot.command("reset", async (ctx) => {
     const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
-    const token = setPending({ kind: "reset", params: {} }, u.id);
+    const token = setPending([{ kind: "reset", params: {} }], u.id);
     await ctx.reply("This will erase everything. Confirm?", {
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "Yes, wipe it", callback_data: "yes:" + token },
-          { text: "Cancel", callback_data: "no:" + token },
-        ]],
-      },
+      ...confirmCard(token, { yesLabel: "Yes, wipe it" }),
     });
   });
 
@@ -301,15 +328,21 @@ function attach(prisma) {
         await ctx.editMessageText("Cancelled.").catch(() => {});
         return;
       }
-      // Yes → apply
+      // Yes → apply each pending intent in order under one lock.
       await db.withUserLock(u.id, async () => {
-        const state = await db.loadState(prisma, u.id);
+        let state = await db.loadState(prisma, u.id);
+        const applied = [];
         try {
-          const r = applyIntent(state, entry.intent);
-          await db.saveState(prisma, u.id, r.state);
-          const sym = r.state.currencySymbol || "$";
-          const text = "✓ Done · " + fmtIntent(entry.intent, sym) + "\n" + heroLine(r.state, sym);
-          await ctx.editMessageText(text, { parse_mode: "Markdown" }).catch(() => {});
+          for (const intent of entry.intents) {
+            const r = applyIntent(state, intent);
+            state = r.state;
+            applied.push(intent);
+          }
+          await db.saveState(prisma, u.id, state);
+          const sym = state.currencySymbol || "$";
+          const lines = applied.map(i => "✓ " + fmtIntent(i, sym));
+          lines.push(heroLine(state, sym));
+          await ctx.editMessageText(lines.join("\n"), { parse_mode: "Markdown" }).catch(() => {});
         } catch (e) {
           console.error("[v4 confirm apply]", e);
           await ctx.editMessageText("Couldn't apply that: " + e.message).catch(() => {});

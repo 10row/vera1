@@ -18,6 +18,11 @@ const MAX_SANE_BALANCE_CENTS = 100_000_000_00; // $100M sanity cap
 const AUTO_SPEND_LIMIT_CENTS = 50_00;          // <$50 auto-applies (with Undo)
 const HALF_BALANCE_FACTOR = 0.5;                // spend > 50% of balance = confirm
 const TEN_X_FACTOR = 10;                        // envelope amount > 10x balance = confirm
+const MAX_INTENTS_PER_TURN = 2;                 // hard cap; setup_account must be solo
+
+// Names that should default to monthly recurrence. Deterministic check
+// catches the "AI forgets recurrence" bug for the obvious cases.
+const MONTHLY_BILL_NAMES = /\b(rent|mortgage|insurance|phone|mobile|cell|internet|wifi|broadband|cable|electric|electricity|water|gas|utilit|subscription|netflix|spotify|hulu|disney|prime|youtube|gym|membership|tuition|loan|car payment|childcare|daycare|hoa)\b/i;
 
 function isFiniteNumber(v) { return typeof v === "number" && Number.isFinite(v); }
 function isPositiveCents(v) { return isFiniteNumber(v) && v > 0; }
@@ -31,6 +36,13 @@ function validateIntent(state, intent, todayStr) {
 
   switch (intent.kind) {
     case "setup_account": {
+      // HARD GUARD: never re-setup an account. The AI used to re-emit setup
+      // every time a user mentioned new info. That can clobber state silently.
+      // To change balance, use adjust_balance. To change schedule, update_settings.
+      // To wipe everything, reset.
+      if (state.setup) {
+        return reject("You're already set up. To fix the balance say \"my balance is X\". To wipe and start over say \"reset\".");
+      }
       if (!isFiniteNumber(p.balanceCents)) return reject("Need a starting balance");
       if (p.balanceCents <= 0) return reject("Starting balance must be greater than zero");
       if (p.balanceCents > MAX_SANE_BALANCE_CENTS) return reject("That balance seems off — sanity check?");
@@ -44,7 +56,6 @@ function validateIntent(state, intent, todayStr) {
       if (p.payFrequency && !m.PAY_FREQS.includes(p.payFrequency)) {
         return reject("Pay frequency must be weekly, biweekly, monthly, or irregular");
       }
-      if (state.setup) return confirm("You're already set up — overwrite?");
       return confirm("Set up your account?");
     }
 
@@ -71,11 +82,23 @@ function validateIntent(state, intent, todayStr) {
         const d = m.normalizeDate(p.dueDate);
         if (!d) return reject("Invalid due date");
         const diff = m.daysBetween(today, d);
-        if (diff < -14) return reject("That due date is more than 2 weeks in the past");
+        // Tighter for NEW bills: must be today or future. Past dates almost
+        // always indicate an LLM date hallucination. Existing bills can be
+        // back-dated through update_envelope.
+        if (p.kind === "bill" && diff < 0) return reject("That due date is in the past — say it like \"due the 1st of next month\"");
         if (diff > 730) return reject("That due date is more than 2 years out");
       }
       if (p.recurrence && !m.RECURRENCES.includes(p.recurrence)) {
         return reject("Recurrence must be once, weekly, biweekly, or monthly");
+      }
+      // BILL RECURRENCE GUARD: rent/utilities/etc. must be monthly. Reject
+      // "once" for these because it would mean the bill silently disappears
+      // after one payment. AI omitting recurrence will be auto-defaulted.
+      if (p.kind === "bill" && MONTHLY_BILL_NAMES.test(p.name)) {
+        const rec = p.recurrence || "once";
+        if (rec === "once") {
+          return reject("\"" + p.name + "\" is a recurring bill — should it repeat monthly? (the AI omitted recurrence)");
+        }
       }
       return confirm("Add this " + p.kind + "?");
     }
@@ -196,14 +219,19 @@ function validateIntent(state, intent, todayStr) {
   }
 }
 
-// Validate a batch from one user turn. Caps cascades.
+// Validate a batch from one user turn. Caps cascades. Enforces atomicity
+// rules like "setup must be solo" so partial confirmations can't leave bad state.
 function validateBatch(state, intents, todayStr) {
   if (!Array.isArray(intents)) return [reject("Intents must be an array")];
   if (intents.length === 0) return [];
-  if (intents.length > 3) {
-    // Cap cascades to prevent one ambiguous voice transcript turning into
-    // a multi-action mass-mutation. Tell user to slow down.
+  if (intents.length > MAX_INTENTS_PER_TURN) {
     return [reject("That's too many things at once — let's do one at a time")];
+  }
+  // SETUP MUST BE SOLO. Otherwise user could approve setup but reject the
+  // sibling intent, leaving partial state.
+  const hasSetup = intents.some(i => i && i.kind === "setup_account");
+  if (hasSetup && intents.length > 1) {
+    return [reject("Let's do setup first on its own — then we'll add the rest.")];
   }
   return intents.map(i => validateIntent(state, i, todayStr));
 }
