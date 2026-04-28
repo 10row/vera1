@@ -23,6 +23,7 @@ model User {
   balanceCents   Int     @default(0)
   incomeCents    Int     @default(0)
   payday         String?
+  payFrequency   String?  // "weekly", "biweekly", "monthly", or number of days
   cycleStart     String?
   currency       String  @default("USD")
   currencySymbol String  @default("$")

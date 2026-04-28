@@ -5,7 +5,24 @@ const v3 = require("./vera-v3");
 function computePicture(state) {
   const s = JSON.parse(JSON.stringify(state));
   if (!s.setup) return { setup: false };
-  const tz = s.timezone || "UTC"; const sym = s.currencySymbol||"$", M = c => v3.toMoney(c,sym), dl = v3.daysUntil(s.payday, tz), t = v3.today(tz);
+  const tz = s.timezone || "UTC"; const sym = s.currencySymbol||"$", M = c => v3.toMoney(c,sym), t = v3.today(tz);
+  // Smart daysLeft: if payday is past, auto-extend display horizon
+  // For regular income: auto-advance payday for display purposes
+  // For irregular income: extend by 30 days from today when payday lapses
+  let displayPayday = s.payday;
+  let paydayOverdue = false;
+  if (s.payday && s.payday < t) {
+    paydayOverdue = true;
+    if (s.payFrequency === "irregular") {
+      // Freelancer: no fixed schedule, use 30-day rolling window from today
+      const ext = new Date(t + "T00:00:00"); ext.setDate(ext.getDate() + 30);
+      displayPayday = ext.toISOString().slice(0, 10);
+    } else {
+      // Regular income: advance payday for display (state isn't mutated)
+      displayPayday = v3.advancePayday(s.payday, s.payFrequency || "monthly", tz);
+    }
+  }
+  const dl = v3.daysUntil(displayPayday, tz);
   const dueEnvelopes = [];
   for (const [k,e] of Object.entries(s.envelopes)) {
     if (e.active && e.nextDate && e.nextDate <= t) { e._isDue=true; dueEnvelopes.push({key:k,name:e.name,amountCents:e.amountCents,amountFormatted:v3.toShort(e.amountCents,sym),nextDate:e.nextDate}); }
@@ -40,7 +57,7 @@ function computePicture(state) {
     freeCents:free, freeFormatted:M(free),
     dailyPaceCents:dailyPace, dailyPaceFormatted:M(dailyPace),
     freeRemainingTodayCents:freeToday, freeRemainingTodayFormatted:M(freeToday),
-    daysLeft:dl, payday:s.payday, cycleStart:s.cycleStart,
+    daysLeft:dl, payday:s.payday, displayPayday, paydayOverdue, cycleStart:s.cycleStart,
     totalReservedCents:totalReserved, totalReservedFormatted:M(totalReserved),
     envelopes:envList, todaySpentCents:v3.todayTotal(s), todaySpentFormatted:M(v3.todayTotal(s)),
     thisWeekSpentCents:weekSpent, thisWeekSpentFormatted:M(weekSpent),

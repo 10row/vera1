@@ -8,31 +8,29 @@ const { buildSystemPrompt } = require("./system-prompt");
 
 const openai = new OpenAI();
 
-// ── RETRY WRAPPER WITH TIMEOUT ────────────────
-const RETRY_DELAYS = [1000, 2000, 4000]; // exponential backoff: 1s, 2s, 4s
-const TIMEOUT_MS = 30000; // 30 seconds per attempt
+// ── RETRY WRAPPER WITH SDK TIMEOUT ────────────
+// Voice-first UX: fail fast. Max 2 attempts with short backoff.
+const MAX_ATTEMPTS = 2;
+const RETRY_DELAY = 1000; // 1s between attempts
+const TIMEOUT_MS = 15000; // 15s per attempt — uses SDK timeout, not AbortController
 
 async function withRetry(fn, label = "AI call") {
   let lastErr;
-  for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      const result = await fn(controller.signal);
-      clearTimeout(timer);
-      return result;
+      return await fn();
     } catch (err) {
-      clearTimeout(timer);
       lastErr = err;
-      const isLast = attempt === RETRY_DELAYS.length - 1;
+      const isLast = attempt === MAX_ATTEMPTS - 1;
       if (isLast) break;
-      const isRetryable = err.name === "AbortError" ||
+      const isRetryable =
         err.status === 429 || err.status === 500 || err.status === 502 ||
         err.status === 503 || err.status === 504 ||
-        err.code === "ECONNRESET" || err.code === "ETIMEDOUT";
+        err.code === "ECONNRESET" || err.code === "ETIMEDOUT" ||
+        err.code === "ECONNABORTED";
       if (!isRetryable) break;
-      console.warn(`${label} attempt ${attempt + 1} failed (${err.message}), retrying in ${RETRY_DELAYS[attempt]}ms...`);
-      await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+      console.warn(`${label} attempt ${attempt + 1} failed (${err.message}), retrying in ${RETRY_DELAY}ms...`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY));
     }
   }
   throw lastErr;
@@ -58,14 +56,14 @@ async function callSpendYes(state, userMessage, userId) {
     { role: "system", content: systemContent },
     ...history,
   ];
-  const response = await withRetry((signal) => openai.chat.completions.create(
+  const response = await withRetry(() => openai.chat.completions.create(
     {
       model: "gpt-4o-mini",
       max_tokens: 1024,
       response_format: { type: "json_object" },
       messages: msgs,
     },
-    { signal }
+    { timeout: TIMEOUT_MS }
   ), "callSpendYes");
   const text = response.choices?.[0]?.message?.content ?? "";
   const usage = response.usage || {};
@@ -164,7 +162,7 @@ RULES:
 
   const userMsg = lang === "ru" ? "Как у меня дела?" : "How am I doing?";
 
-  const response = await withRetry((signal) => openai.chat.completions.create(
+  const response = await withRetry(() => openai.chat.completions.create(
     {
       model: "gpt-4o-mini",
       max_tokens: 300,
@@ -173,7 +171,7 @@ RULES:
         { role: "user", content: userMsg },
       ],
     },
-    { signal }
+    { timeout: TIMEOUT_MS }
   ), "callReview");
   const usage = response.usage || {};
   logApiCall(userId || null, "gpt-4o-mini", usage.prompt_tokens || 0, usage.completion_tokens || 0, "review").catch(() => {});

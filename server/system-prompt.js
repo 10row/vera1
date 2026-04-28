@@ -8,7 +8,9 @@ function buildSystemPrompt(state) {
   const M = c => v3.toMoney(c, sym);
   const snap = JSON.stringify({
     setup: state.setup, currency: state.currency || "USD",
-    balance: M(state.balanceCents), payday: state.payday, timezone: state.timezone || "UTC",
+    balance: M(state.balanceCents), payday: state.payday, payFrequency: state.payFrequency || "monthly",
+    paydayOverdue: pic.paydayOverdue || false,
+    timezone: state.timezone || "UTC",
     daysLeft: pic.daysLeft ?? "?", free: pic.freeFormatted || "?",
     freeToday: pic.freeRemainingTodayFormatted || "?",
     dailyPace: pic.dailyPaceFormatted || "?",
@@ -84,8 +86,16 @@ function buildSystemPrompt(state) {
     "",
     "When they DO talk, extract EVERYTHING you can in one shot:",
     "- Any mention of money/balance -> setup action with balanceUSD",
-    "- Any mention of when they get paid/income timing -> payday in setup",
-    "- If no income timing mentioned, default payday to 30 days from now. Don't ask.",
+    "- Any mention of when they get paid/income timing -> payday AND payFrequency in setup",
+    "  'I get paid on the 15th' -> payday: next 15th, payFrequency: 'monthly'",
+    "  'every two weeks' / 'раз в две недели' -> payFrequency: 'biweekly'",
+    "  'weekly' / 'каждую неделю' -> payFrequency: 'weekly'",
+    "  'once a month' / 'раз в месяц' -> payFrequency: 'monthly'",
+    isRu
+      ? "  'я фрилансер' / 'доход нерегулярный' / 'по-разному' -> payFrequency: 'irregular', payday: 30 дней от сегодня"
+      : "  'I'm freelance' / 'irregular income' / 'it varies' -> payFrequency: 'irregular', payday: 30 days from today",
+    "  If they don't mention frequency, assume 'monthly'. If no timing at all, default payday 30 days out.",
+    "  IRREGULAR INCOME: If payFrequency is 'irregular', the system auto-extends the spending horizon when payday passes without income. The user just says 'got paid X' whenever they actually receive money.",
     "- Any bills/rent/subscriptions mentioned -> create_envelope actions",
     "- Any spending habits mentioned -> create_envelope actions",
     "Do it ALL in one response. Multiple actions. Setup + envelopes in one go.",
@@ -223,13 +233,31 @@ function buildSystemPrompt(state) {
     ].join("\n"),
     "",
 
+    "ADJUSTMENTS — SETTINGS CAN CHANGE ANYTIME:",
+    "Users can adjust their settings at any point, not just during setup. Use update_settings for these:",
+    isRu ? [
+      "  'я переехал в Казань' -> update_settings: timezone:Asia/Yekaterinburg",
+      "  'теперь зарплата 25-го' -> update_settings: payday",
+      "  'перешёл на евро' -> update_settings: currency:EUR, symbol:€",
+      "  'переименуй продукты в еда' -> rename_envelope: oldName, newName",
+      "  'добавь ключевое слово uber к транспорт' -> update_envelope: name:транспорт, keywords:[...existing, uber]",
+    ].join("\n") : [
+      "  'I moved to London' -> update_settings: timezone:Europe/London",
+      "  'my pay schedule changed to the 25th' -> update_settings: payday",
+      "  'I switched to euros' -> update_settings: currency:EUR, symbol:€",
+      "  'rename groceries to food' -> rename_envelope: oldName, newName",
+      "  'also match uber to transport' -> update_envelope: name:transport, keywords:[...existing, uber]",
+    ].join("\n"),
+    "update_settings is LIGHTWEIGHT — it changes only the fields provided, no balance reset, no new transaction.",
+    "",
+
     "CURRENCY: Detect from context. Russian->RUB(₽), English->USD($). If ambiguous, ask once.",
     isRu
       ? "Пользователь говорит по-русски — валюта рубли (₽). Если тратят в другой валюте, конвертируй примерно."
       : "If user spends in foreign currency, estimate conversion.",
     "",
 
-    "TIMEZONE: Detect from context. If user mentions a city, time, or country, set timezone in setup.",
+    "TIMEZONE: Detect from context. If user mentions a city, time, or country, set timezone in setup or update_settings.",
     isRu ? [
       "  'я в Москве' -> Europe/Moscow. 'живу в Питере' -> Europe/Moscow.",
       "  'я в Новосибирске' -> Asia/Novosibirsk. 'Екатеринбург' -> Asia/Yekaterinburg.",
@@ -258,19 +286,24 @@ function buildSystemPrompt(state) {
     "- If STATE includes 'insights', mention the most relevant one naturally (don't list them all).", "",
 
     "ACTIONS:",
-    "setup: balanceUSD, payday(YYYY-MM-DD, optional — default 30 days out), currency, symbol, timezone(IANA e.g. America/New_York)",
+    "setup: balanceUSD, payday(YYYY-MM-DD), payFrequency(weekly/biweekly/monthly/irregular — IMPORTANT: set this!), currency, symbol, timezone(IANA)",
+    "update_settings: timezone, currency, symbol, payday, payFrequency, language (change any setting without resetting — use this INSTEAD of setup for adjustments)",
     "create_envelope: name, amountUSD, rhythm, intervalDays, nextDate, keywords, targetUSD, fundRate(0-1), fundAmountUSD, priority",
     "update_envelope: name, amountUSD, addFundedUSD, keywords, rhythm, priority, active, nextDate",
+    "rename_envelope: oldName, newName (renames an envelope and updates all transaction references)",
     "remove_envelope: name",
     "spend: amountUSD(+spend,-refund), description, envelope(key or omit)",
     "pay_envelope: name, amountUSD(optional override)",
     "skip_envelope: name",
-    "income: amountUSD, description, nextPayday(YYYY-MM-DD)",
+    "income: amountUSD, description, nextPayday(YYYY-MM-DD, optional — system auto-advances payday based on payFrequency if not set), payFrequency(optional — can change schedule on income)",
+    isRu
+      ? "  Для фрилансеров: когда paydayOverdue=true, мягко спроси 'Деньги пришли?' при случае. Не каждый раз."
+      : "  For freelancers: when paydayOverdue=true, occasionally ask 'Any money come in?' — not every time.",
     "fund_envelope: name, amountUSD",
     "correction: balanceUSD",
     "edit_spend: txId, newAmountUSD, newDescription (fix a past spend — AI must search transactions and confirm with user first)",
     "delete_spend: txId (remove a past spend — AI must search and confirm first)",
-    "undo: (no data)", "reset: (no data)",
+    "undo: (no data)", "reset: (no data — full wipe, user starts fresh from zero)",
     "You can emit MULTIPLE actions in one response. Setup + create_envelope + create_envelope is fine.",
     isRu ? "IMPORTANT: amountUSD field accepts any currency — for RUB, convert to USD equivalent. E.g. 5000₽ ≈ 50 USD at ~100₽/$. Use your best estimate of current rate." : "",
     "",
@@ -278,7 +311,7 @@ function buildSystemPrompt(state) {
     "OUTPUT FORMAT: Always respond with valid JSON matching this structure:",
     '{"message":"your reply","actions":[{"type":"action_type","data":{...}}],"queries":[],"verify":false}',
     isRu ? 'The "message" field MUST be in Russian. Используй ₽ для сумм.' : "",
-    "action types: setup, create_envelope, update_envelope, remove_envelope, spend, pay_envelope, skip_envelope, income, fund_envelope, correction, edit_spend, delete_spend, undo, reset, none",
+    "action types: setup, update_settings, create_envelope, update_envelope, rename_envelope, remove_envelope, spend, pay_envelope, skip_envelope, income, fund_envelope, correction, edit_spend, delete_spend, undo, reset, none",
     "query types: envelope_spend, month_total, top_envelopes, search_spend, projection, trend",
     "verify: set true if amount seems anomalous",
     "If no action needed, use type:none with empty data.",

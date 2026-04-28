@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Vera V3 Engine Tests</title>
+<style>
+body { font-family: 'Consolas', 'Monaco', monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; font-size: 14px; }
+.pass { color: #4caf50; }
+.fail { color: #f44336; }
+.section { color: #64b5f6; font-weight: bold; margin-top: 16px; }
+#summary { margin-top: 20px; padding: 12px; border-radius: 6px; font-size: 16px; font-weight: bold; }
+.summary-pass { background: #1b5e20; color: #a5d6a7; }
+.summary-fail { background: #b71c1c; color: #ef9a9a; }
+#log { white-space: pre-wrap; line-height: 1.6; }
+.fail-detail { color: #ef9a9a; margin-left: 24px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="log"></div>
+<div id="summary"></div>
+<script>
+// ═══════════════════════════════════════════════════════
+// BUNDLED ENGINE CODE (vera-v3.js + vera-v3-picture.js + system-prompt.js)
+// ═══════════════════════════════════════════════════════
+
+const v3 = (() => {
+  // crypto.randomBytes replacement for browser
+  function uid() {
+    const arr = new Uint8Array(12);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+  }
+  function toCents(v) { if (v == null) return 0; const n = typeof v === "string" ? parseFloat(v.replace(/[^0-9.\-]/g, "")) : v; return (isNaN(n) || !isFinite(n)) ? 0 : Math.round(n * 100); }
+  function toMoney(cents, sym) { if (cents == null) return (sym||"$")+"0.00"; const neg = cents<0, abs = Math.abs(cents); return (neg?"-":"")+(sym||"$")+Math.floor(abs/100).toLocaleString()+"."+String(abs%100).padStart(2,"0"); }
+  function toShort(c,s) { const v = toMoney(c,s); return v.endsWith(".00") ? v.slice(0,-3) : v; }
+  function today(tz) { if(!tz||tz==="UTC") return new Date().toISOString().slice(0,10); try { return new Date().toLocaleDateString("en-CA",{timeZone:tz}); } catch { return new Date().toISOString().slice(0,10); } }
+  function daysUntil(ds, tz) { if (!ds) return 30; return Math.max(1, Math.ceil((new Date(ds+"T00:00:00")-new Date(today(tz)+"T00:00:00"))/86400000)); }
+  function daysBetween(a,b) { return Math.max(1, Math.ceil((new Date(b+"T00:00:00")-new Date(a+"T00:00:00"))/86400000)); }
+  function ekey(name) { return (name??"").toLowerCase().trim().replace(/\s+/g,"_"); }
+  function monthKey(d) { return d && d.length>=7 ? d.slice(0,7) : null; }
+  function normalizeDate(d) { if (!d) return null; if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return isNaN(new Date(d+"T00:00:00").getTime())?null:d; const dt = new Date(d); return isNaN(dt.getTime())?null:dt.toISOString().slice(0,10); }
+  function advancePayday(currentPayday, freq, tz) {
+    if (!currentPayday) return null;
+    if (freq === "irregular") return currentPayday;
+    const now = new Date(today(tz) + "T12:00:00Z");
+    let dt = new Date(currentPayday + "T12:00:00Z");
+    if (typeof freq === "number" && freq > 0) {
+      while (dt <= now) dt.setUTCDate(dt.getUTCDate() + freq);
+    } else if (freq === "weekly") {
+      while (dt <= now) dt.setUTCDate(dt.getUTCDate() + 7);
+    } else if (freq === "biweekly") {
+      while (dt <= now) dt.setUTCDate(dt.getUTCDate() + 14);
+    } else {
+      const dayOfMonth = dt.getUTCDate();
+      while (dt <= now) {
+        dt.setUTCMonth(dt.getUTCMonth() + 1);
+        const m = dt.getUTCMonth();
+        dt.setUTCDate(Math.min(dayOfMonth, new Date(Date.UTC(dt.getUTCFullYear(), m + 1, 0)).getUTCDate()));
+      }
+    }
+    return dt.toISOString().slice(0, 10);
+  }
+  function createFreshState() { return { setup:false, balanceCents:0, currency:"USD", currencySymbol:"$", language:"en", timezone:"UTC", payday:null, payFrequency:null, cycleStart:null, envelopes:{}, transactions:[], conversationHistory:[], monthlySummaries:{}, cycleHistory:[], undoSnapshot:null }; }
+  function updateMonthly(s,date,ek,amt,type) { const mk=monthKey(date); if(!mk) return; if(!s.monthlySummaries[mk]) s.monthlySummaries[mk]={}; const m=s.monthlySummaries[mk],nk=ek||"_free"; if(!m[nk]) m[nk]={spent:0,earned:0,count:0}; if(type==="income") m[nk].earned+=amt; else { m[nk].spent+=amt; m[nk].count+=(amt>=0?1:-1); } if(!m._total) m._total={spent:0,earned:0,count:0}; if(type==="income") m._total.earned+=amt; else { m._total.spent+=amt; m._total.count+=(amt>=0?1:-1); } }
+  function archiveCycle(s) { if(!s.cycleStart||!s.setup) return; let tot=0,txC=0; const es={}; for(const [k,e] of Object.entries(s.envelopes)){if(e.active&&e.spentCents>0){es[k]=e.spentCents;tot+=e.spentCents;}} for(const tx of s.transactions){if(tx.date<s.cycleStart)continue;if(tx.type==="spend"||tx.type==="refund"){txC++;if(!tx.envelope||tx.envelope==="free")tot+=tx.amountCents;}} const ce=today(s.timezone||"UTC"),days=daysBetween(s.cycleStart,ce); s.cycleHistory.push({cycleStart:s.cycleStart,cycleEnd:ce,totalSpentCents:tot,envSpend:es,txCount:txC,daysInCycle:days,avgDailySpend:days>0?Math.round(tot/days):0}); if(s.cycleHistory.length>12)s.cycleHistory=s.cycleHistory.slice(-12); }
+  function matchEnvelope(s,desc) { if(!desc) return null; const lower=desc.toLowerCase(); let best=null,bestLen=0; for(const[key,e] of Object.entries(s.envelopes)){if(!e.active)continue;for(const kw of(e.keywords||[])){if(lower.includes(kw.toLowerCase())&&kw.length>bestLen){best=key;bestLen=kw.length;}}if(lower.includes(key)&&key.length>bestLen){best=key;bestLen=key.length;}} return best; }
+  function countOccurrences(nd,iv,end) { if(!nd||!end) return 1; let c=0,d=new Date(nd+"T00:00:00"); const e=new Date(end+"T00:00:00"); iv=iv||30; while(d<=e&&c<100){c++;d.setDate(d.getDate()+iv);} return Math.max(c,0); }
+  function envelopeReserve(env,daysLeft,payday) { if(!env.active) return 0; switch(env.rhythm){ case "daily":return Math.max(0,(env.amountCents*daysLeft)-env.spentCents); case "weekly":return Math.max(0,(env.amountCents*Math.ceil(daysLeft/7))-env.spentCents); case "monthly":case "on_income":return Math.max(0,env.amountCents-env.spentCents); case "once":return Math.max(0,env.amountCents-(env.spentCents||0)); case "ongoing":return Math.max(0,(env.fundedCents||0)-(env.spentCents||0)); default:if(env.nextDate) return env.amountCents*countOccurrences(env.nextDate,env.intervalDays,payday); return env.amountCents; } }
+  function todaySpendOn(s,ek) { const t=today(s.timezone); let c=0; for(const tx of s.transactions){if(tx.date===t&&tx.envelope===ek&&tx.type==="spend")c+=tx.amountCents;} return c; }
+  function todayUnmatched(s) { const t=today(s.timezone); let c=0; for(const tx of s.transactions){if(tx.date===t&&(tx.type==="spend"||tx.type==="refund")&&(!tx.envelope||tx.envelope==="free"))c+=tx.amountCents;} return c; }
+  function todayTotal(s) { const t=today(s.timezone); let c=0; for(const tx of s.transactions){if(tx.date===t&&(tx.type==="spend"||tx.type==="refund"))c+=tx.amountCents;} return c; }
+  function applyAction(state, action) {
+    if (!action||!action.type) return state;
+    const s = JSON.parse(JSON.stringify(state)), d = action.data||{};
+    const tz = s.timezone || "UTC";
+    switch (action.type) {
+      case "setup": { if (d.balanceUSD==null) return s; s.setup=true; s.balanceCents=toCents(d.balanceUSD); if(d.payFrequency) s.payFrequency=d.payFrequency; let pd=d.payday?normalizeDate(d.payday):null; if(pd){ pd=advancePayday(pd, s.payFrequency||"monthly", tz); } s.payday=pd||(()=>{const f=new Date(today(tz)+"T00:00:00");f.setDate(f.getDate()+30);return f.toISOString().slice(0,10);})(); s.cycleStart=d.cycleStart||today(tz); if(d.currency)s.currency=d.currency; if(d.symbol)s.currencySymbol=d.symbol; if(d.timezone)s.timezone=d.timezone; s.transactions.push({id:uid(),type:"setup",amountCents:s.balanceCents,description:"Initial balance",envelope:null,date:today(tz),ts:Date.now()}); return s; }
+      case "create_envelope": { const key=ekey(d.name); if(!key) return s; s.envelopes[key]={name:d.name||key,amountCents:toCents(d.amountUSD||0),targetCents:d.targetUSD?toCents(d.targetUSD):null,fundedCents:d.fundedUSD?toCents(d.fundedUSD):0,spentCents:0,fundRate:d.fundRate!=null?Math.min(10000,Math.max(0,Math.round(d.fundRate*10000))):null,fundAmountCents:d.fundAmountUSD?toCents(d.fundAmountUSD):null,intervalDays:d.intervalDays||30,nextDate:d.nextDate?normalizeDate(d.nextDate):null,keywords:d.keywords||[],rhythm:d.rhythm||"monthly",priority:d.priority||"flexible",active:true}; return s; }
+      case "update_envelope": { const key=ekey(d.name),env=s.envelopes[key]; if(!env) return s; if(d.amountUSD!==undefined)env.amountCents=toCents(d.amountUSD); if(d.targetUSD!==undefined)env.targetCents=toCents(d.targetUSD); if(d.addFundedUSD!==undefined)env.fundedCents=Math.max(0,env.fundedCents+toCents(d.addFundedUSD)); if(d.fundRate!==undefined)env.fundRate=Math.min(10000,Math.max(0,Math.round(d.fundRate*10000))); if(d.fundAmountUSD!==undefined)env.fundAmountCents=toCents(d.fundAmountUSD); if(d.keywords!==undefined)env.keywords=d.keywords; if(d.rhythm!==undefined)env.rhythm=d.rhythm; if(d.priority!==undefined)env.priority=d.priority; if(d.nextDate!==undefined)env.nextDate=normalizeDate(d.nextDate); if(d.intervalDays!==undefined)env.intervalDays=d.intervalDays; if(d.active!==undefined)env.active=d.active; return s; }
+      case "remove_envelope": { const key=ekey(d.name); if(s.envelopes[key])s.envelopes[key].active=false; return s; }
+      case "spend": { const amt=toCents(d.amountUSD); if(amt===0) return s; s.balanceCents-=amt; const ek=d.envelope?ekey(d.envelope):matchEnvelope(s,d.description||""); if(ek&&s.envelopes[ek]&&s.envelopes[ek].active)s.envelopes[ek].spentCents+=amt; const txType=amt<0?"refund":"spend",txDate=today(tz); s.transactions.push({id:uid(),type:txType,amountCents:amt,description:d.description||"",envelope:ek||"free",date:txDate,ts:Date.now()}); updateMonthly(s,txDate,ek,amt,txType); return s; }
+      case "pay_envelope": { const key=ekey(d.name),env=s.envelopes[key]; if(!env||!env.active) return s; const payAmt=d.amountUSD!==undefined?toCents(d.amountUSD):env.amountCents; s.balanceCents-=payAmt; env.spentCents+=payAmt; const txDate=today(tz); s.transactions.push({id:uid(),type:"envelope_payment",amountCents:payAmt,description:"Paid: "+env.name,envelope:key,date:txDate,ts:Date.now()}); updateMonthly(s,txDate,key,payAmt,"envelope_payment"); if(env.nextDate){const dt=new Date(env.nextDate+"T00:00:00");dt.setDate(dt.getDate()+(env.intervalDays||30));env.nextDate=dt.toISOString().slice(0,10);} return s; }
+      case "skip_envelope": { const key=ekey(d.name),env=s.envelopes[key]; if(!env||!env.active||!env.nextDate) return s; const dt=new Date(env.nextDate+"T00:00:00");dt.setDate(dt.getDate()+(env.intervalDays||30));env.nextDate=dt.toISOString().slice(0,10); return s; }
+      case "income": { const amt=Math.max(0,toCents(d.amountUSD)); if(amt===0) return s; archiveCycle(s); s.balanceCents+=amt; const pctE=[],fixE=[]; for(const[k,e] of Object.entries(s.envelopes)){if(!e.active)continue;if(e.fundRate>0)pctE.push([k,e]);else if(e.fundAmountCents>0)fixE.push([k,e]);} const sp=(a,b)=>(a[1].priority==="essential"?0:1)-(b[1].priority==="essential"?0:1); pctE.sort(sp);fixE.sort(sp); let funded=0; const fundLog=[]; for(const[k,e] of pctE){const c=Math.min(Math.round(amt*e.fundRate/10000),Math.max(0,amt-funded));e.fundedCents+=c;funded+=c;fundLog.push({name:e.name,amount:c});} for(const[k,e] of fixE){const want=e.fundAmountCents,avail=amt-funded,c=Math.min(want,Math.max(0,avail));if(c>0){e.fundedCents+=c;funded+=c;fundLog.push({name:e.name,amount:c});}} for(const[k,e] of Object.entries(s.envelopes)){if(e.active&&["daily","weekly","monthly","on_income"].includes(e.rhythm))e.spentCents=0;} if(d.payFrequency) s.payFrequency=d.payFrequency; if(d.nextPayday){const np=normalizeDate(d.nextPayday);if(np)s.payday=np;} else if(s.payday){ s.payday=advancePayday(s.payday, s.payFrequency||"monthly", tz); } s.cycleStart=today(tz); s.transactions.push({id:uid(),type:"income",amountCents:amt,description:d.description||"Income",envelope:null,date:today(tz),ts:Date.now()}); updateMonthly(s,today(tz),null,amt,"income"); s._lastFundLog=fundLog;s._lastIncome=amt; return s; }
+      case "fund_envelope": { const key=ekey(d.name),env=s.envelopes[key]; if(!env||!env.active) return s; const amt=toCents(d.amountUSD); if(amt<=0) return s; env.fundedCents+=amt; s.transactions.push({id:uid(),type:"fund_envelope",amountCents:amt,description:"Fund: "+env.name,envelope:key,date:today(tz),ts:Date.now()}); return s; }
+      case "correction": { if(d.balanceUSD==null) return s; const prev=s.balanceCents; s.balanceCents=toCents(d.balanceUSD); s.transactions.push({id:uid(),type:"correction",amountCents:s.balanceCents-prev,description:d.description||"Balance correction",envelope:null,date:today(tz),ts:Date.now()}); return s; }
+      case "edit_spend": {
+        const tx = s.transactions.find(t => t.id === d.txId);
+        if (!tx) return s;
+        const oldAmt = tx.amountCents;
+        const newAmt = d.newAmountUSD !== undefined ? toCents(d.newAmountUSD) : oldAmt;
+        s.balanceCents += oldAmt; s.balanceCents -= newAmt;
+        const ek = tx.envelope && tx.envelope !== "free" ? tx.envelope : null;
+        if (ek && s.envelopes[ek]) { s.envelopes[ek].spentCents = Math.max(0, s.envelopes[ek].spentCents - oldAmt + newAmt); }
+        updateMonthly(s, tx.date, ek, -oldAmt, tx.type); updateMonthly(s, tx.date, ek, newAmt, tx.type);
+        tx.amountCents = newAmt; if (d.newDescription !== undefined) tx.description = d.newDescription;
+        return s;
+      }
+      case "delete_spend": {
+        const idx = s.transactions.findIndex(t => t.id === d.txId);
+        if (idx === -1) return s;
+        const tx = s.transactions[idx];
+        if (!["spend", "refund", "envelope_payment"].includes(tx.type)) return s;
+        s.balanceCents += tx.amountCents;
+        const ek = tx.envelope && tx.envelope !== "free" ? tx.envelope : null;
+        if (ek && s.envelopes[ek]) { s.envelopes[ek].spentCents = Math.max(0, s.envelopes[ek].spentCents - tx.amountCents); }
+        updateMonthly(s, tx.date, ek, -tx.amountCents, tx.type);
+        s.transactions.splice(idx, 1);
+        return s;
+      }
+      case "update_settings": {
+        if (d.timezone) s.timezone = d.timezone; if (d.currency) s.currency = d.currency;
+        if (d.symbol) s.currencySymbol = d.symbol; if (d.language) s.language = d.language;
+        if (d.payFrequency) s.payFrequency = d.payFrequency;
+        if (d.payday) { const np = normalizeDate(d.payday); if (np) s.payday = np; }
+        return s;
+      }
+      case "rename_envelope": {
+        const oldKey = ekey(d.oldName), newKey = ekey(d.newName);
+        if (!oldKey || !newKey || !s.envelopes[oldKey]) return s;
+        const env = s.envelopes[oldKey]; env.name = d.newName || newKey;
+        if (oldKey !== newKey) { s.envelopes[newKey] = env; delete s.envelopes[oldKey];
+          for (const tx of s.transactions) { if (tx.envelope === oldKey) tx.envelope = newKey; }
+        }
+        return s;
+      }
+      case "undo": { return s.undoSnapshot?JSON.parse(JSON.stringify(s.undoSnapshot)):s; }
+      case "reset": return createFreshState();
+      default: return s;
+    }
+  }
+  return { toCents,toMoney,toShort,today,daysUntil,daysBetween,monthKey,uid,ekey,createFreshState,applyAction,matchEnvelope,envelopeReserve,countOccurrences,updateMonthly,archiveCycle,todayUnmatched,todayTotal,todaySpendOn,normalizeDate,advancePayday };
+})();
+
+// ═══════════════════════════════════════════════════════
+// computePicture (vera-v3-picture.js)
+// ═══════════════════════════════════════════════════════
+function computePicture(state) {
+  const s = JSON.parse(JSON.stringify(state));
+  if (!s.setup) return { setup: false };
+  const tz = s.timezone || "UTC"; const sym = s.currencySymbol||"$", M = c => v3.toMoney(c,sym), t = v3.today(tz);
+  let displayPayday = s.payday;
+  let paydayOverdue = false;
+  if (s.payday && s.payday < t) {
+    paydayOverdue = true;
+    if (s.payFrequency === "irregular") {
+      const ext = new Date(t + "T00:00:00"); ext.setDate(ext.getDate() + 30);
+      displayPayday = ext.toISOString().slice(0, 10);
+    } else {
+      displayPayday = v3.advancePayday(s.payday, s.payFrequency || "monthly", tz);
+    }
+  }
+  const dl = v3.daysUntil(displayPayday, tz);
+  const dueEnvelopes = [];
+  for (const [k,e] of Object.entries(s.envelopes)) {
+    if (e.active && e.nextDate && e.nextDate <= t) { e._isDue=true; dueEnvelopes.push({key:k,name:e.name,amountCents:e.amountCents,amountFormatted:v3.toShort(e.amountCents,sym),nextDate:e.nextDate}); }
+  }
+  let totalReserved = 0; const envList = [];
+  for (const [key,e] of Object.entries(s.envelopes)) {
+    if (!e.active) continue;
+    const reserved = v3.envelopeReserve(e, dl, s.payday); totalReserved += reserved;
+    let todayRem = null;
+    if (e.rhythm === "daily") todayRem = Math.max(0, e.amountCents - v3.todaySpendOn(s, key));
+    envList.push({key,name:e.name,rhythm:e.rhythm,priority:e.priority,amountCents:e.amountCents,targetCents:e.targetCents,fundedCents:e.fundedCents,spentCents:e.spentCents,reservedCents:reserved,remainingCents:Math.max(0,reserved),todayRemainingCents:todayRem,nextDate:e.nextDate,isDue:e._isDue||false,daysUntilDue:e.nextDate?v3.daysUntil(e.nextDate,tz):null,intervalDays:e.intervalDays,keywords:e.keywords||[],active:true,amountFormatted:v3.toShort(e.amountCents,sym),reservedFormatted:v3.toShort(reserved,sym),spentFormatted:v3.toShort(e.spentCents,sym),fundedFormatted:e.fundedCents>0?v3.toShort(e.fundedCents,sym):null,targetFormatted:e.targetCents?v3.toShort(e.targetCents,sym):null});
+  }
+  const free = s.balanceCents - totalReserved;
+  const checksumOk = (totalReserved + free) === s.balanceCents;
+  const dailyPace = dl > 0 ? Math.floor(free / dl) : free;
+  const freeToday = dailyPace - v3.todayUnmatched(s);
+  const wcs = (() => { const d = new Date(t+"T00:00:00"); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
+  let weekSpent = 0;
+  for (const tx of s.transactions) { if (tx.date>=wcs && (tx.type==="spend"||tx.type==="refund")) weekSpent+=tx.amountCents; }
+  const mk = v3.monthKey(t), mSnap = s.monthlySummaries[mk] || {};
+  const monthSpent = mSnap._total ? mSnap._total.spent : 0;
+  const cyCut = s.cycleStart || t; let cySpent=0, cyTxC=0;
+  for (const tx of s.transactions) { if(tx.date<cyCut) continue; if(tx.type==="spend"||tx.type==="refund"){cySpent+=tx.amountCents;cyTxC++;} if(tx.type==="envelope_payment")cySpent+=tx.amountCents; }
+  const cyDays = Math.max(1, v3.daysBetween(cyCut, t));
+  let totalSaved = 0; const savingsEnvs = [];
+  for (const e of envList) { if ((e.rhythm==="ongoing"||e.targetCents)&&e.fundedCents>0) { totalSaved+=e.fundedCents; savingsEnvs.push(e); } }
+  const upcoming = envList.filter(e => e.daysUntilDue!=null && e.daysUntilDue>0 && e.daysUntilDue<=7);
+  return {
+    setup:true, currency:s.currency||"USD", currencySymbol:sym,
+    balanceCents:s.balanceCents, balanceFormatted:M(s.balanceCents),
+    freeCents:free, freeFormatted:M(free),
+    dailyPaceCents:dailyPace, dailyPaceFormatted:M(dailyPace),
+    freeRemainingTodayCents:freeToday, freeRemainingTodayFormatted:M(freeToday),
+    daysLeft:dl, payday:s.payday, displayPayday, paydayOverdue, cycleStart:s.cycleStart,
+    totalReservedCents:totalReserved, totalReservedFormatted:M(totalReserved),
+    envelopes:envList, todaySpentCents:v3.todayTotal(s), todaySpentFormatted:M(v3.todayTotal(s)),
+    thisWeekSpentCents:weekSpent, thisWeekSpentFormatted:M(weekSpent),
+    thisMonthSpentCents:monthSpent, thisMonthSpentFormatted:M(monthSpent),
+    weeklyPaceCents:dailyPace*7, weeklyPaceFormatted:M(dailyPace*7),
+    cycleStats:{totalSpent:cySpent,totalSpentFormatted:M(cySpent),dailyAvg:Math.round(cySpent/cyDays),dailyAvgFormatted:M(Math.round(cySpent/cyDays)),txCount:cyTxC,daysInCycle:cyDays},
+    dueEnvelopes, upcomingEnvelopes:upcoming,
+    totalSavedCents:totalSaved, totalSavedFormatted:M(totalSaved), savingsEnvelopes:savingsEnvs,
+    transactions:s.transactions.slice(-20).reverse(), monthlySnapshot:mSnap, checksumOk,
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+// buildSystemPrompt (system-prompt.js) — MINIMAL for testing
+// ═══════════════════════════════════════════════════════
+function buildSystemPrompt(state) {
+  const pic = computePicture(state);
+  const sym = state.currencySymbol || "$";
+  const M = c => v3.toMoney(c, sym);
+  const snap = JSON.stringify({
+    setup: state.setup, currency: state.currency || "USD",
+    balance: M(state.balanceCents), payday: state.payday, payFrequency: state.payFrequency || "monthly",
+    paydayOverdue: pic.paydayOverdue || false,
+    timezone: state.timezone || "UTC",
+    daysLeft: pic.daysLeft ?? "?", free: pic.freeFormatted || "?",
+    freeToday: pic.freeRemainingTodayFormatted || "?",
+    dailyPace: pic.dailyPaceFormatted || "?",
+    weeklyPace: pic.weeklyPaceFormatted || "?",
+    spentToday: M(pic.todaySpentCents || 0),
+    thisWeek: pic.thisWeekSpentFormatted || M(0),
+    thisMonth: pic.thisMonthSpentFormatted || M(0),
+    envelopes: (pic.envelopes || []).map(e => ({
+      name: e.name, rhythm: e.rhythm,
+      amount: e.amountFormatted || M(e.amountCents),
+      spent: e.spentFormatted || M(e.spentCents),
+      funded: e.fundedCents > 0 ? (e.fundedFormatted || M(e.fundedCents)) : undefined,
+      target: e.targetCents ? (e.targetFormatted || M(e.targetCents)) : undefined,
+      isDue: e.isDue || false, next: e.nextDate,
+      interval: e.intervalDays, priority: e.priority,
+    })),
+    due: (pic.dueEnvelopes || []),
+    upcoming: (pic.upcomingEnvelopes || []).map(e => ({ name: e.name, amount: e.amountFormatted, days: e.daysUntilDue })),
+    savings: pic.totalSavedCents > 0 ? M(pic.totalSavedCents) : undefined,
+    recentTx: (state.transactions || []).slice(-10).reverse().map(tx => ({
+      id: tx.id, type: tx.type, amount: M(tx.amountCents),
+      desc: tx.description, envelope: tx.envelope, date: tx.date,
+    })),
+    cycleStats: pic.cycleStats || null,
+    insights: (() => {
+      const ins = [];
+      const ru = (state.language || "en") === "ru";
+      for (const e of (pic.envelopes || [])) {
+        if (["daily","weekly","monthly","on_income"].includes(e.rhythm) && e.amountCents > 0) {
+          const pct = Math.round((e.spentCents / e.amountCents) * 100);
+          if (pct >= 100) ins.push(ru ? (e.name + " — перерасход (" + pct + "%)") : (e.name + " is over budget (" + pct + "% spent)"));
+          else if (pct >= 70) ins.push(ru ? (e.name + " уже на " + pct + "%") : (e.name + " is at " + pct + "% of budget"));
+        }
+      }
+      if (pic.freeCents != null && pic.freeCents < 0) ins.push(ru ? "Перерасход — свободных денег нет" : "Over budget — free is negative");
+      return ins.length > 0 ? ins : undefined;
+    })(),
+  });
+  const lang = state.language || "en";
+  const isRu = lang === "ru";
+  const lines = [
+    "You are SpendYes — a spending confidence engine.",
+    "LANGUAGE: The user's language is " + (isRu ? "Russian. ALWAYS respond in Russian. Use ты, not вы. Be casual and natural — как друг, не как банк." : "English."),
+    "NEVER translate — think and write natively in the user's language.",
+    "VOICE-FIRST: This is a voice-first Telegram bot.",
+    isRu ? "Russian voice transcripts especially: 'тыщ' = тысяч, 'пятихатка' = 500, 'косарь' = 1000, 'штука' = 1000, 'лям' = миллион." : "",
+    "STATE:", snap, "TODAY: " + v3.today(state.timezone || "UTC"),
+    "== IF NOT SET UP ==",
+    isRu ? "НЕ допрашивай. Просто скажи тепло: 'Привет! Зажми микрофон и расскажи про деньги...'" : "DO NOT interrogate them. Say: 'Hey! Just hold the mic and tell me about your money...'",
+    "  'I get paid on the 15th' -> payday: next 15th, payFrequency: 'monthly'",
+    "  'every two weeks' -> payFrequency: 'biweekly'",
+    "  'weekly' -> payFrequency: 'weekly'",
+    isRu ? "  'я фрилансер' / 'доход нерегулярный' -> payFrequency: 'irregular'" : "  'I'm freelance' / 'irregular income' -> payFrequency: 'irregular'",
+    "  IRREGULAR INCOME: If payFrequency is 'irregular', the system auto-extends the spending horizon.",
+    "CRITICAL — FOLLOW UP ABOUT BILLS:",
+    isRu ? "'Понял — X на счету. Есть регулярные траты?'" : "'Got it — $X. Got any bills coming up?'",
+    "== IF SET UP ==",
+    isRu ? "Записывай траты, управляй конвертами." : "Log spending, manage envelopes.",
+    "CONTEXTUAL AWARENESS:",
+    isRu ? "Ты не логгер трат." : "You're not a logging tool.",
+    isRu ? "'Записал. Кстати, завтра телефон — 600₽.'" : "'Got it. Oh heads up — phone bill is due tomorrow, $60.'",
+    isRu ? "'зарплата пришла' -> income." : "'got paid' -> income action.",
+    isRu ? "'удали последнее' -> delete_spend" : "'delete the last thing' -> delete_spend",
+    isRu ? "'Нашёл кофе за ₽400 сегодня — поменять на ₽250?'" : "'I found a $40 coffee from today — change it to $14?'",
+    "ADJUSTMENTS — SETTINGS CAN CHANGE ANYTIME:",
+    "update_settings: timezone, currency, symbol, payday, payFrequency, language",
+    isRu ? "'переименуй продукты в еда' -> rename_envelope" : "'rename groceries to food' -> rename_envelope",
+    isRu ? "КАЖДЫЙ ответ после изменения: *Сегодня: X₽*" : "EVERY response after change: *Free today: $X*",
+    "ACTIONS:",
+    "setup: balanceUSD, payday(YYYY-MM-DD), payFrequency(weekly/biweekly/monthly/irregular — IMPORTANT: set this!), currency, symbol, timezone(IANA)",
+    "update_settings: timezone, currency, symbol, payday, payFrequency, language",
+    "create_envelope: name, amountUSD, rhythm, intervalDays, nextDate, keywords, targetUSD, fundRate, fundAmountUSD, priority",
+    "update_envelope: name, amountUSD, addFundedUSD, keywords, rhythm, priority, active, nextDate",
+    "rename_envelope: oldName, newName",
+    "remove_envelope: name",
+    "spend: amountUSD, description, envelope",
+    "pay_envelope: name, amountUSD",
+    "skip_envelope: name",
+    "income: amountUSD, description, nextPayday, payFrequency",
+    isRu ? "  Для фрилансеров: когда paydayOverdue=true, спроси 'Деньги пришли?'" : "  For freelancers: when paydayOverdue=true, ask 'Any money come in?'",
+    "fund_envelope: name, amountUSD",
+    "correction: balanceUSD",
+    "edit_spend: txId, newAmountUSD, newDescription",
+    "delete_spend: txId",
+    "undo: (no data)", "reset: (no data)",
+    '{"message":"...","actions":[{"type":"...","data":{}}],"queries":[],"verify":false}',
+  ];
+  return lines.join("\n");
+}
+
+// ═══════════════════════════════════════════════════════
+// TEST RUNNER
+// ═══════════════════════════════════════════════════════
+const logEl = document.getElementById("log");
+const summaryEl = document.getElementById("summary");
+let passed = 0, failed = 0;
+const failures = [];
+
+function log(html) { logEl.innerHTML += html + "\n"; }
+function section(name) { log('<span class="section">' + name + '</span>'); }
+
+function test(name, fn) {
+  try {
+    fn();
+    passed++;
+    log('<span class="pass">  ✓</span> ' + name);
+  } catch (err) {
+    failed++;
+    failures.push({ name, err });
+    log('<span class="fail">  ✗</span> ' + name);
+    log('<span class="fail-detail">    ' + err.message + '</span>');
+  }
+}
+
+function assert_strictEqual(a, b, msg) {
+  if (a !== b) throw new Error((msg || "") + " Expected " + JSON.stringify(b) + ", got " + JSON.stringify(a));
+}
+function assert_ok(val, msg) {
+  if (!val) throw new Error(msg || "Expected truthy, got " + val);
+}
+function assert_deepStrictEqual(a, b, msg) {
+  if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error((msg || "") + " Expected " + JSON.stringify(b) + ", got " + JSON.stringify(a));
+}
+function assert_notStrictEqual(a, b, msg) {
+  if (a === b) throw new Error((msg || "") + " Expected NOT " + JSON.stringify(b));
+}
+
+function futureDate(days) { const d = new Date(v3.today() + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }
+function pastDate(days) { const d = new Date(v3.today() + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - days); return d.toISOString().slice(0, 10); }
+
+function setupState(overrides) {
+  let s = v3.createFreshState();
+  s = v3.applyAction(s, { type: "setup", data: { balanceUSD: 1000, payday: futureDate(30) } });
+  if (overrides) Object.assign(s, overrides);
+  return s;
+}
+
+function checkEquation(s, label) {
+  const pic = computePicture(s);
+  if (!pic.setup) return;
+  const lhs = pic.balanceCents;
+  const rhs = pic.totalReservedCents + pic.freeCents;
+  assert_strictEqual(lhs, rhs, label + ": balance != reserves + free");
+  assert_strictEqual(pic.checksumOk, true, label + ": checksumOk");
+}
+
+// ═══════════════════════════════════════════════════════
+// ALL TESTS
+// ═══════════════════════════════════════════════════════
+
+section("--- Core Utilities ---");
+
+test("toCents: $1,234.56 -> 123456", () => { assert_strictEqual(v3.toCents("$1,234.56"), 123456); });
+test("toCents: '0' -> 0", () => { assert_strictEqual(v3.toCents("0"), 0); });
+test("toCents: negative number -5.50 -> -550", () => { assert_strictEqual(v3.toCents(-5.50), -550); });
+test("toCents: null -> 0", () => { assert_strictEqual(v3.toCents(null), 0); });
+test("toCents: undefined -> 0", () => { assert_strictEqual(v3.toCents(undefined), 0); });
+test("toCents: NaN string -> 0", () => { assert_strictEqual(v3.toCents("abc"), 0); });
+test("toCents: plain number 42 -> 4200", () => { assert_strictEqual(v3.toCents(42), 4200); });
+test("toCents: Infinity -> 0", () => { assert_strictEqual(v3.toCents(Infinity), 0); });
+
+test("toMoney: 123456 -> contains $, 1234, .56", () => {
+  const r = v3.toMoney(123456);
+  assert_ok(r.startsWith("$"), "starts $: " + r); assert_ok(r.endsWith(".56"), "ends .56: " + r);
+});
+test("toMoney: 0 -> '$0.00'", () => { assert_strictEqual(v3.toMoney(0), "$0.00"); });
+test("toMoney: negative -550 -> '-$5.50'", () => { assert_strictEqual(v3.toMoney(-550), "-$5.50"); });
+test("toMoney: null -> '$0.00'", () => { assert_strictEqual(v3.toMoney(null), "$0.00"); });
+test("toMoney: custom symbol", () => { const r = v3.toMoney(12345, "₽"); assert_ok(r.startsWith("₽")); });
+test("today: returns YYYY-MM-DD format", () => { assert_ok(/^\d{4}-\d{2}-\d{2}$/.test(v3.today())); });
+test("daysUntil: future date returns positive", () => { const r = v3.daysUntil(futureDate(10)); assert_ok(r >= 9 && r <= 11, "got: " + r); });
+test("daysUntil: past date returns 1", () => { assert_strictEqual(v3.daysUntil(pastDate(5)), 1); });
+test("daysUntil: today returns 1", () => { assert_strictEqual(v3.daysUntil(v3.today()), 1); });
+test("daysUntil: null returns 30", () => { assert_strictEqual(v3.daysUntil(null), 30); });
+test("daysUntil: accepts timezone param", () => { const r = v3.daysUntil(futureDate(5), "America/New_York"); assert_ok(r >= 4 && r <= 6, "got: " + r); });
+test("daysUntil: invalid tz falls back", () => { const r = v3.daysUntil(futureDate(5), "Invalid/Zone"); assert_ok(r >= 4 && r <= 6, "got: " + r); });
+
+section("--- State Management ---");
+
+test("createFreshState: valid initial state", () => {
+  const s = v3.createFreshState();
+  assert_strictEqual(s.setup, false); assert_strictEqual(s.balanceCents, 0); assert_strictEqual(s.currency, "USD");
+  assert_strictEqual(s.payday, null); assert_deepStrictEqual(s.envelopes, {});
+});
+test("setup: sets balance, payday, marks setup=true", () => {
+  const s = v3.applyAction(v3.createFreshState(), { type: "setup", data: { balanceUSD: 500, payday: futureDate(15) } });
+  assert_strictEqual(s.setup, true); assert_strictEqual(s.balanceCents, 50000); assert_ok(s.payday != null);
+  assert_strictEqual(s.cycleStart, v3.today()); assert_strictEqual(s.transactions.length, 1);
+});
+test("setup without payday: defaults to ~30 days", () => {
+  const s = v3.applyAction(v3.createFreshState(), { type: "setup", data: { balanceUSD: 100 } });
+  const dl = v3.daysUntil(s.payday); assert_ok(dl >= 29 && dl <= 31, "got: " + dl);
+});
+test("setup with currency", () => {
+  const s = v3.applyAction(v3.createFreshState(), { type: "setup", data: { balanceUSD: 100, currency: "RUB", symbol: "₽" } });
+  assert_strictEqual(s.currency, "RUB"); assert_strictEqual(s.currencySymbol, "₽");
+});
+
+section("--- Spending ---");
+
+test("spend free: deducts balance", () => {
+  const a = v3.applyAction(setupState(), { type: "spend", data: { amountUSD: 25, description: "lunch" } });
+  assert_strictEqual(a.balanceCents, 97500);
+  assert_ok(a.transactions.find(t => t.type === "spend" && t.description === "lunch"));
+});
+test("spend matched to envelope", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Coffee", amountUSD: 5, rhythm: "daily", keywords: ["coffee"] } });
+  const a = v3.applyAction(s, { type: "spend", data: { amountUSD: 4.50, description: "morning coffee" } });
+  assert_strictEqual(a.envelopes.coffee.spentCents, 450);
+});
+test("spend refund: adds to balance", () => {
+  const a = v3.applyAction(setupState(), { type: "spend", data: { amountUSD: -20, description: "refund" } });
+  assert_strictEqual(a.balanceCents, 102000);
+});
+test("spend zero: no-op", () => {
+  const s = setupState(); const tc = s.transactions.length;
+  const a = v3.applyAction(s, { type: "spend", data: { amountUSD: 0 } });
+  assert_strictEqual(a.transactions.length, tc);
+});
+
+section("--- Envelopes ---");
+
+test("create_envelope: correct key, rhythm, amount", () => {
+  const a = v3.applyAction(setupState(), { type: "create_envelope", data: { name: "Groceries", amountUSD: 100, rhythm: "weekly" } });
+  assert_ok(a.envelopes.groceries); assert_strictEqual(a.envelopes.groceries.amountCents, 10000);
+  assert_strictEqual(a.envelopes.groceries.rhythm, "weekly"); assert_strictEqual(a.envelopes.groceries.active, true);
+});
+test("create_envelope with keywords", () => {
+  const a = v3.applyAction(setupState(), { type: "create_envelope", data: { name: "Food", amountUSD: 50, rhythm: "weekly", keywords: ["grocery", "food"] } });
+  assert_deepStrictEqual(a.envelopes.food.keywords, ["grocery", "food"]);
+});
+test("create_envelope savings goal", () => {
+  const a = v3.applyAction(setupState(), { type: "create_envelope", data: { name: "Vacation", amountUSD: 0, rhythm: "ongoing", targetUSD: 3000 } });
+  assert_strictEqual(a.envelopes.vacation.targetCents, 300000);
+});
+test("update_envelope: changes fields", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Rent", amountUSD: 1000, rhythm: "monthly" } });
+  const a = v3.applyAction(s, { type: "update_envelope", data: { name: "Rent", amountUSD: 1200, priority: "essential" } });
+  assert_strictEqual(a.envelopes.rent.amountCents, 120000); assert_strictEqual(a.envelopes.rent.priority, "essential");
+});
+test("remove_envelope: sets active=false", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Netflix", amountUSD: 15, rhythm: "monthly" } });
+  const a = v3.applyAction(s, { type: "remove_envelope", data: { name: "Netflix" } });
+  assert_strictEqual(a.envelopes.netflix.active, false);
+});
+test("pay_envelope: deducts, advances nextDate", () => {
+  let s = setupState();
+  const nd = futureDate(5);
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Rent", amountUSD: 1400, rhythm: "monthly", nextDate: nd, intervalDays: 30 } });
+  const bb = s.balanceCents;
+  const a = v3.applyAction(s, { type: "pay_envelope", data: { name: "Rent" } });
+  assert_strictEqual(a.balanceCents, bb - 140000);
+  assert_ok(a.envelopes.rent.nextDate > nd, "nextDate should advance");
+});
+test("skip_envelope: advances without spending", () => {
+  let s = setupState();
+  const nd = futureDate(2);
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Gym", amountUSD: 30, rhythm: "monthly", nextDate: nd, intervalDays: 30 } });
+  const bb = s.balanceCents;
+  const a = v3.applyAction(s, { type: "skip_envelope", data: { name: "Gym" } });
+  assert_strictEqual(a.balanceCents, bb); assert_ok(a.envelopes.gym.nextDate > nd);
+});
+
+section("--- Income ---");
+
+test("income: adds balance, resets envelope spentCents", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Coffee", amountUSD: 5, rhythm: "daily", keywords: ["coffee"] } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 3, description: "coffee" } });
+  assert_strictEqual(s.envelopes.coffee.spentCents, 300);
+  const bb = s.balanceCents;
+  const a = v3.applyAction(s, { type: "income", data: { amountUSD: 2000, nextPayday: futureDate(30) } });
+  assert_strictEqual(a.balanceCents, bb + 200000);
+  assert_strictEqual(a.envelopes.coffee.spentCents, 0, "Budget reset");
+});
+
+section("--- The Equation: balance = reserves + free ---");
+
+test("Equation: after setup", () => { checkEquation(setupState(), "setup"); });
+test("Equation: after spending", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "spend", data: { amountUSD: 50, description: "x" } });
+  checkEquation(s, "spend");
+});
+test("Equation: after creating envelope", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "create_envelope", data: { name: "Rent", amountUSD: 500, rhythm: "monthly" } });
+  checkEquation(s, "envelope");
+});
+test("Equation: after paying envelope", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Phone", amountUSD: 80, rhythm: "monthly", nextDate: futureDate(10) } });
+  s = v3.applyAction(s, { type: "pay_envelope", data: { name: "Phone" } });
+  checkEquation(s, "pay");
+});
+test("Equation: after income", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Food", amountUSD: 200, rhythm: "monthly" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 100, description: "groceries" } });
+  s = v3.applyAction(s, { type: "income", data: { amountUSD: 3000, nextPayday: futureDate(30) } });
+  checkEquation(s, "income");
+});
+
+section("--- Reset and Undo ---");
+
+test("reset: returns fresh state", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "spend", data: { amountUSD: 50, description: "x" } });
+  const a = v3.applyAction(s, { type: "reset" });
+  assert_strictEqual(a.setup, false); assert_strictEqual(a.balanceCents, 0);
+});
+test("undo: restores snapshot", () => {
+  let s = setupState(); s.undoSnapshot = JSON.parse(JSON.stringify(s)); delete s.undoSnapshot.undoSnapshot;
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 50, description: "oops" } });
+  const u = v3.applyAction(s, { type: "undo" });
+  assert_strictEqual(u.balanceCents, 100000);
+});
+test("undo: no snapshot returns same", () => {
+  const s = setupState(); s.undoSnapshot = null;
+  const a = v3.applyAction(s, { type: "undo" });
+  assert_strictEqual(a.balanceCents, s.balanceCents);
+});
+
+section("--- Edge Cases ---");
+
+test("Multiple actions in sequence", () => {
+  let s = v3.createFreshState();
+  s = v3.applyAction(s, { type: "setup", data: { balanceUSD: 2000, payday: futureDate(14) } });
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Rent", amountUSD: 1000, rhythm: "monthly" } });
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Food", amountUSD: 200, rhythm: "weekly" } });
+  assert_strictEqual(Object.keys(s.envelopes).length, 2); checkEquation(s, "multi");
+});
+test("Very large amounts", () => {
+  let s = v3.createFreshState();
+  s = v3.applyAction(s, { type: "setup", data: { balanceUSD: 1000000 } });
+  assert_strictEqual(s.balanceCents, 100000000);
+});
+test("Unicode envelope names", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Квартира", amountUSD: 500, rhythm: "monthly" } });
+  const key = v3.ekey("Квартира");
+  assert_ok(s.envelopes[key], "Unicode key: " + key);
+});
+test("Null action: no-op", () => {
+  const s = setupState(); const a = v3.applyAction(s, null); assert_strictEqual(a.balanceCents, s.balanceCents);
+});
+test("Unknown type: no-op", () => {
+  const s = setupState(); const a = v3.applyAction(s, { type: "bogus", data: {} }); assert_strictEqual(a.balanceCents, s.balanceCents);
+});
+test("matchEnvelope: by keyword", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Coffee", amountUSD: 5, rhythm: "daily", keywords: ["coffee", "starbucks"] } });
+  assert_strictEqual(v3.matchEnvelope(s, "starbucks latte"), "coffee");
+  assert_strictEqual(v3.matchEnvelope(s, "pizza"), null);
+});
+test("matchEnvelope: longest keyword wins", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Food", amountUSD: 100, rhythm: "weekly", keywords: ["food"] } });
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Fast Food", amountUSD: 50, rhythm: "weekly", keywords: ["fast food"] } });
+  assert_strictEqual(v3.matchEnvelope(s, "fast food burger"), "fast_food");
+});
+
+section("--- System Prompt ---");
+
+test("buildSystemPrompt returns a string", () => { const p = buildSystemPrompt(v3.createFreshState()); assert_ok(typeof p === "string" && p.length > 100); });
+test("buildSystemPrompt contains SpendYes", () => { assert_ok(buildSystemPrompt(v3.createFreshState()).includes("SpendYes")); });
+test("buildSystemPrompt contains state data", () => {
+  const p = buildSystemPrompt(setupState());
+  assert_ok(p.includes('"setup":true'), "setup:true");
+});
+test("buildSystemPrompt: FOLLOW UP ABOUT BILLS", () => { assert_ok(buildSystemPrompt(v3.createFreshState()).includes("FOLLOW UP ABOUT BILLS")); });
+test("buildSystemPrompt: VOICE-FIRST", () => { assert_ok(buildSystemPrompt(v3.createFreshState()).includes("VOICE-FIRST")); });
+
+section("--- computePicture ---");
+
+test("computePicture: freeRemainingTodayCents", () => {
+  const pic = computePicture(setupState()); assert_ok(pic.setup); assert_strictEqual(pic.freeRemainingTodayCents, pic.dailyPaceCents);
+});
+test("computePicture: dailyPaceCents", () => {
+  const pic = computePicture(setupState()); assert_strictEqual(pic.dailyPaceCents, Math.floor(pic.freeCents / pic.daysLeft));
+});
+test("computePicture: dueEnvelopes", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "create_envelope", data: { name: "Phone", amountUSD: 60, rhythm: "monthly", nextDate: pastDate(2) } });
+  const pic = computePicture(s); assert_ok(pic.dueEnvelopes.length > 0); assert_strictEqual(pic.dueEnvelopes[0].name, "Phone");
+});
+test("computePicture: non-setup", () => { const pic = computePicture(v3.createFreshState()); assert_strictEqual(pic.setup, false); });
+test("computePicture: checksumOk", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "create_envelope", data: { name: "Rent", amountUSD: 400, rhythm: "monthly" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 30, description: "taxi" } });
+  const pic = computePicture(s); assert_strictEqual(pic.checksumOk, true);
+  assert_strictEqual(pic.balanceCents, pic.totalReservedCents + pic.freeCents);
+});
+test("computePicture: envelopes list", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Gym", amountUSD: 30, rhythm: "monthly" } });
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Netflix", amountUSD: 15, rhythm: "monthly" } });
+  assert_strictEqual(computePicture(s).envelopes.length, 2);
+});
+test("computePicture: inactive envelopes excluded", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Old", amountUSD: 50, rhythm: "monthly" } });
+  s = v3.applyAction(s, { type: "remove_envelope", data: { name: "Old" } });
+  assert_strictEqual(computePicture(s).envelopes.length, 0);
+});
+test("computePicture: todaySpentFormatted", () => {
+  const s = v3.createFreshState(); s.setup = true; s.balanceCents = 100000; s.payday = futureDate(30);
+  s.transactions.push({ id: "ts1", type: "spend", amountCents: 500, description: "test", envelope: "free", date: v3.today(), ts: Date.now() });
+  const pic = computePicture(s);
+  assert_ok(pic.todaySpentFormatted, "present"); assert_ok(pic.todaySpentFormatted.includes("5"), "includes 5");
+});
+
+section("--- Timezone ---");
+
+test("today() no args: YYYY-MM-DD", () => { assert_ok(/^\d{4}-\d{2}-\d{2}$/.test(v3.today())); });
+test("today() with valid IANA tz", () => { assert_ok(/^\d{4}-\d{2}-\d{2}$/.test(v3.today("America/New_York"))); });
+test("today() with invalid tz: fallback", () => { assert_ok(/^\d{4}-\d{2}-\d{2}$/.test(v3.today("Invalid/Zone"))); });
+test("setup with timezone stores it", () => {
+  const s = v3.applyAction(v3.createFreshState(), { type: "setup", data: { balanceUSD: 1000, timezone: "Europe/London" } });
+  assert_strictEqual(s.timezone, "Europe/London");
+});
+test("createFreshState: timezone=UTC", () => { assert_strictEqual(v3.createFreshState().timezone, "UTC"); });
+
+section("--- Edit Spend ---");
+
+test("edit_spend: changes amount", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "spend", data: { amountUSD: 40, description: "coffee" } });
+  const txId = s.transactions.find(t => t.description === "coffee").id;
+  const a = v3.applyAction(s, { type: "edit_spend", data: { txId, newAmountUSD: 14 } });
+  assert_strictEqual(a.balanceCents, 100000 - 1400);
+  assert_strictEqual(a.transactions.find(t => t.id === txId).amountCents, 1400);
+});
+test("edit_spend: changes description", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "spend", data: { amountUSD: 10, description: "taxi" } });
+  const txId = s.transactions.find(t => t.description === "taxi").id;
+  const a = v3.applyAction(s, { type: "edit_spend", data: { txId, newDescription: "uber" } });
+  assert_strictEqual(a.transactions.find(t => t.id === txId).description, "uber");
+});
+test("edit_spend: adjusts envelope spentCents", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Coffee", amountUSD: 10, rhythm: "daily", keywords: ["coffee"] } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 8, description: "coffee latte" } });
+  const txId = s.transactions.find(t => t.description === "coffee latte").id;
+  const a = v3.applyAction(s, { type: "edit_spend", data: { txId, newAmountUSD: 4 } });
+  assert_strictEqual(a.envelopes.coffee.spentCents, 400);
+});
+test("edit_spend: invalid txId no-op", () => {
+  const s = setupState();
+  const a = v3.applyAction(s, { type: "edit_spend", data: { txId: "x", newAmountUSD: 5 } });
+  assert_strictEqual(a.balanceCents, s.balanceCents);
+});
+test("edit_spend: equation holds", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Food", amountUSD: 100, rhythm: "weekly" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 30, description: "lunch" } });
+  const txId = s.transactions.find(t => t.description === "lunch").id;
+  s = v3.applyAction(s, { type: "edit_spend", data: { txId, newAmountUSD: 15 } });
+  checkEquation(s, "edit_spend");
+});
+
+section("--- Delete Spend ---");
+
+test("delete_spend: removes tx, restores balance", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "spend", data: { amountUSD: 25, description: "movie" } });
+  const txId = s.transactions.find(t => t.description === "movie").id;
+  const a = v3.applyAction(s, { type: "delete_spend", data: { txId } });
+  assert_strictEqual(a.balanceCents, 100000); assert_ok(!a.transactions.find(t => t.id === txId));
+});
+test("delete_spend: restores envelope spentCents", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Food", amountUSD: 50, rhythm: "daily", keywords: ["food"] } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 20, description: "food court" } });
+  const txId = s.transactions.find(t => t.description === "food court").id;
+  const a = v3.applyAction(s, { type: "delete_spend", data: { txId } });
+  assert_strictEqual(a.envelopes.food.spentCents, 0);
+});
+test("delete_spend: refuses to delete income", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "income", data: { amountUSD: 2000, nextPayday: futureDate(30) } });
+  const inc = s.transactions.find(t => t.type === "income");
+  const a = v3.applyAction(s, { type: "delete_spend", data: { txId: inc.id } });
+  assert_ok(a.transactions.find(t => t.id === inc.id), "income should survive");
+});
+test("delete_spend: invalid txId no-op", () => {
+  const s = setupState();
+  const a = v3.applyAction(s, { type: "delete_spend", data: { txId: "bogus" } });
+  assert_strictEqual(a.balanceCents, s.balanceCents);
+});
+test("delete_spend: equation holds", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Gym", amountUSD: 30, rhythm: "monthly" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 50, description: "shoes" } });
+  const txId = s.transactions.find(t => t.description === "shoes").id;
+  s = v3.applyAction(s, { type: "delete_spend", data: { txId } });
+  checkEquation(s, "delete_spend");
+});
+
+section("--- Insights ---");
+
+test("insights: overspent budget", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Coffee", amountUSD: 5, rhythm: "daily" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 8, description: "coffee", envelope: "coffee" } });
+  const p = buildSystemPrompt(s);
+  assert_ok(p.includes("insights") || p.includes("over budget") || p.includes("100%"), "should have insight");
+});
+test("prompt includes recentTx with IDs", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "spend", data: { amountUSD: 10, description: "lunch" } });
+  const txId = s.transactions.find(t => t.description === "lunch").id;
+  assert_ok(buildSystemPrompt(s).includes(txId), "should contain txId");
+});
+
+section("--- Native Language (Russian) ---");
+
+test("Russian: native prompt", () => {
+  let s = setupState(); s.language = "ru"; const p = buildSystemPrompt(s);
+  assert_ok(p.includes("Russian")); assert_ok(p.includes("Зажми микрофон"));
+});
+test("English: English prompt", () => {
+  let s = setupState(); s.language = "en"; const p = buildSystemPrompt(s);
+  assert_ok(p.includes("English")); assert_ok(p.includes("hold the mic"));
+});
+test("Russian insights in Russian", () => {
+  let s = setupState(); s.language = "ru";
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Кофе", amountUSD: 5, rhythm: "daily" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 8, description: "кофе", envelope: "кофе" } });
+  const p = buildSystemPrompt(s);
+  assert_ok(p.includes("перерасход") || p.includes("100%"), "Russian insight");
+});
+test("Russian slang glossary", () => {
+  let s = setupState(); s.language = "ru"; const p = buildSystemPrompt(s);
+  assert_ok(p.includes("тыщ")); assert_ok(p.includes("косарь")); assert_ok(p.includes("штука"));
+});
+
+section("--- update_settings ---");
+
+test("update_settings: timezone", () => {
+  let s = setupState(); const bb = s.balanceCents;
+  s = v3.applyAction(s, { type: "update_settings", data: { timezone: "Europe/Moscow" } });
+  assert_strictEqual(s.timezone, "Europe/Moscow"); assert_strictEqual(s.balanceCents, bb);
+});
+test("update_settings: currency", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "update_settings", data: { currency: "EUR", symbol: "€" } });
+  assert_strictEqual(s.currency, "EUR"); assert_strictEqual(s.currencySymbol, "€");
+});
+test("update_settings: payday", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "update_settings", data: { payday: futureDate(25) } });
+  assert_strictEqual(s.payday, futureDate(25));
+});
+test("update_settings: language", () => {
+  let s = setupState(); s = v3.applyAction(s, { type: "update_settings", data: { language: "ru" } });
+  assert_strictEqual(s.language, "ru");
+});
+test("update_settings: partial", () => {
+  let s = setupState(); s.timezone = "UTC"; s.currency = "USD";
+  s = v3.applyAction(s, { type: "update_settings", data: { timezone: "Asia/Tokyo" } });
+  assert_strictEqual(s.timezone, "Asia/Tokyo"); assert_strictEqual(s.currency, "USD");
+});
+
+section("--- rename_envelope ---");
+
+test("rename_envelope: renames key + updates txs", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Groceries", amountUSD: 100, rhythm: "weekly" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 30, description: "supermarket", envelope: "groceries" } });
+  s = v3.applyAction(s, { type: "rename_envelope", data: { oldName: "Groceries", newName: "Food" } });
+  assert_ok(!s.envelopes["groceries"]); assert_ok(s.envelopes["food"]);
+  assert_strictEqual(s.envelopes["food"].name, "Food");
+  assert_strictEqual(s.transactions.find(t => t.description === "supermarket").envelope, "food");
+});
+test("rename_envelope: same key updates display name", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Coffee", amountUSD: 5, rhythm: "daily" } });
+  s = v3.applyAction(s, { type: "rename_envelope", data: { oldName: "Coffee", newName: "coffee" } });
+  assert_ok(s.envelopes["coffee"]);
+});
+test("rename_envelope: nonexistent no-op", () => {
+  let s = setupState(); const before = JSON.stringify(s);
+  s = v3.applyAction(s, { type: "rename_envelope", data: { oldName: "nope", newName: "also nope" } });
+  assert_strictEqual(JSON.stringify(s), before);
+});
+
+section("--- System Prompt: actions ---");
+
+test("prompt includes update_settings + rename_envelope", () => {
+  const p = buildSystemPrompt(setupState());
+  assert_ok(p.includes("update_settings")); assert_ok(p.includes("rename_envelope"));
+});
+test("prompt includes ADJUSTMENTS", () => {
+  assert_ok(buildSystemPrompt(setupState()).includes("ADJUSTMENTS"));
+});
+
+section("--- Cycle / Payday Logic ---");
+
+test("advancePayday: monthly", () => {
+  const past = pastDate(5); const r = v3.advancePayday(past, "monthly");
+  const todayMs = new Date(v3.today() + "T00:00:00Z");
+  assert_ok(new Date(r + "T00:00:00Z") > todayMs, "future: " + r);
+  assert_strictEqual(new Date(r + "T00:00:00Z").getUTCDate(), new Date(past + "T00:00:00Z").getUTCDate());
+});
+test("advancePayday: biweekly", () => {
+  const r = v3.advancePayday(pastDate(3), "biweekly");
+  const todayMs = new Date(v3.today() + "T00:00:00Z");
+  assert_ok(new Date(r + "T00:00:00Z") > todayMs, "future");
+  const d = Math.round((new Date(r + "T00:00:00Z") - todayMs) / 86400000);
+  assert_ok(d >= 10 && d <= 12, "~11 days: " + d);
+});
+test("advancePayday: weekly", () => {
+  const r = v3.advancePayday(pastDate(2), "weekly");
+  const todayMs = new Date(v3.today() + "T00:00:00Z");
+  const d = Math.round((new Date(r + "T00:00:00Z") - todayMs) / 86400000);
+  assert_ok(d >= 4 && d <= 6, "~5 days: " + d);
+});
+test("advancePayday: future unchanged", () => {
+  const f = futureDate(10); assert_strictEqual(v3.advancePayday(f, "monthly"), f);
+});
+test("income auto-advances payday", () => {
+  let s = setupState(); s.payFrequency = "monthly"; s.payday = pastDate(2); const old = s.payday;
+  s = v3.applyAction(s, { type: "income", data: { amountUSD: 5000 } });
+  assert_notStrictEqual(s.payday, old, "Payday should advance"); assert_ok(s.payday > v3.today(), "New payday in future");
+});
+test("income respects explicit nextPayday", () => {
+  let s = setupState(); s.payFrequency = "biweekly"; const ex = futureDate(20);
+  s = v3.applyAction(s, { type: "income", data: { amountUSD: 5000, nextPayday: ex } });
+  assert_strictEqual(s.payday, ex);
+});
+test("setup stores payFrequency", () => {
+  let s = v3.createFreshState();
+  s = v3.applyAction(s, { type: "setup", data: { balanceUSD: 1000, payday: futureDate(14), payFrequency: "biweekly" } });
+  assert_strictEqual(s.payFrequency, "biweekly");
+});
+test("createFreshState: payFrequency null", () => { assert_strictEqual(v3.createFreshState().payFrequency, null); });
+
+section("--- Irregular Income & Payday Overdue ---");
+
+test("advancePayday: irregular returns same date", () => {
+  const past = pastDate(5); assert_strictEqual(v3.advancePayday(past, "irregular", "UTC"), past);
+});
+test("computePicture: irregular expired payday -> 30-day horizon", () => {
+  let s = setupState(); s.payday = pastDate(3); s.payFrequency = "irregular";
+  const pic = computePicture(s);
+  assert_ok(pic.daysLeft >= 28 && pic.daysLeft <= 31, "~30 days: " + pic.daysLeft);
+  assert_strictEqual(pic.paydayOverdue, true);
+});
+test("computePicture: monthly expired payday auto-advances", () => {
+  let s = setupState(); s.payday = pastDate(5); s.payFrequency = "monthly";
+  const pic = computePicture(s);
+  assert_ok(pic.daysLeft > 1, "daysLeft: " + pic.daysLeft);
+  assert_strictEqual(pic.paydayOverdue, true);
+  assert_ok(pic.displayPayday > v3.today("UTC"), "displayPayday future: " + pic.displayPayday);
+});
+test("computePicture: future payday NOT overdue", () => {
+  let s = setupState(); s.payday = futureDate(15);
+  const pic = computePicture(s);
+  assert_strictEqual(pic.paydayOverdue, false); assert_strictEqual(pic.daysLeft, 15);
+});
+test("computePicture: irregular dailyPace reasonable", () => {
+  let s = setupState(); s.payday = pastDate(2); s.payFrequency = "irregular"; s.balanceCents = 300000;
+  const pic = computePicture(s);
+  assert_ok(pic.dailyPaceCents < 200000, "spread ~30 days: " + pic.dailyPaceCents);
+  assert_ok(pic.dailyPaceCents > 0, "positive");
+});
+test("income with irregular: no auto-advance", () => {
+  let s = setupState(); s.payFrequency = "irregular"; s.payday = pastDate(5); const orig = s.payday;
+  s = v3.applyAction(s, { type: "income", data: { amountUSD: 2000 } });
+  assert_strictEqual(s.payday, orig);
+});
+test("setup with irregular: payday 30 days out", () => {
+  let s = v3.createFreshState();
+  s = v3.applyAction(s, { type: "setup", data: { balanceUSD: 500, payFrequency: "irregular" } });
+  assert_strictEqual(s.payFrequency, "irregular");
+  const dl = v3.daysUntil(s.payday, "UTC");
+  assert_ok(dl >= 29 && dl <= 31, "~30: " + dl);
+});
+test("prompt includes irregular", () => { assert_ok(buildSystemPrompt(setupState()).includes("irregular")); });
+test("prompt includes paydayOverdue", () => {
+  let s = setupState(); s.payday = pastDate(3); s.payFrequency = "irregular";
+  assert_ok(buildSystemPrompt(s).includes("paydayOverdue"));
+});
+
+// ═══════════════════════════════════════════════════════
+// SUMMARY
+// ═══════════════════════════════════════════════════════
+const cls = failed > 0 ? "summary-fail" : "summary-pass";
+summaryEl.className = cls;
+summaryEl.textContent = `${passed} passed, ${failed} failed`;
+if (failures.length > 0) {
+  let fl = "\n\nFailed:\n";
+  for (const f of failures) fl += "  • " + f.name + ": " + f.err.message + "\n";
+  summaryEl.textContent += fl;
+}
+document.title = failed > 0 ? `FAIL (${failed})` : `ALL ${passed} PASSED`;
+</script>
+</body>
+</html>

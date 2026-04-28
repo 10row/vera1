@@ -40,14 +40,14 @@ function setupState(overrides) {
 }
 
 function futureDate(days) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
+  const d = new Date(v3.today() + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
 function pastDate(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
+  const d = new Date(v3.today() + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);
 }
 
@@ -869,6 +869,246 @@ test("buildSystemPrompt: Russian slang glossary present for RU users", () => {
   assert.ok(prompt.includes("тыщ"), "Should include тыщ slang mapping");
   assert.ok(prompt.includes("косарь"), "Should include косарь slang mapping");
   assert.ok(prompt.includes("штука"), "Should include штука slang mapping");
+});
+
+// ════════════════════════════════════════════════════════════════════
+console.log("\n--- update_settings ---");
+
+test("update_settings: changes timezone without touching balance", () => {
+  let s = setupState();
+  const balBefore = s.balanceCents;
+  const txCountBefore = s.transactions.length;
+  s = v3.applyAction(s, { type: "update_settings", data: { timezone: "Europe/Moscow" } });
+  assert.strictEqual(s.timezone, "Europe/Moscow");
+  assert.strictEqual(s.balanceCents, balBefore, "Balance should not change");
+  assert.strictEqual(s.transactions.length, txCountBefore, "No new transactions");
+});
+
+test("update_settings: changes currency and symbol", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "update_settings", data: { currency: "EUR", symbol: "€" } });
+  assert.strictEqual(s.currency, "EUR");
+  assert.strictEqual(s.currencySymbol, "€");
+});
+
+test("update_settings: changes payday", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "update_settings", data: { payday: futureDate(25) } });
+  assert.strictEqual(s.payday, futureDate(25));
+});
+
+test("update_settings: changes language", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "update_settings", data: { language: "ru" } });
+  assert.strictEqual(s.language, "ru");
+});
+
+test("update_settings: partial — only changes provided fields", () => {
+  let s = setupState();
+  s.timezone = "UTC";
+  s.currency = "USD";
+  s = v3.applyAction(s, { type: "update_settings", data: { timezone: "Asia/Tokyo" } });
+  assert.strictEqual(s.timezone, "Asia/Tokyo");
+  assert.strictEqual(s.currency, "USD", "Currency should remain unchanged");
+});
+
+// ════════════════════════════════════════════════════════════════════
+console.log("\n--- rename_envelope ---");
+
+test("rename_envelope: renames key and updates transactions", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Groceries", amountUSD: 100, rhythm: "weekly" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 30, description: "supermarket", envelope: "groceries" } });
+  assert.ok(s.envelopes["groceries"], "Old key should exist before rename");
+  s = v3.applyAction(s, { type: "rename_envelope", data: { oldName: "Groceries", newName: "Food" } });
+  assert.ok(!s.envelopes["groceries"], "Old key should be gone");
+  assert.ok(s.envelopes["food"], "New key should exist");
+  assert.strictEqual(s.envelopes["food"].name, "Food");
+  // Transaction should be updated
+  const tx = s.transactions.find(t => t.description === "supermarket");
+  assert.strictEqual(tx.envelope, "food", "Transaction envelope should be updated to new key");
+});
+
+test("rename_envelope: same key does not break (just updates display name)", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Coffee", amountUSD: 5, rhythm: "daily" } });
+  s = v3.applyAction(s, { type: "rename_envelope", data: { oldName: "Coffee", newName: "coffee" } });
+  assert.ok(s.envelopes["coffee"], "Key should still exist");
+});
+
+test("rename_envelope: nonexistent envelope returns state unchanged", () => {
+  let s = setupState();
+  const before = JSON.stringify(s);
+  s = v3.applyAction(s, { type: "rename_envelope", data: { oldName: "nope", newName: "also nope" } });
+  assert.strictEqual(JSON.stringify(s), before);
+});
+
+// ════════════════════════════════════════════════════════════════════
+console.log("\n--- System Prompt: update_settings ---");
+
+test("buildSystemPrompt includes update_settings in actions list", () => {
+  const s = setupState();
+  const prompt = buildSystemPrompt(s);
+  assert.ok(prompt.includes("update_settings"), "Should list update_settings action");
+  assert.ok(prompt.includes("rename_envelope"), "Should list rename_envelope action");
+});
+
+test("buildSystemPrompt includes adjustment examples", () => {
+  const s = setupState();
+  const prompt = buildSystemPrompt(s);
+  assert.ok(prompt.includes("ADJUSTMENTS"), "Should have adjustments section");
+});
+
+// ════════════════════════════════════════════════════════════════════
+console.log("\n--- Cycle / Payday Logic ---");
+
+test("advancePayday: monthly advances to next month same day", () => {
+  const past = pastDate(5);
+  const result = v3.advancePayday(past, "monthly");
+  const todayMs = new Date(v3.today() + "T00:00:00Z");
+  const rd = new Date(result + "T00:00:00Z");
+  const pd = new Date(past + "T00:00:00Z");
+  assert.ok(rd > todayMs, "Should be in the future, got: " + result);
+  assert.strictEqual(rd.getUTCDate(), pd.getUTCDate(), "Day of month should be same");
+});
+
+test("advancePayday: biweekly advances by 14 days", () => {
+  const past = pastDate(3);
+  const result = v3.advancePayday(past, "biweekly");
+  const todayMs = new Date(v3.today() + "T00:00:00Z");
+  const rd = new Date(result + "T00:00:00Z");
+  assert.ok(rd > todayMs, "Should be in the future");
+  const daysOut = Math.round((rd - todayMs) / 86400000);
+  assert.ok(daysOut >= 10 && daysOut <= 12, "Should be ~11 days out, got: " + daysOut);
+});
+
+test("advancePayday: weekly advances by 7 days", () => {
+  const past = pastDate(2);
+  const result = v3.advancePayday(past, "weekly");
+  const todayMs = new Date(v3.today() + "T00:00:00Z");
+  const rd = new Date(result + "T00:00:00Z");
+  assert.ok(rd > todayMs, "Should be in the future");
+  const daysOut = Math.round((rd - todayMs) / 86400000);
+  assert.ok(daysOut >= 4 && daysOut <= 6, "Should be ~5 days out, got: " + daysOut);
+});
+
+test("advancePayday: future date stays unchanged", () => {
+  const future = futureDate(10);
+  const result = v3.advancePayday(future, "monthly");
+  assert.strictEqual(result, future, "Future date should not change");
+});
+
+test("income auto-advances payday when nextPayday not provided", () => {
+  let s = setupState();
+  s.payFrequency = "monthly";
+  s.payday = pastDate(2); // Must be in the past so advancePayday actually advances it
+  const oldPayday = s.payday;
+  s = v3.applyAction(s, { type: "income", data: { amountUSD: 5000, description: "Salary" } });
+  assert.notStrictEqual(s.payday, oldPayday, "Payday should auto-advance");
+  assert.ok(s.payday > v3.today(), "New payday should be in future");
+});
+
+test("income respects explicit nextPayday over auto-advance", () => {
+  let s = setupState();
+  s.payFrequency = "biweekly";
+  const explicit = futureDate(20);
+  s = v3.applyAction(s, { type: "income", data: { amountUSD: 5000, nextPayday: explicit } });
+  assert.strictEqual(s.payday, explicit, "Explicit nextPayday should take precedence");
+});
+
+test("setup stores payFrequency", () => {
+  let s = v3.createFreshState();
+  s = v3.applyAction(s, { type: "setup", data: { balanceUSD: 1000, payday: futureDate(14), payFrequency: "biweekly" } });
+  assert.strictEqual(s.payFrequency, "biweekly");
+});
+
+test("createFreshState includes payFrequency null", () => {
+  const s = v3.createFreshState();
+  assert.strictEqual(s.payFrequency, null);
+});
+
+// ════════════════════════════════════════════════════════════════════
+console.log("\n--- Irregular Income & Payday Overdue ---");
+
+test("advancePayday with irregular frequency returns same date (no advance)", () => {
+  const past = pastDate(5);
+  const result = v3.advancePayday(past, "irregular", "UTC");
+  assert.strictEqual(result, past, "Irregular should NOT advance payday");
+});
+
+test("computePicture: expired payday with irregular freq gives 30-day rolling horizon", () => {
+  let s = setupState();
+  s.payday = pastDate(3);
+  s.payFrequency = "irregular";
+  const pic = computePicture(s);
+  assert.ok(pic.daysLeft >= 28 && pic.daysLeft <= 31, "Should be ~30 days, got: " + pic.daysLeft);
+  assert.strictEqual(pic.paydayOverdue, true, "paydayOverdue should be true");
+});
+
+test("computePicture: expired payday with monthly freq auto-advances for display", () => {
+  let s = setupState();
+  s.payday = pastDate(5);
+  s.payFrequency = "monthly";
+  const pic = computePicture(s);
+  assert.ok(pic.daysLeft > 1, "Should auto-advance, got daysLeft: " + pic.daysLeft);
+  assert.strictEqual(pic.paydayOverdue, true, "paydayOverdue should be true");
+  // displayPayday should be in the future
+  assert.ok(pic.displayPayday > v3.today("UTC"), "displayPayday should be future: " + pic.displayPayday);
+});
+
+test("computePicture: future payday is NOT overdue", () => {
+  let s = setupState();
+  s.payday = futureDate(15);
+  const pic = computePicture(s);
+  assert.strictEqual(pic.paydayOverdue, false, "Future payday should not be overdue");
+  assert.strictEqual(pic.daysLeft, 15, "daysLeft should be 15");
+});
+
+test("computePicture: irregular income dailyPace is reasonable (not all money in one day)", () => {
+  let s = setupState();
+  s.payday = pastDate(2);
+  s.payFrequency = "irregular";
+  s.balanceCents = 300000; // $3000
+  const pic = computePicture(s);
+  // dailyPace should be ~$100/day (3000/30), not $3000/1
+  assert.ok(pic.dailyPaceCents < 200000, "dailyPace should be spread over ~30 days, got: " + pic.dailyPaceCents);
+  assert.ok(pic.dailyPaceCents > 0, "dailyPace should be positive");
+});
+
+test("income action with irregular frequency does NOT auto-advance payday", () => {
+  let s = setupState();
+  s.payFrequency = "irregular";
+  s.payday = pastDate(5);
+  const originalPayday = s.payday;
+  s = v3.applyAction(s, { type: "income", data: { amountUSD: 2000 } });
+  // With irregular, payday stays the same (advancePayday returns same date)
+  assert.strictEqual(s.payday, originalPayday, "Irregular income should not auto-advance payday");
+});
+
+test("setup with payFrequency irregular sets payday 30 days out", () => {
+  let s = v3.createFreshState();
+  s = v3.applyAction(s, {
+    type: "setup",
+    data: { balanceUSD: 500, payFrequency: "irregular" },
+  });
+  assert.strictEqual(s.payFrequency, "irregular");
+  // Payday defaults to ~30 days out
+  const dl = v3.daysUntil(s.payday, "UTC");
+  assert.ok(dl >= 29 && dl <= 31, "Default payday should be ~30 days out, got: " + dl);
+});
+
+test("system prompt includes irregular in payFrequency options", () => {
+  const s = setupState();
+  const prompt = buildSystemPrompt(s);
+  assert.ok(prompt.includes("irregular"), "Prompt should mention irregular payFrequency");
+});
+
+test("system prompt includes paydayOverdue in state snapshot", () => {
+  const s = setupState();
+  s.payday = pastDate(3);
+  s.payFrequency = "irregular";
+  const prompt = buildSystemPrompt(s);
+  assert.ok(prompt.includes("paydayOverdue"), "Prompt should include paydayOverdue field");
 });
 
 // ════════════════════════════════════════════════════════════════════

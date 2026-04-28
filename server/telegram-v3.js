@@ -4,6 +4,7 @@
 
 const Anthropic = require("@anthropic-ai/sdk").default;
 const OpenAI = require("openai");
+const { toFile } = require("openai/uploads");
 const { Bot } = require("grammy");
 const prisma = require("./db/client");
 const db = require("./db/queries");
@@ -81,6 +82,9 @@ async function processMessage(ctx, telegramId, text) {
     const lang = await ensureLanguage(ctx, user, state);
     const miniAppUrl = process.env.MINIAPP_URL || null;
 
+    // Refresh typing indicator before AI call
+    await ctx.replyWithChatAction("typing").catch(() => {});
+
     // Call AI
     const { text: raw, parsed } = await callSpendYes(state, text, user.id);
 
@@ -109,7 +113,7 @@ async function processMessage(ctx, telegramId, text) {
       delete state.undoSnapshot.undoSnapshot; // don't nest
     }
 
-    // Handle reset
+    // Handle reset — full /start experience
     const hasReset = (parsed.actions || []).some(a => a.type === "reset");
     if (hasReset) {
       await prisma.$transaction([
@@ -126,8 +130,9 @@ async function processMessage(ctx, telegramId, text) {
           },
         }),
       ]);
-      state = v3.createFreshState();
-      state.language = lang;
+      // Send full welcome message — identical to /start for a new user
+      await ctx.reply(fmt.t(lang, "welcome"), { parse_mode: "Markdown" });
+      return;
     } else {
       // Apply actions
       for (const a of (parsed.actions || [])) {
@@ -237,7 +242,8 @@ async function handleResetDirect(ctx, telegramId) {
       }),
     ]);
   }
-  await ctx.reply(fmt.t(lang, "resetConfirm"));
+  // Full /start welcome — not just "clean slate"
+  await ctx.reply(fmt.t(lang, "welcome"), { parse_mode: "Markdown" });
 }
 
 // ── GREETING INTERCEPT (non-setup users) ─────────
@@ -281,24 +287,68 @@ if (bot) bot.on("message:voice", async (ctx) => {
     await ctx.reply("Voice not enabled.");
     return;
   }
+
+  // Instant visible feedback — user knows we received the voice
+  const lang = fmt.detectLang(ctx);
+  let statusMsg;
+  try {
+    statusMsg = await ctx.reply("🎙");
+  } catch (e) { /* non-critical */ }
+
+  // Keep typing indicator alive throughout pipeline
+  const typingInterval = setInterval(() => {
+    ctx.replyWithChatAction("typing").catch(() => {});
+  }, 4000);
+
   try {
     await ctx.replyWithChatAction("typing");
+    const t0 = Date.now();
+
+    // 1. Download voice file (10s timeout)
     const file = await ctx.getFile();
     const url = "https://api.telegram.org/file/bot" + process.env.BOT_TOKEN + "/" + file.file_path;
-    const buf = await (await fetch(url)).arrayBuffer();
+    const dlController = new AbortController();
+    const dlTimer = setTimeout(() => dlController.abort(), 10000);
+    const resp = await fetch(url, { signal: dlController.signal });
+    const buf = Buffer.from(await resp.arrayBuffer());
+    clearTimeout(dlTimer);
+    console.log(`Voice download: ${Date.now() - t0}ms, ${buf.length} bytes`);
+
+    // 2. Whisper transcription — use SDK toFile() + timeout option (NOT AbortController)
+    const t1 = Date.now();
+    const audioFile = await toFile(buf, "voice.ogg", { type: "audio/ogg" });
     const tr = await openai.audio.transcriptions.create({
-      file: new File([buf], "voice.ogg", { type: "audio/ogg" }),
+      file: audioFile,
       model: "whisper-1",
-    });
+    }, { timeout: 15000 });
+    console.log(`Whisper: ${Date.now() - t1}ms, text="${(tr.text || "").slice(0, 60)}"`);
+
     if (!tr.text) {
-      await ctx.reply("Couldn't catch that.");
+      clearInterval(typingInterval);
+      const noText = lang === "ru" ? "Не расслышал, попробуй ещё раз." : "Couldn't catch that.";
+      if (statusMsg) await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, noText).catch(() => ctx.reply(noText));
+      else await ctx.reply(noText);
       return;
     }
     const voiceText = tr.text.length > 2000 ? tr.text.slice(0, 2000) : tr.text;
+
+    // Delete the 🎙 status message before AI reply comes through
+    if (statusMsg) {
+      ctx.api.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+    }
+
+    console.log(`Voice pipeline pre-AI: ${Date.now() - t0}ms total`);
     await processMessage(ctx, ctx.from.id, voiceText);
   } catch (err) {
     console.error("Voice err:", err);
-    await ctx.reply("Couldn't process voice.").catch(() => {});
+    const errMsg = lang === "ru" ? "Что-то пошло не так, попробуй ещё раз." : "Something went wrong, try again.";
+    if (statusMsg) {
+      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, errMsg).catch(() => ctx.reply(fmt.t(lang, "error")).catch(() => {}));
+    } else {
+      await ctx.reply(fmt.t(lang, "error")).catch(() => {});
+    }
+  } finally {
+    clearInterval(typingInterval);
   }
 });
 
@@ -417,7 +467,7 @@ if (bot) bot.command("reset", async (ctx) => {
     const tid = String(ctx.from.id);
     const user = await prisma.user.findUnique({ where: { telegramId: tid } });
     if (!user) {
-      await ctx.reply(fmt.t(fmt.detectLang(ctx), "resetConfirm"));
+      await ctx.reply(fmt.t(fmt.detectLang(ctx), "welcome"), { parse_mode: "Markdown" });
       return;
     }
     const lang = (await db.loadState(prisma, user.id)).language || fmt.detectLang(ctx);
@@ -435,7 +485,7 @@ if (bot) bot.command("reset", async (ctx) => {
         },
       }),
     ]);
-    await ctx.reply(fmt.t(lang, "resetConfirm"));
+    await ctx.reply(fmt.t(lang, "welcome"), { parse_mode: "Markdown" });
   } catch (err) {
     console.error("Reset err:", err);
     await ctx.reply(fmt.t(fmt.detectLang(ctx), "error")).catch(() => {});
