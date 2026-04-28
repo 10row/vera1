@@ -4,7 +4,7 @@
   "description": "SpendYes - Spending Confidence Engine",
   "main": "server/v3-server.js",
   "scripts": {
-    "start": "prisma db push --accept-data-loss && node server/v3-server.js",
+    "start": "node server/migrate-v3.js && node server/v3-server.js",
     "dev": "node --watch server/v3-server.js",
     "test": "node web/vera-v2-tests.js && node web/vera-v2-edge-tests.js && node web/vera-v2-planned-tests.js && node web/vera-v2-graph-tests.js",
     "postinstall": "prisma generate",
