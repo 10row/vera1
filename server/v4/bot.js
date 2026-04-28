@@ -14,7 +14,7 @@ const db = require("./db");
 
 // Trim BOT_TOKEN — Railway/.env paste often leaves a trailing newline which
 // silently breaks initData HMAC validation while still working for API calls.
-const BOT_TOKEN_RAW = BOT_TOKEN || "";
+const BOT_TOKEN_RAW = process.env.BOT_TOKEN || "";
 const BOT_TOKEN = BOT_TOKEN_RAW.trim();
 if (BOT_TOKEN_RAW && BOT_TOKEN_RAW !== BOT_TOKEN) {
   console.warn("[v4] BOT_TOKEN had trailing whitespace — trimmed");
