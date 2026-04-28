@@ -38,15 +38,33 @@ function validateTelegramInitData(initData) {
 }
 
 // Middleware: validate tg_ requests have valid initData
+// Also upgrades non-tg_ requests to tg_ if valid initData is present
 function requireTelegramAuth(req, res, next) {
   const sid = req.params.sid;
-  if (!sid || !sid.startsWith("tg_")) return next(); // non-telegram requests pass through
   const initData = req.headers["x-telegram-init-data"];
-  if (!initData) return res.status(401).json({ error: "Missing Telegram auth" });
-  const user = validateTelegramInitData(initData);
-  if (!user) return res.status(401).json({ error: "Invalid Telegram auth" });
-  // Ensure the authenticated user matches the requested session
-  if (String(user.id) !== sid.slice(3)) return res.status(403).json({ error: "User mismatch" });
+
+  if (initData) {
+    // If initData is present, always validate it and attach the authenticated user
+    const user = validateTelegramInitData(initData);
+    if (!user) return res.status(401).json({ error: "Invalid Telegram auth" });
+
+    if (sid && sid.startsWith("tg_")) {
+      // Ensure the authenticated user matches the requested session
+      if (String(user.id) !== sid.slice(3)) return res.status(403).json({ error: "User mismatch" });
+    } else {
+      // Client sent initData but wrong/missing sid — override sid with authenticated user
+      req.params.sid = "tg_" + String(user.id);
+    }
+    req.telegramUser = user;
+    return next();
+  }
+
+  // No initData
+  if (sid && sid.startsWith("tg_")) {
+    // tg_ requests MUST have initData
+    return res.status(401).json({ error: "Missing Telegram auth" });
+  }
+  // Non-telegram requests pass through
   next();
 }
 

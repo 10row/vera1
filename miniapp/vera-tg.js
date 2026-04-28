@@ -837,7 +837,8 @@ function App() {
         }
         setError(false);
       })
-      .catch(function() {
+      .catch(function(err) {
+        console.error("[SpendYes] loadPicture error:", err.message);
         if (!pic) setError(true);
       })
       .finally(function() {

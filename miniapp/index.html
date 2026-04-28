@@ -33,8 +33,25 @@
     tg.expand();
     tg.setHeaderColor('#0F0F0F');
     tg.setBackgroundColor('#0F0F0F');
-    window.TELEGRAM_USER_ID = tg.initDataUnsafe?.user?.id || 'dev';
+
+    // Extract user ID: prefer initDataUnsafe, fall back to parsing initData string
+    var _tgUserId = tg.initDataUnsafe?.user?.id;
+    if (!_tgUserId && tg.initData) {
+      try {
+        var _params = new URLSearchParams(tg.initData);
+        var _userStr = _params.get('user');
+        if (_userStr) {
+          var _parsed = JSON.parse(_userStr);
+          _tgUserId = _parsed.id;
+        }
+      } catch (e) {
+        console.warn('[SpendYes] Failed to parse initData user:', e);
+      }
+    }
+    window.TELEGRAM_USER_ID = _tgUserId || 'dev';
     window.TELEGRAM_USER_NAME = tg.initDataUnsafe?.user?.first_name || 'User';
+    window.TG_INIT_DATA = tg.initData || '';
+    console.log('[SpendYes] user_id=' + window.TELEGRAM_USER_ID + ' initData=' + (tg.initData ? tg.initData.slice(0, 40) + '...' : 'EMPTY'));
   </script>
 
   <script src="vera-tg.js"></script>
