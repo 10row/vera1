@@ -39,3 +39,10 @@ function applyAction(state, action) {
   }
 }
 module.exports = { toCents,toMoney,toShort,today,daysUntil,daysBetween,monthKey,uid,ekey,createFreshState,applyAction,matchEnvelope,envelopeReserve,countOccurrences,updateMonthly,archiveCycle,todayUnmatched,todayTotal,todaySpendOn,normalizeDate };
+
+// Re-export computePicture and runQuery from the split module.
+// This require() is AFTER module.exports is set, so vera-v3-picture.js
+// sees all utility functions when it does require("./vera-v3").
+const _pic = require("./vera-v3-picture");
+module.exports.computePicture = _pic.computePicture;
+module.exports.runQuery = _pic.runQuery;
