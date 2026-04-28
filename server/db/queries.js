@@ -105,6 +105,7 @@ async function loadState(prisma, userId) {
     currency: user.currency,
     currencySymbol: user.currencySymbol,
     language: user.language || "en",
+    timezone: user.timezone || "UTC",
     envelopes,
     transactions,
     conversationHistory,
@@ -128,6 +129,7 @@ async function saveState(prisma, userId, state) {
         currency: state.currency,
         currencySymbol: state.currencySymbol,
         language: state.language || "en",
+        timezone: state.timezone || "UTC",
       },
     });
 
@@ -169,14 +171,22 @@ async function saveState(prisma, userId, state) {
       });
     }
 
-    // 3. Transactions (append only)
+    // 3. Transactions (append + update + delete)
     const existing = await tx.transaction.findMany({
       where: { userId },
       select: { id: true },
     });
     const existingIds = new Set(existing.map(t => t.id));
+    const stateIds = new Set(state.transactions.map(t => t.id));
+    // Delete transactions removed from state (delete_spend)
+    for (const eid of existingIds) {
+      if (!stateIds.has(eid)) {
+        await tx.transaction.delete({ where: { id: eid } });
+      }
+    }
     for (const t of state.transactions) {
       if (!existingIds.has(t.id)) {
+        // New transaction — create
         await tx.transaction.create({
           data: {
             id: t.id, userId, type: t.type,
@@ -184,6 +194,16 @@ async function saveState(prisma, userId, state) {
             description: t.description || "",
             envelope: t.envelope || null,
             date: t.date,
+          },
+        });
+      } else {
+        // Existing transaction — update (edit_spend may have changed fields)
+        await tx.transaction.update({
+          where: { id: t.id },
+          data: {
+            amountCents: t.amountCents,
+            description: t.description || "",
+            envelope: t.envelope || null,
           },
         });
       }

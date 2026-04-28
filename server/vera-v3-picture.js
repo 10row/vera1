@@ -5,7 +5,7 @@ const v3 = require("./vera-v3");
 function computePicture(state) {
   const s = JSON.parse(JSON.stringify(state));
   if (!s.setup) return { setup: false };
-  const sym = s.currencySymbol||"$", M = c => v3.toMoney(c,sym), dl = v3.daysUntil(s.payday), t = v3.today();
+  const tz = s.timezone || "UTC"; const sym = s.currencySymbol||"$", M = c => v3.toMoney(c,sym), dl = v3.daysUntil(s.payday, tz), t = v3.today(tz);
   const dueEnvelopes = [];
   for (const [k,e] of Object.entries(s.envelopes)) {
     if (e.active && e.nextDate && e.nextDate <= t) { e._isDue=true; dueEnvelopes.push({key:k,name:e.name,amountCents:e.amountCents,amountFormatted:v3.toShort(e.amountCents,sym),nextDate:e.nextDate}); }
@@ -16,7 +16,7 @@ function computePicture(state) {
     const reserved = v3.envelopeReserve(e, dl, s.payday); totalReserved += reserved;
     let todayRem = null;
     if (e.rhythm === "daily") todayRem = Math.max(0, e.amountCents - v3.todaySpendOn(s, key));
-    envList.push({key,name:e.name,rhythm:e.rhythm,priority:e.priority,amountCents:e.amountCents,targetCents:e.targetCents,fundedCents:e.fundedCents,spentCents:e.spentCents,reservedCents:reserved,remainingCents:Math.max(0,reserved),todayRemainingCents:todayRem,nextDate:e.nextDate,isDue:e._isDue||false,daysUntilDue:e.nextDate?v3.daysUntil(e.nextDate):null,intervalDays:e.intervalDays,keywords:e.keywords||[],active:true,amountFormatted:v3.toShort(e.amountCents,sym),reservedFormatted:v3.toShort(reserved,sym),spentFormatted:v3.toShort(e.spentCents,sym),fundedFormatted:e.fundedCents>0?v3.toShort(e.fundedCents,sym):null,targetFormatted:e.targetCents?v3.toShort(e.targetCents,sym):null});
+    envList.push({key,name:e.name,rhythm:e.rhythm,priority:e.priority,amountCents:e.amountCents,targetCents:e.targetCents,fundedCents:e.fundedCents,spentCents:e.spentCents,reservedCents:reserved,remainingCents:Math.max(0,reserved),todayRemainingCents:todayRem,nextDate:e.nextDate,isDue:e._isDue||false,daysUntilDue:e.nextDate?v3.daysUntil(e.nextDate,tz):null,intervalDays:e.intervalDays,keywords:e.keywords||[],active:true,amountFormatted:v3.toShort(e.amountCents,sym),reservedFormatted:v3.toShort(reserved,sym),spentFormatted:v3.toShort(e.spentCents,sym),fundedFormatted:e.fundedCents>0?v3.toShort(e.fundedCents,sym):null,targetFormatted:e.targetCents?v3.toShort(e.targetCents,sym):null});
   }
   const free = s.balanceCents - totalReserved;
   const checksumOk = (totalReserved + free) === s.balanceCents;
@@ -42,7 +42,7 @@ function computePicture(state) {
     freeRemainingTodayCents:freeToday, freeRemainingTodayFormatted:M(freeToday),
     daysLeft:dl, payday:s.payday, cycleStart:s.cycleStart,
     totalReservedCents:totalReserved, totalReservedFormatted:M(totalReserved),
-    envelopes:envList, todaySpentCents:v3.todayTotal(s),
+    envelopes:envList, todaySpentCents:v3.todayTotal(s), todaySpentFormatted:M(v3.todayTotal(s)),
     thisWeekSpentCents:weekSpent, thisWeekSpentFormatted:M(weekSpent),
     thisMonthSpentCents:monthSpent, thisMonthSpentFormatted:M(monthSpent),
     weeklyPaceCents:dailyPace*7, weeklyPaceFormatted:M(dailyPace*7),

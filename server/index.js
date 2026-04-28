@@ -78,7 +78,7 @@ const ALLOWED_ACTION_TYPES = new Set([
   "transaction", "income", "correction", "set_committed", "remove_committed",
   "confirm_payment", "set_envelope", "remove_envelope", "set_location",
   "set_saving_rate", "propose_setup", "confirm_setup", "cancel_setup",
-  "complete_setup", "create_custom_sub", "none",
+  "complete_setup", "create_custom_sub", "edit_spend", "delete_spend", "none",
 ]);
 
 // ── MINI APP API ──────────────────────────────────────────────────────────────

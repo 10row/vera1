@@ -463,6 +463,41 @@ function applyAction(state, action) {
       break;
     }
 
+    // ── EDIT / DELETE SPEND ─────────────────────────────────────────────────
+    case "edit_spend": {
+      const idx = s.ledger.findIndex(e => e.id === d.txId);
+      if (idx === -1) return s;
+      const tx = { ...s.ledger[idx] };
+      const oldAmt = tx.amountUSD ?? 0;
+      const newAmt = d.newAmountUSD !== undefined ? d.newAmountUSD : oldAmt;
+      tx.amountUSD = newAmt;
+      if (d.newDescription !== undefined) tx.description = d.newDescription;
+      s.ledger = [...s.ledger];
+      s.ledger[idx] = tx;
+      // Adjust envelope spent if linked
+      const envKey = Object.keys(s.envelopes).find(k => {
+        const env = s.envelopes[k];
+        if (!env.active) return false;
+        if (env.linkedSubIds?.length)
+          return tx.parentId === env.linkedParentId && env.linkedSubIds.includes(tx.subId);
+        if (env.linkedParentId) return tx.parentId === env.linkedParentId;
+        return false;
+      });
+      // No direct envelope field to adjust — envelopes are computed from ledger
+      s.lastDiff = `Edited transaction: $${oldAmt.toFixed(2)} → $${newAmt.toFixed(2)}${d.newDescription ? ` "${d.newDescription}"` : ""}`;
+      break;
+    }
+    case "delete_spend": {
+      const idx = s.ledger.findIndex(e => e.id === d.txId);
+      if (idx === -1) return s;
+      const tx = s.ledger[idx];
+      // Only allow deleting transactions (not income, setup, correction)
+      if (!["transaction"].includes(tx.type)) return s;
+      s.ledger = s.ledger.filter((_, i) => i !== idx);
+      s.lastDiff = `Deleted: ${tx.description || "transaction"} $${(tx.amountUSD ?? 0).toFixed(2)}`;
+      break;
+    }
+
     default:
       break;
   }

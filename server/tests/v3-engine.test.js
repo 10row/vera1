@@ -137,6 +137,18 @@ test("daysUntil: null returns 30 (default)", () => {
   assert.strictEqual(v3.daysUntil(null), 30);
 });
 
+test("daysUntil: accepts timezone parameter without error", () => {
+  const future = futureDate(5);
+  const result = v3.daysUntil(future, "America/New_York");
+  assert.ok(result >= 4 && result <= 6, "Expected ~5, got: " + result);
+});
+
+test("daysUntil: invalid timezone falls back gracefully", () => {
+  const future = futureDate(5);
+  const result = v3.daysUntil(future, "Invalid/Zone");
+  assert.ok(result >= 4 && result <= 6, "Expected ~5, got: " + result);
+});
+
 // ════════════════════════════════════════════════════════════════════
 console.log("\n--- State Management ---");
 
@@ -659,6 +671,161 @@ test("computePicture: inactive envelopes excluded", () => {
   s = v3.applyAction(s, { type: "remove_envelope", data: { name: "Old" } });
   const pic = computePicture(s);
   assert.strictEqual(pic.envelopes.length, 0);
+});
+
+test("computePicture: todaySpentFormatted is present", () => {
+  const s = v3.createFreshState(); s.setup = true; s.balanceCents = 100000; s.payday = futureDate(30);
+  s.transactions.push({ id: "ts1", type: "spend", amountCents: 500, description: "test", envelope: "free", date: v3.today(), ts: Date.now() });
+  const pic = computePicture(s);
+  assert.ok(pic.todaySpentFormatted, "todaySpentFormatted should be present");
+  assert.ok(pic.todaySpentFormatted.includes("5"), "todaySpentFormatted should include $5.00");
+});
+
+// ════════════════════════════════════════════════════════════════════
+console.log("\n--- Timezone ---");
+
+test("today() with no args returns YYYY-MM-DD (UTC)", () => {
+  const t = v3.today();
+  assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(t));
+});
+
+test("today() with valid IANA timezone returns YYYY-MM-DD", () => {
+  const t = v3.today("America/New_York");
+  assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(t), "Should return YYYY-MM-DD, got: " + t);
+});
+
+test("today() with invalid timezone falls back to UTC", () => {
+  const t = v3.today("Invalid/Zone");
+  assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(t), "Should return YYYY-MM-DD even for invalid tz, got: " + t);
+});
+
+test("setup with timezone stores it in state", () => {
+  const s = v3.applyAction(v3.createFreshState(), {
+    type: "setup",
+    data: { balanceUSD: 1000, timezone: "Europe/London" },
+  });
+  assert.strictEqual(s.timezone, "Europe/London");
+});
+
+test("createFreshState includes timezone: UTC", () => {
+  const s = v3.createFreshState();
+  assert.strictEqual(s.timezone, "UTC");
+});
+
+// ════════════════════════════════════════════════════════════════════
+console.log("\n--- Edit Spend ---");
+
+test("edit_spend: changes amount and adjusts balance", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 40, description: "coffee" } });
+  const txId = s.transactions.find(t => t.type === "spend" && t.description === "coffee").id;
+  const balAfterSpend = s.balanceCents; // 100000 - 4000 = 96000
+  const after = v3.applyAction(s, { type: "edit_spend", data: { txId, newAmountUSD: 14 } });
+  // Balance should be: original 100000 - 1400 = 98600
+  assert.strictEqual(after.balanceCents, 100000 - 1400);
+  const editedTx = after.transactions.find(t => t.id === txId);
+  assert.strictEqual(editedTx.amountCents, 1400);
+});
+
+test("edit_spend: changes description", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 10, description: "taxi" } });
+  const txId = s.transactions.find(t => t.type === "spend" && t.description === "taxi").id;
+  const after = v3.applyAction(s, { type: "edit_spend", data: { txId, newDescription: "uber" } });
+  assert.strictEqual(after.transactions.find(t => t.id === txId).description, "uber");
+});
+
+test("edit_spend: adjusts envelope spentCents", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Coffee", amountUSD: 10, rhythm: "daily", keywords: ["coffee"] } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 8, description: "coffee latte" } });
+  assert.strictEqual(s.envelopes.coffee.spentCents, 800);
+  const txId = s.transactions.find(t => t.type === "spend" && t.description === "coffee latte").id;
+  const after = v3.applyAction(s, { type: "edit_spend", data: { txId, newAmountUSD: 4 } });
+  assert.strictEqual(after.envelopes.coffee.spentCents, 400);
+});
+
+test("edit_spend: invalid txId returns state unchanged", () => {
+  const s = setupState();
+  const after = v3.applyAction(s, { type: "edit_spend", data: { txId: "nonexistent", newAmountUSD: 5 } });
+  assert.strictEqual(after.balanceCents, s.balanceCents);
+});
+
+test("edit_spend: equation holds after edit", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Food", amountUSD: 100, rhythm: "weekly" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 30, description: "lunch" } });
+  const txId = s.transactions.find(t => t.description === "lunch").id;
+  s = v3.applyAction(s, { type: "edit_spend", data: { txId, newAmountUSD: 15 } });
+  checkEquation(s, "after edit_spend");
+});
+
+// ════════════════════════════════════════════════════════════════════
+console.log("\n--- Delete Spend ---");
+
+test("delete_spend: removes transaction and restores balance", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 25, description: "movie" } });
+  const txId = s.transactions.find(t => t.description === "movie").id;
+  const txCountBefore = s.transactions.length;
+  const after = v3.applyAction(s, { type: "delete_spend", data: { txId } });
+  assert.strictEqual(after.balanceCents, 100000, "Balance should be fully restored");
+  assert.strictEqual(after.transactions.length, txCountBefore - 1);
+  assert.ok(!after.transactions.find(t => t.id === txId), "Transaction should be gone");
+});
+
+test("delete_spend: restores envelope spentCents", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Food", amountUSD: 50, rhythm: "daily", keywords: ["food"] } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 20, description: "food court" } });
+  assert.strictEqual(s.envelopes.food.spentCents, 2000);
+  const txId = s.transactions.find(t => t.description === "food court").id;
+  const after = v3.applyAction(s, { type: "delete_spend", data: { txId } });
+  assert.strictEqual(after.envelopes.food.spentCents, 0);
+});
+
+test("delete_spend: refuses to delete income transaction", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "income", data: { amountUSD: 2000, nextPayday: futureDate(30) } });
+  const incomeTx = s.transactions.find(t => t.type === "income");
+  const after = v3.applyAction(s, { type: "delete_spend", data: { txId: incomeTx.id } });
+  assert.ok(after.transactions.find(t => t.id === incomeTx.id), "Income tx should NOT be deleted");
+});
+
+test("delete_spend: invalid txId returns state unchanged", () => {
+  const s = setupState();
+  const after = v3.applyAction(s, { type: "delete_spend", data: { txId: "bogus" } });
+  assert.strictEqual(after.balanceCents, s.balanceCents);
+});
+
+test("delete_spend: equation holds after delete", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Gym", amountUSD: 30, rhythm: "monthly" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 50, description: "shoes" } });
+  const txId = s.transactions.find(t => t.description === "shoes").id;
+  s = v3.applyAction(s, { type: "delete_spend", data: { txId } });
+  checkEquation(s, "after delete_spend");
+});
+
+// ════════════════════════════════════════════════════════════════════
+console.log("\n--- Insights in System Prompt ---");
+
+test("buildSystemPrompt includes insights when budget is overspent", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Coffee", amountUSD: 5, rhythm: "daily" } });
+  // Spend more than the daily budget
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 8, description: "coffee", envelope: "coffee" } });
+  const prompt = buildSystemPrompt(s);
+  assert.ok(prompt.includes("insights") || prompt.includes("over budget") || prompt.includes("100%"),
+    "Should include budget warning insight");
+});
+
+test("buildSystemPrompt includes recentTx with transaction IDs", () => {
+  let s = setupState();
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 10, description: "lunch" } });
+  const prompt = buildSystemPrompt(s);
+  const txId = s.transactions.find(t => t.description === "lunch").id;
+  assert.ok(prompt.includes(txId), "Prompt should contain transaction ID for edit/delete");
 });
 
 // ════════════════════════════════════════════════════════════════════

@@ -212,11 +212,18 @@ function App() {
     loadPicture();
   }, []);
 
+  const authHeaders = () => {
+    const initData = window.Telegram?.WebApp?.initData;
+    return initData ? { "X-Telegram-Init-Data": initData } : {};
+  };
+
   const loadPicture = async () => {
     if (!sid.current) return;
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/v3/picture/${sid.current}`);
+      const r = await fetch(`${API_BASE}/api/v3/picture/${sid.current}`, {
+        headers: authHeaders(),
+      });
       const d = await r.json();
       if (d.pic) setPic(d.pic);
     } catch {}

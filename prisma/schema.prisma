@@ -27,6 +27,7 @@ model User {
   currency       String  @default("USD")
   currencySymbol String  @default("$")
   language       String  @default("en")
+  timezone       String  @default("UTC")
 
   // Relations
   envelopes    Envelope[]

@@ -62,6 +62,8 @@ ${pic.prevCycleSpend ? `LAST CYCLE: $${pic.prevCycleSpend.total.toFixed(2)} tota
 UPCOMING BILLS: ${(pic.upcomingCommitted || []).map((c) => `"${c.name}" $${(c.amountUSD || 0).toFixed(2)} due ${c.nextDate}${c.nextDate === pic.today ? " TODAY" : ""}`).join(", ") || "none"}
 PARKED NEXT CYCLE: ${Object.values(state.committed || {}).filter((c) => c.parkedForNextCycle).map((c) => `"${c.name}" $${(c.amountUSD || 0).toFixed(2)}`).join(", ") || "none"}
 RECENT: ${(state.ledger || []).slice(-5).map((e) => `[${e.date}] ${e.type} ${e.description || ""} ${e.amountUSD != null ? "$" + e.amountUSD.toFixed(2) : ""}${e.localAmount ? ` (${e.localCurrency || ""}${e.localAmount})` : ""}${e.parentId && e.parentId !== "other" ? " ["+e.parentId+(e.subId ? ">"+e.subId : "")+"]" : ""}`).join(" | ") || "empty"}
+RECENT TRANSACTIONS (with IDs for edit/delete):
+${(state.ledger || []).filter(e => e.type === "transaction").slice(-10).reverse().map(e => `  id:${e.id} | ${e.date} | ${e.description || ""} | $${(e.amountUSD || 0).toFixed(2)}${e.parentId ? " ["+e.parentId+"]" : ""}`).join("\n") || "  (none)"}
 ${state.lastDiff ? `LAST ACTION: ${state.lastDiff} ✓` : ""}`;
 }
 
@@ -206,6 +208,19 @@ entertainment → streaming, events, hobbies
 education    → courses, books
 travel       → accommodation, visas
 financial    → investment, fees
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CORRECTIONS — EDIT & DELETE PAST SPENDING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Users will say things like "that was wrong" or "delete the taxi".
+  "that coffee was actually $4" → search recent transactions for coffee, find the tx, emit edit_spend with txId and newAmountUSD:4
+  "delete the last thing" or "remove that" → find the most recent spend, confirm with user, emit delete_spend with txId
+  "the $40 wasn't right, it was $14" → find recent ~$40 tx, emit edit_spend
+  ALWAYS confirm before editing/deleting: "I found a $40 coffee from today — change it to $14?"
+  To search, look at the RECENT TRANSACTIONS in the picture above. The last 10 are included with their IDs.
+  Include the txId from the transaction in your action data.
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

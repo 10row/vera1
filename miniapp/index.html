@@ -2,44 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#0F0F0F">
-  <title>Spend Kitty</title>
+  <title>SpendYes</title>
 
-  <!-- Telegram WebApp SDK — must be loaded before any app code -->
+  <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@300;400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@300;400;500;600&display=swap">
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; background: #0F0F0F; color: #fff; }
-    #root { height: 100%; }
+    html, body { height: 100%; background: #0F0F0F; color: #E8E4DF; overflow-x: hidden; }
+    body { -webkit-tap-highlight-color: transparent; }
+    #root { min-height: 100%; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
-  <!-- React + Babel (replace with bundler in production) -->
+  <!-- React 18 production (no Babel) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <script>
-    // Initialize Telegram WebApp — must run before vera-tg.jsx
-    const tg = window.Telegram.WebApp;
+    var tg = window.Telegram.WebApp;
     tg.ready();
     tg.expand();
     tg.setHeaderColor('#0F0F0F');
     tg.setBackgroundColor('#0F0F0F');
-
-    // Make telegramId available to the app
     window.TELEGRAM_USER_ID = tg.initDataUnsafe?.user?.id || 'dev';
     window.TELEGRAM_USER_NAME = tg.initDataUnsafe?.user?.first_name || 'User';
   </script>
 
-  <script type="text/babel" src="vera-tg.jsx"></script>
+  <script src="vera-tg.js"></script>
 </body>
 </html>

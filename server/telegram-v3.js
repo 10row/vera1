@@ -164,7 +164,7 @@ async function processMessage(ctx, telegramId, text) {
         reply_markup: fmt.mainKeyboard(lang, miniAppUrl),
       });
       // Send due alert as separate message with pay/skip buttons
-      const alertMsg = fmt.formatEnvelopeAlert(dueEnv, pic, lang);
+      const alertMsg = fmt.formatEnvelopeAlert(dueEnv, pic, lang, state.timezone);
       await safeReply(ctx, alertMsg, {
         parse_mode: "Markdown",
         reply_markup: fmt.dueButtons(dueEnv.name, lang),
@@ -578,23 +578,31 @@ async function sendEnvelopeAlert(tid, envName) {
     const env = state.envelopes[key];
     if (!env || !env.active) return;
     const pic = v3.computePicture(state);
-    await bot.api.sendMessage(tid, fmt.formatEnvelopeAlert(env, pic, lang), {
+    await bot.api.sendMessage(tid, fmt.formatEnvelopeAlert(env, pic, lang, state.timezone), {
       parse_mode: "Markdown",
       reply_markup: fmt.dueButtons(env.name, lang),
     });
   } catch (e) { console.error("Envelope alert err:", e); }
 }
 
+function localHour(tz) {
+  try { return parseInt(new Date().toLocaleString("en-US", { timeZone: tz, hour: "numeric", hour12: false })); }
+  catch { return new Date().getUTCHours(); }
+}
+
 async function runDailyBriefings() {
   try {
     const users = await prisma.user.findMany({
       where: { setup: true, telegramId: { not: null } },
-      select: { telegramId: true },
+      select: { telegramId: true, timezone: true },
     });
+    let sent = 0;
     for (const u of users) {
-      if (u.telegramId) await sendMorningBriefing(u.telegramId);
+      if (!u.telegramId) continue;
+      const h = localHour(u.timezone || "UTC");
+      if (h === 8) { await sendMorningBriefing(u.telegramId); sent++; }
     }
-    console.log("Briefings sent:", users.length);
+    if (sent > 0) console.log("Briefings sent:", sent);
   } catch (e) { console.error("Briefings err:", e); }
 }
 

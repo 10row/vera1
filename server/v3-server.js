@@ -2,6 +2,7 @@
 require("dotenv").config();
 const express = require("express");
 const path = require("path");
+const crypto = require("crypto");
 const OpenAI = require("openai");
 const v3 = require("./vera-v3");
 const { runQuery } = require("./vera-v3-query");
@@ -15,6 +16,39 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: "16kb" }));
 const openai = new OpenAI();
+
+// ── TELEGRAM INITDATA VALIDATION ─────────────
+function validateTelegramInitData(initData) {
+  if (!initData || !process.env.BOT_TOKEN) return null;
+  try {
+    const params = new URLSearchParams(initData);
+    const hash = params.get("hash");
+    if (!hash) return null;
+    params.delete("hash");
+    const dataCheckString = [...params.entries()].sort(([a],[b]) => a.localeCompare(b)).map(([k,v]) => k+"="+v).join("\n");
+    const secretKey = crypto.createHmac("sha256", "WebAppData").update(process.env.BOT_TOKEN).digest();
+    const checkHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+    if (checkHash !== hash) return null;
+    // Check auth_date is not too old (24 hours)
+    const authDate = parseInt(params.get("auth_date") || "0");
+    if (Date.now() / 1000 - authDate > 86400) return null;
+    const user = params.get("user");
+    return user ? JSON.parse(user) : null;
+  } catch { return null; }
+}
+
+// Middleware: validate tg_ requests have valid initData
+function requireTelegramAuth(req, res, next) {
+  const sid = req.params.sid;
+  if (!sid || !sid.startsWith("tg_")) return next(); // non-telegram requests pass through
+  const initData = req.headers["x-telegram-init-data"];
+  if (!initData) return res.status(401).json({ error: "Missing Telegram auth" });
+  const user = validateTelegramInitData(initData);
+  if (!user) return res.status(401).json({ error: "Invalid Telegram auth" });
+  // Ensure the authenticated user matches the requested session
+  if (String(user.id) !== sid.slice(3)) return res.status(403).json({ error: "User mismatch" });
+  next();
+}
 
 // Token cache for web sessions
 const tokenCache = new Map();
@@ -52,7 +86,7 @@ function sanitise(st) {
 app.use("/miniapp", express.static(path.join(__dirname, "../miniapp")));
 
 // ── API: PICTURE ──────────────────────────────
-app.get("/api/v3/picture/:sid", async (req, res) => {
+app.get("/api/v3/picture/:sid", requireTelegramAuth, async (req, res) => {
   try {
     const uid = await resolveUser(req.params.sid);
     const st = await db.loadState(prisma, uid);
@@ -64,7 +98,7 @@ app.get("/api/v3/picture/:sid", async (req, res) => {
 });
 
 // ── API: ACTION ───────────────────────────────
-app.post("/api/v3/action/:sid", async (req, res) => {
+app.post("/api/v3/action/:sid", requireTelegramAuth, async (req, res) => {
   const { action } = req.body;
   if (!action || !action.type) return res.status(400).json({ error: "action required" });
   try {
@@ -83,7 +117,7 @@ app.post("/api/v3/action/:sid", async (req, res) => {
 });
 
 // ── API: CHAT ─────────────────────────────────
-app.post("/api/v3/chat/:sid", async (req, res) => {
+app.post("/api/v3/chat/:sid", requireTelegramAuth, async (req, res) => {
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: "message required" });
   if (message.length > 2000) return res.status(400).json({ error: "message too long" });
@@ -159,7 +193,7 @@ app.post("/api/v3/chat/:sid", async (req, res) => {
 });
 
 // ── API: QUERY ────────────────────────────────
-app.post("/api/v3/query/:sid", async (req, res) => {
+app.post("/api/v3/query/:sid", requireTelegramAuth, async (req, res) => {
   const { query } = req.body;
   if (!query || !query.type) return res.status(400).json({ error: "query required" });
   try {
@@ -173,7 +207,7 @@ app.post("/api/v3/query/:sid", async (req, res) => {
 });
 
 // ── API: RESET ────────────────────────────────
-app.post("/api/v3/reset/:sid", async (req, res) => {
+app.post("/api/v3/reset/:sid", requireTelegramAuth, async (req, res) => {
   try {
     const uid = await resolveUser(req.params.sid);
     await prisma.$transaction(async (tx) => {
@@ -237,19 +271,16 @@ app.listen(PORT, async () => {
     }
   }
 
-  // Scheduler: briefings, envelope alerts, reconciliation
-  let lastBD = "", lastRecon = "";
+  // Scheduler: briefings (per-user timezone), envelope alerts, reconciliation
+  let lastRecon = "";
   setInterval(async () => {
     const now = new Date();
     const h = now.getUTCHours();
     const day = now.toISOString().slice(0, 10);
     const dow = now.getUTCDay();
 
-    // Daily briefings at 8 AM UTC
-    if (h === 8 && day !== lastBD) {
-      lastBD = day;
-      await runDailyBriefings();
-    }
+    // Briefings: run every hour, sends only to users whose local time is 8am
+    await runDailyBriefings();
     // Envelope alerts every 6 hours
     if (h % 6 === 0) await runEnvelopeAlerts();
     // Weekly reconciliation on Sundays at 18:00 UTC
@@ -259,7 +290,7 @@ app.listen(PORT, async () => {
     }
   }, 3600000);
 
-  console.log("  Scheduler: briefings 8AM UTC, alerts q6h, reconciliation Sun 6PM UTC");
+  console.log("  Scheduler: briefings per-user 8AM local, alerts q6h, reconciliation Sun 6PM UTC");
   console.log("  Admin dashboard: /admin");
   console.log("  Mini App: /miniapp");
 });

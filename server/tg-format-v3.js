@@ -1,7 +1,7 @@
 "use strict";
 const v3 = require("./vera-v3");
-function today() { return new Date().toISOString().slice(0,10); }
-function daysUntil(ds) { if (!ds) return 99; return Math.ceil((new Date(ds+"T00:00:00")-new Date(today()+"T00:00:00"))/86400000); }
+function today(tz) { return v3.today(tz); }
+function daysUntil(ds, tz) { if (!ds) return 99; return Math.ceil((new Date(ds+"T00:00:00")-new Date(today(tz)+"T00:00:00"))/86400000); }
 const S = {
   en: {
     review: "\u{1F9E0} How'm I doing?", dashboard: "\u{1F4CA} Dashboard",
@@ -58,9 +58,9 @@ function formatBriefing(pic, lang) {
   lines.push(lang==="ru"?"\n🎙 Расскажи если что-то потратил":"\n🎙 Tell me if you spent anything");
   return lines.join("\n");
 }
-function formatEnvelopeAlert(envelope, pic, lang) {
+function formatEnvelopeAlert(envelope, pic, lang, tz) {
   const sym = (pic&&pic.currencySymbol)||"$", M = c => v3.toMoney(c,sym);
-  const days = daysUntil(envelope.nextDate);
+  const days = daysUntil(envelope.nextDate, tz);
   const when = days<0?(lang==="ru"?"просрочено":"overdue"):days===0?(lang==="ru"?"к оплате сегодня":"due today"):(lang==="ru"?"к оплате завтра":"due tomorrow");
   return "⚠ *"+envelope.name+"* "+when+" — "+M(envelope.amountCents);
 }
