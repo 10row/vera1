@@ -607,76 +607,168 @@ function SummaryFooter(props) {
 }
 
 // ── ERROR STATE ─────────────────────────────────────────────────
+// Friendly empty state with a primary retry. Diagnostics are gated behind
+// a quiet text link — an end user sees a calm screen, a developer (or a
+// user we're triaging with) can tap "Diagnostics" to see what went wrong.
 function ErrorState(props) {
   var diagState = useState(null);
   var diag = diagState[0], setDiag = diagState[1];
+  var loadingState = useState(false);
+  var loadingDiag = loadingState[0], setLoadingDiag = loadingState[1];
 
-  function runDiagnostic() {
-    setDiag("Checking…");
+  function HUMAN_TITLE() {
+    if (!props.errMsg) return "Something's not loading";
+    if (/identity|initData|telegram/i.test(props.errMsg)) return "We can't see your Telegram identity";
+    return "Something's not loading";
+  }
+  function HUMAN_BODY() {
+    if (!props.errMsg) return "We couldn't reach your dashboard. Tap retry to try again.";
+    if (/identity|initData|telegram/i.test(props.errMsg)) {
+      return "Open this Mini App from inside Telegram — tap the Menu button next to the message input, or send /app to your bot.";
+    }
+    return "We couldn't reach your dashboard. Tap retry to try again.";
+  }
+
+  function fetchDiagnostic() {
+    if (loadingDiag) return;
+    setLoadingDiag(true);
+    setDiag(null);
     fetch(API_BASE + "/api/v3/whoami", { headers: authHeaders() })
       .then(function(r) { return r.json(); })
-      .then(function(d) {
-        var line = "[" + (d.status || "?") + "] " + (d.hint || "");
-        if (d.user) line += " user=" + d.user.id + " (" + (d.user.first_name || "") + ")";
-        line += " | initData=" + d.initDataLength + "B age=" + (d.ageSeconds != null ? d.ageSeconds + "s" : "?");
-        line += " botToken=" + (d.hasBotToken ? "yes" : "MISSING");
-        setDiag(line);
-      })
-      .catch(function(e) { setDiag("whoami failed: " + e.message); });
+      .then(function(d) { setDiag(d); })
+      .catch(function(e) { setDiag({ status: "network", hint: e.message }); })
+      .then(function() { setLoadingDiag(false); });
+  }
+
+  function statusLabel(status) {
+    return ({
+      "ok": "Authenticated",
+      "no-init-data": "No Telegram session",
+      "bad-signature": "Server token mismatch",
+      "stale": "Session expired",
+      "no-bot-token": "Bot not configured",
+      "malformed": "Malformed session data",
+      "parse-error": "Couldn't read session data",
+      "network": "Couldn't reach the server",
+    })[status] || (status || "Unknown");
+  }
+  function statusColor(status) {
+    return status === "ok" ? C.green : status === "stale" ? C.amber : C.red;
   }
 
   return h("div", {
     style: {
       display: "flex", flexDirection: "column", alignItems: "center",
-      justifyContent: "center", flex: 1, padding: 32, minHeight: "60vh",
+      justifyContent: "center", flex: 1, padding: "48px 24px", minHeight: "70vh",
     },
   },
-    h("div", { style: { fontSize: 18, color: C.sub, marginBottom: 12 } },
-      "Couldn't load your data"
-    ),
+    h("div", {
+      style: {
+        width: 64, height: 64, borderRadius: "50%",
+        background: C.card, border: "1px solid " + C.border,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        marginBottom: 20, fontSize: 28, color: C.sub,
+      },
+    }, "·  ·"),
+    h("div", {
+      style: {
+        fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 500,
+        textAlign: "center", marginBottom: 10, lineHeight: 1.3,
+        letterSpacing: "-0.01em",
+      },
+    }, HUMAN_TITLE()),
+    h("div", {
+      style: {
+        color: C.sub, fontSize: 14, lineHeight: 1.5, textAlign: "center",
+        maxWidth: 300, marginBottom: 24,
+      },
+    }, HUMAN_BODY()),
     h("button", {
       onClick: props.onRetry,
       style: {
         background: C.green, color: "#fff", border: "none",
-        borderRadius: 8, padding: "10px 24px", fontSize: 14,
-        fontWeight: 500, cursor: "pointer", fontFamily: "'Inter',sans-serif",
+        borderRadius: 10, padding: "12px 28px", fontSize: 14,
+        fontWeight: 600, cursor: "pointer", fontFamily: "'Inter',sans-serif",
+        letterSpacing: "0.01em",
       },
-    }, "Tap to retry"),
-    h("button", {
-      onClick: runDiagnostic,
-      style: {
-        background: "transparent", color: C.sub, border: "1px solid " + C.border,
-        borderRadius: 8, padding: "6px 16px", fontSize: 12, marginTop: 10,
-        cursor: "pointer", fontFamily: "'Inter',sans-serif",
-      },
-    }, "Why?"),
-    props.errMsg ? h("div", {
-      style: { color: C.muted, fontSize: 10, marginTop: 12, wordBreak: "break-all", maxWidth: 320, textAlign: "center" },
-    }, props.errMsg) : null,
+    }, "Try again"),
+    diag === null && !loadingDiag
+      ? h("div", {
+          onClick: fetchDiagnostic,
+          style: {
+            marginTop: 28, color: C.muted, fontSize: 12,
+            cursor: "pointer", borderBottom: "1px dotted " + C.muted,
+            paddingBottom: 1, letterSpacing: "0.02em",
+          },
+        }, "Diagnostics")
+      : null,
+    loadingDiag
+      ? h("div", { style: { marginTop: 28, color: C.muted, fontSize: 12 } }, "Checking…")
+      : null,
     diag ? h("div", {
-      style: { color: C.amber, fontSize: 10, marginTop: 8, wordBreak: "break-all", maxWidth: 320, textAlign: "center" },
-    }, diag) : null
+      style: {
+        marginTop: 24, padding: "14px 16px", maxWidth: 320, width: "100%",
+        background: C.card, border: "1px solid " + C.border, borderRadius: 10,
+        fontSize: 12, lineHeight: 1.5,
+      },
+    },
+      h("div", {
+        style: {
+          display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
+        },
+      },
+        h("div", {
+          style: {
+            width: 8, height: 8, borderRadius: "50%",
+            background: statusColor(diag.status),
+          },
+        }),
+        h("div", {
+          style: { fontWeight: 600, color: C.text },
+        }, statusLabel(diag.status))
+      ),
+      diag.hint ? h("div", {
+        style: { color: C.sub, fontSize: 12 },
+      }, diag.hint) : null,
+      diag.user ? h("div", {
+        style: { color: C.muted, fontSize: 11, marginTop: 8 },
+      }, "Signed in as " + (diag.user.first_name || "user") + " · id " + diag.user.id) : null
+    ) : null
   );
 }
 
 // ── NOT SET UP STATE ────────────────────────────────────────────
-function NotSetUpState(props) {
-  var debugInfo = props && props.debug;
+// Shown to legitimate first-time users (auth worked, but they haven't told
+// the bot anything yet). Keep this screen quiet, warm, and free of any
+// developer chrome — diagnostics only belong on the error path.
+function NotSetUpState() {
   return h("div", {
     style: {
       display: "flex", flexDirection: "column", alignItems: "center",
-      justifyContent: "center", flex: 1, padding: 32, minHeight: "60vh",
+      justifyContent: "center", flex: 1, padding: "48px 24px", minHeight: "70vh",
     },
   },
     h("div", {
-      style: { fontSize: 28, marginBottom: 12 },
+      style: {
+        width: 64, height: 64, borderRadius: "50%",
+        background: C.card, border: "1px solid " + C.border,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        marginBottom: 20, fontSize: 28,
+      },
     }, "👋"),
     h("div", {
-      style: { color: C.sub, textAlign: "center", fontSize: 15, lineHeight: 1.5 },
-    }, "Welcome! Send a message in the chat to get started."),
-    debugInfo ? h("div", {
-      style: { color: C.muted, textAlign: "center", fontSize: 10, marginTop: 20, wordBreak: "break-all", maxWidth: 300 },
-    }, debugInfo) : null
+      style: {
+        fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 500,
+        textAlign: "center", marginBottom: 10, lineHeight: 1.3,
+        letterSpacing: "-0.01em",
+      },
+    }, "You're all set"),
+    h("div", {
+      style: {
+        color: C.sub, fontSize: 14, lineHeight: 1.5, textAlign: "center",
+        maxWidth: 300,
+      },
+    }, "Send your bot a message to add your first expense — your dashboard fills in from there.")
   );
 }
 
@@ -918,8 +1010,7 @@ function App() {
       console.error("[SpendYes] No Telegram user ID after " + attempts + " tries. "
         + "platform=" + window.TG_PLATFORM
         + " initData=" + (hasInit ? "present" : "EMPTY"));
-      setLastErr("No Telegram identity. platform=" + window.TG_PLATFORM
-        + " initData=" + (hasInit ? "present-but-no-user" : "missing"));
+      setLastErr("No Telegram identity available.");
       setLoading(false);
       setError(true);
     }
@@ -954,12 +1045,7 @@ function App() {
   } else if (error && !pic) {
     content = h(ErrorState, { onRetry: function() { loadPicture(); }, errMsg: lastErr });
   } else if (!pic || !pic.setup) {
-    var dbg = "sid=" + (sid.current || "none")
-      + " tgId=" + window.TELEGRAM_USER_ID
-      + " platform=" + window.TG_PLATFORM
-      + " initData=" + (window.TG_INIT_DATA ? "yes(" + window.TG_INIT_DATA.length + ")" : "EMPTY")
-      + (pic ? " setup=" + pic.setup : " pic=null");
-    content = h(NotSetUpState, { debug: dbg });
+    content = h(NotSetUpState, null);
   } else {
     content = h(Dashboard, { pic: pic, lastUpdated: lastUpdated });
   }
