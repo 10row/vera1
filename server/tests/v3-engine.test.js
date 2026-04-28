@@ -829,6 +829,49 @@ test("buildSystemPrompt includes recentTx with transaction IDs", () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
+console.log("\n--- Native Language (Russian) ---");
+
+test("buildSystemPrompt: Russian user gets native Russian prompt", () => {
+  let s = setupState();
+  s.language = "ru";
+  const prompt = buildSystemPrompt(s);
+  assert.ok(prompt.includes("Russian"), "Should declare Russian language");
+  assert.ok(prompt.includes("Зажми микрофон"), "Should have native Russian setup greeting");
+  assert.ok(prompt.includes("зарплата пришла"), "Should have native Russian income example");
+  assert.ok(prompt.includes("удали последнее"), "Should have native Russian correction example");
+  assert.ok(prompt.includes("Сегодня:"), "Should have Russian hero number format");
+  assert.ok(!prompt.includes("Got it. Oh heads up"), "Should NOT have English nudge examples");
+});
+
+test("buildSystemPrompt: English user gets English prompt", () => {
+  let s = setupState();
+  s.language = "en";
+  const prompt = buildSystemPrompt(s);
+  assert.ok(prompt.includes("English"), "Should declare English language");
+  assert.ok(prompt.includes("Just hold the mic"), "Should have English setup greeting");
+  assert.ok(prompt.includes("got paid"), "Should have English income example");
+  assert.ok(!prompt.includes("Зажми микрофон"), "Should NOT have Russian text");
+});
+
+test("buildSystemPrompt: Russian insights are in Russian", () => {
+  let s = setupState();
+  s.language = "ru";
+  s = v3.applyAction(s, { type: "create_envelope", data: { name: "Кофе", amountUSD: 5, rhythm: "daily" } });
+  s = v3.applyAction(s, { type: "spend", data: { amountUSD: 8, description: "кофе", envelope: "кофе" } });
+  const prompt = buildSystemPrompt(s);
+  assert.ok(prompt.includes("перерасход") || prompt.includes("100%"), "Russian insight should use native text");
+});
+
+test("buildSystemPrompt: Russian slang glossary present for RU users", () => {
+  let s = setupState();
+  s.language = "ru";
+  const prompt = buildSystemPrompt(s);
+  assert.ok(prompt.includes("тыщ"), "Should include тыщ slang mapping");
+  assert.ok(prompt.includes("косарь"), "Should include косарь slang mapping");
+  assert.ok(prompt.includes("штука"), "Should include штука slang mapping");
+});
+
+// ════════════════════════════════════════════════════════════════════
 // SUMMARY
 console.log("\n" + "=".repeat(50));
 console.log(`Results: ${passed} passed, ${failed} failed`);

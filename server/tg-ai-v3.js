@@ -53,10 +53,7 @@ try {
 async function callSpendYes(state, userMessage, userId) {
   const history = (state.conversationHistory || []).slice(-10);
   history.push({ role: "user", content: userMessage });
-  const langNote = state.language === "ru"
-    ? "\n\nIMPORTANT: The user speaks Russian. Respond in Russian. All message text must be in Russian."
-    : "";
-  const systemContent = buildSystemPrompt(state) + langNote;
+  const systemContent = buildSystemPrompt(state);
   const msgs = [
     { role: "system", content: systemContent },
     ...history,
@@ -91,23 +88,51 @@ async function callReview(state, userId) {
     `  ${tx.date} | ${M(tx.amountCents)} | ${tx.description || "unnamed"} | ${tx.envelope || "free"}`
   ).join("\n");
 
+  const isRu = lang === "ru";
+
   // Envelope summary
   const envList = (pic.envelopes || []).map(e => {
     let info = `${e.name}: ${e.amountFormatted || M(e.amountCents)}`;
     if (e.rhythm === "ongoing" && e.targetCents) {
       info += ` (${M(e.fundedCents)} / ${M(e.targetCents)})`;
     } else if (e.spentCents > 0) {
-      info += ` (spent ${M(e.spentCents)})`;
+      info += isRu ? ` (потрачено ${M(e.spentCents)})` : ` (spent ${M(e.spentCents)})`;
     }
-    if (e.isDue) info += " ⚠ DUE";
+    if (e.isDue) info += isRu ? " ⚠ К ОПЛАТЕ" : " ⚠ DUE";
     return info;
   }).join(", ");
 
-  const langInstruction = lang === "ru"
-    ? "IMPORTANT: Respond entirely in Russian.\n\n"
-    : "";
+  const systemPrompt = isRu
+    ? `Ты SpendYes — умный друг, который хорошо разбирается в деньгах. Пользователь спрашивает как у него дела с финансами.
 
-  const systemPrompt = `${langInstruction}You are SpendYes, a sharp and honest money friend. The user is asking how they're doing financially.
+ЗАДАЧА: Дай тёплый, честный обзор за 3-6 предложений. Хвали когда всё хорошо, мягко предупреждай когда туго. Говори как друг — на ты, неформально, не как робот.
+
+ГОТОВЫЕ ЦИФРЫ (используй их, НИКОГДА не считай сам):
+- Баланс: ${M(pic.balanceCents)}
+- Свободно: ${pic.freeFormatted || M(pic.freeCents)}
+- Сегодня свободно: ${pic.freeRemainingTodayFormatted || M(pic.freeRemainingTodayCents || 0)}
+- Темп: ${pic.dailyPaceFormatted || M(pic.dailyPaceCents || 0)}/день
+- Неделя: ${pic.weeklyPaceFormatted || M(pic.weeklyPaceCents || 0)}/нед
+- Потрачено сегодня: ${pic.todaySpentFormatted || M(pic.todaySpentCents || 0)}
+- За неделю: ${pic.thisWeekSpentFormatted || M(pic.thisWeekSpentCents || 0)}
+- За месяц: ${pic.thisMonthSpentFormatted || M(pic.thisMonthSpentCents || 0)}
+- Дней до зарплаты: ${pic.daysLeft ?? "?"}
+- Зарезервировано: ${M(pic.totalReservedCents || 0)}
+- Накоплено: ${pic.totalSavedCents ? M(pic.totalSavedCents) : "нет"}
+- Валюта: ${state.currency || "USD"}
+- Цикл: ${pic.cycleStats ? `потрачено ${M(pic.cycleStats.totalSpent)}, в среднем ${M(pic.cycleStats.dailyAvg)}/день` : "данных пока нет"}
+- Конверты: ${envList || "нет"}
+
+Последние траты:
+${recentTxs || "  (пока нет)"}
+
+ПРАВИЛА:
+- Используй готовые цифры. НИКОГДА не считай сам.
+- До 100 слов. Без кодовых блоков.
+- Не перечисляй все цифры — выбери 2-3 самых важных.
+- Если есть цели/накопления, упомяни прогресс.
+- Заканчивай: *Сегодня: X₽*`
+    : `You are SpendYes, a sharp and honest money friend. The user is asking how they're doing financially.
 
 YOUR JOB: Give a warm, honest 3-6 sentence check-in. Be encouraging when things are good, gently honest when they're tight. Talk like a smart friend who's great with money — not a robot listing numbers.
 
