@@ -69,6 +69,9 @@ function validateIntent(state, intent, todayStr) {
     }
 
     case "add_envelope": {
+      // Onboarding guard: can't add envelopes before the account is set up.
+      // Prevents an over-eager AI from creating bills on a fresh state.
+      if (!state.setup) return reject("Let's get your balance set first — what's in your account?");
       if (!p.name || typeof p.name !== "string") return reject("Need a name");
       if (!m.ENVELOPE_KINDS.includes(p.kind)) return reject("Pick a kind: bill, budget, or goal");
       if (!isPositiveCents(p.amountCents)) return reject("Need a positive amount");
