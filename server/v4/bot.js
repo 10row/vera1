@@ -8,7 +8,7 @@ const OpenAI = require("openai");
 const { toFile } = require("openai/uploads");
 const m = require("./model");
 const { applyIntent } = require("./engine");
-const { compute } = require("./view");
+const { compute, heroLine: viewHeroLine } = require("./view");
 const { processMessage } = require("./pipeline");
 const db = require("./db");
 
@@ -119,14 +119,10 @@ function fmtIntent(intent, sym) {
   }
 }
 
-function heroLine(state, sym) {
+function heroLine(state) {
   const v = compute(state);
   if (!v.setup) return "";
-  const symAct = sym || v.currencySymbol;
-  const M = c => m.toMoney(c, symAct);
-  if (v.state === "over") return "_You're " + M(v.deficitCents) + " over for this period._";
-  if (v.state === "tight") return "_Tight: " + v.dailyPaceFormatted + "/day for " + v.daysToPayday + " days._";
-  return "_" + v.dailyPaceFormatted + "/day · " + v.daysToPayday + " days to payday._";
+  return viewHeroLine(v, m.today(state.timezone || "UTC"));
 }
 
 function mainKeyboard() {
@@ -329,6 +325,22 @@ function attach(prisma) {
     } catch (e) {
       console.error("[v4 /start]", e);
       await ctx.reply("Something went wrong. Try again?").catch(() => {});
+    }
+  });
+
+  bot.command("today", async (ctx) => {
+    try {
+      const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+      const state = await db.loadState(prisma, u.id);
+      if (!state.setup) {
+        await ctx.reply("Not set up yet — say hi and tell me your balance.", { reply_markup: mainKeyboard() });
+        return;
+      }
+      // Just the hero. Nothing else. The daily ritual.
+      await ctx.reply(heroLine(state), { parse_mode: "Markdown", reply_markup: mainKeyboard() });
+    } catch (e) {
+      console.error("[v4 /today]", e);
+      await ctx.reply("Couldn't load that.").catch(() => {});
     }
   });
 

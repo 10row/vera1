@@ -87,6 +87,12 @@ function compute(state, todayStr) {
   else if (dailyPace < TIGHT_THRESHOLD_CENTS) displayState = "tight";
   else displayState = "green";
 
+  // Status word and dot for the hero. Curated, calibrated, never cute.
+  const statusWord = displayState === "over" ? "Over"
+    : displayState === "tight" ? "Tight" : "Calm";
+  const statusEmoji = displayState === "over" ? "🔴"
+    : displayState === "tight" ? "🟡" : "🟢";
+
   // Today's spend totals (for "you've spent X today" + remaining-today calc).
   let todayTotal = 0;
   let todayUnmatched = 0; // not assigned to any envelope
@@ -128,6 +134,7 @@ function compute(state, todayStr) {
     daysToPayday,
     payday: state.payday,
     paydayOverdue,
+    statusWord, statusEmoji,
     todaySpentCents: todayTotal, todaySpentFormatted: M(todayTotal),
     todayRemainingCents: todayRemaining, todayRemainingFormatted: M(todayRemaining),
     weekSpentCents: weekTotal, weekSpentFormatted: M(weekTotal),
@@ -138,6 +145,49 @@ function compute(state, todayStr) {
     upcoming,
     invariantOk,
   };
+}
+
+// ── HERO LINE — day-stable variant phrasing ────────────────────
+// Five greens, three tights, three overs. Selected by hash(date+state)
+// so the same day always shows the same phrasing — but tomorrow may pick
+// a different one. Avoids monotony without feeling random.
+const HERO_VARIANTS = {
+  green: [
+    (v) => "🟢 *" + v.statusWord + "* — " + v.dailyPaceFormatted + "/day · " + v.daysToPayday + " days to payday",
+    (v) => "🟢 *" + v.dailyPaceFormatted + "/day* — " + v.daysToPayday + " days. Steady.",
+    (v) => "🟢 " + v.daysToPayday + " days to go. *" + v.dailyPaceFormatted + "/day* free.",
+    (v) => "🟢 *Easy* — " + v.dailyPaceFormatted + "/day for the next " + v.daysToPayday + " days",
+    (v) => "🟢 You've got *" + v.dailyPaceFormatted + "/day* for " + v.daysToPayday + " days. Calm.",
+  ],
+  tight: [
+    (v) => "🟡 *Tight* — " + v.dailyPaceFormatted + "/day · " + v.daysToPayday + " days",
+    (v) => "🟡 *Careful* — " + v.dailyPaceFormatted + "/day for " + v.daysToPayday + " days",
+    (v) => "🟡 " + v.daysToPayday + " days, *" + v.dailyPaceFormatted + "/day*. Keep it light.",
+  ],
+  over: [
+    (v) => "🔴 *Over* — you're " + v.deficitFormatted + " short for this period",
+    (v) => "🔴 *" + v.deficitFormatted + " over* for the cycle. What to cut?",
+    (v) => "🔴 Short by " + v.deficitFormatted + ". Worth a look.",
+  ],
+};
+
+function dayHash(s) {
+  let h = 5381 | 0;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function pickVariant(view, today) {
+  const arr = HERO_VARIANTS[view.state] || HERO_VARIANTS.green;
+  const t = today || "1970-01-01";
+  return arr[dayHash(t + ":" + view.state) % arr.length];
+}
+
+// heroLine(view, today?) returns the one-line hero string.
+// Pure: same view + same today → same string.
+function heroLine(view, today) {
+  if (!view || !view.setup) return "";
+  return pickVariant(view, today)(view);
 }
 
 // simulate(state, simulatedSpend) returns the view AS IF the simulated
@@ -176,4 +226,4 @@ function simulate(state, simulatedSpend, todayStr) {
   };
 }
 
-module.exports = { compute, simulate };
+module.exports = { compute, simulate, heroLine, HERO_VARIANTS };
