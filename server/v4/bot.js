@@ -44,6 +44,34 @@ function setPending(intents, userId) {
   return token;
 }
 
+// Undo tokens — separate map. Tied to a specific event id so a stale undo
+// (after other actions happened) can be detected and refused gracefully.
+const UNDO_TTL_MS = 30 * 60 * 1000;
+const undoTokens = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of undoTokens) if (v.expires < now) undoTokens.delete(k);
+}, 60_000);
+
+function setUndoToken(eventId, userId) {
+  const token = makeToken();
+  undoTokens.set(token, { eventId, userId, expires: Date.now() + UNDO_TTL_MS });
+  return token;
+}
+
+function takeUndoToken(token) {
+  const e = undoTokens.get(token);
+  if (!e) return null;
+  undoTokens.delete(token);
+  return e;
+}
+
+function undoButton(token) {
+  return { reply_markup: { inline_keyboard: [[{ text: "↶ Undo", callback_data: "undo:" + token }]] } };
+}
+
+const PROMISE = "_I'll never log anything you don't tap. Anything I do is undoable._";
+
 function takePending(token) {
   const entry = pending.get(token);
   if (!entry) return null;
@@ -190,7 +218,16 @@ async function processText(prisma, ctx, telegramId, text) {
     if (autoApplied.length > 0) {
       const lines = autoApplied.map(i => "✓ " + fmtIntent(i, sym));
       lines.push(heroLine(curState, sym));
-      await ctx.reply(lines.join("\n"), { parse_mode: "Markdown", reply_markup: mainKeyboard() });
+      // Get the most recent event id for the Undo token.
+      const lastEventId = curState.events && curState.events.length
+        ? curState.events[curState.events.length - 1].id
+        : null;
+      const opts = { parse_mode: "Markdown", reply_markup: mainKeyboard() };
+      if (lastEventId) {
+        const undoTok = setUndoToken(lastEventId, u.id);
+        opts.reply_markup = undoButton(undoTok).reply_markup;
+      }
+      await ctx.reply(lines.join("\n"), opts);
     }
 
     if (toConfirm.length === 1) {
@@ -228,6 +265,7 @@ function attach(prisma) {
       if (!state.setup) {
         await ctx.reply(
           "Hey 👋 I'm SpendYes — your money friend.\n\n" +
+          PROMISE + "\n\n" +
           "Tell me your starting balance, when you next get paid, and any bills or budgets you've got. " +
           "You can hold the mic and just talk.",
           { parse_mode: "Markdown", reply_markup: mainKeyboard() }
@@ -242,6 +280,55 @@ function attach(prisma) {
     } catch (e) {
       console.error("[v4 /start]", e);
       await ctx.reply("Something went wrong. Try again?").catch(() => {});
+    }
+  });
+
+  bot.command("help", async (ctx) => {
+    await ctx.reply(
+      "*SpendYes — what I do*\n\n" +
+      PROMISE + "\n\n" +
+      "Just talk to me about your money — text or voice. I'll show a confirm card before anything changes.\n\n" +
+      "*Commands*\n" +
+      "/start — say hi or set up\n" +
+      "/today — just the hero number\n" +
+      "/app — open your dashboard\n" +
+      "/undo — roll back my last action\n" +
+      "/reset — wipe everything (asks first)",
+      { parse_mode: "Markdown", reply_markup: mainKeyboard() }
+    );
+  });
+
+  bot.command("undo", async (ctx) => {
+    try {
+      const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+      await db.withUserLock(u.id, async () => {
+        const state = await db.loadState(prisma, u.id);
+        if (!state.setup || !Array.isArray(state.events) || state.events.length <= 1) {
+          await ctx.reply("Nothing to undo yet.", { reply_markup: mainKeyboard() });
+          return;
+        }
+        const last = state.events[state.events.length - 1];
+        if (last && last.intent && last.intent.kind === "setup_account") {
+          await ctx.reply("Can't undo setup — say /reset to wipe everything instead.", { reply_markup: mainKeyboard() });
+          return;
+        }
+        try {
+          const r = applyIntent(state, { kind: "undo_last", params: {} });
+          await db.saveState(prisma, u.id, r.state);
+          const sym = r.state.currencySymbol || "$";
+          const undidIntent = r.event.undid && r.event.undid.intent;
+          const desc = undidIntent ? fmtIntent(undidIntent, sym) : "last action";
+          await ctx.reply("↶ Undone: " + desc + "\n" + heroLine(r.state, sym), {
+            parse_mode: "Markdown",
+            reply_markup: mainKeyboard(),
+          });
+        } catch (e) {
+          await ctx.reply("Couldn't undo: " + e.message).catch(() => {});
+        }
+      });
+    } catch (e) {
+      console.error("[v4 /undo]", e);
+      await ctx.reply("Something went wrong with undo.").catch(() => {});
     }
   });
 
@@ -311,6 +398,43 @@ function attach(prisma) {
     const data = ctx.callbackQuery.data || "";
     await ctx.answerCallbackQuery().catch(() => {});
     try {
+      // Undo button — independent flow from confirm tokens.
+      if (data.startsWith("undo:")) {
+        const token = data.slice(5);
+        const entry = takeUndoToken(token);
+        if (!entry) {
+          await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
+          await ctx.reply("That undo expired — say /undo to roll back the latest.", { reply_markup: mainKeyboard() }).catch(() => {});
+          return;
+        }
+        const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+        if (entry.userId !== u.id) {
+          await ctx.reply("That wasn't yours.").catch(() => {});
+          return;
+        }
+        await db.withUserLock(u.id, async () => {
+          const state = await db.loadState(prisma, u.id);
+          const last = state.events && state.events.length ? state.events[state.events.length - 1] : null;
+          if (!last || last.id !== entry.eventId) {
+            await ctx.reply("Other things happened since — say /undo to roll back the latest.", { reply_markup: mainKeyboard() }).catch(() => {});
+            return;
+          }
+          try {
+            const r = applyIntent(state, { kind: "undo_last", params: {} });
+            await db.saveState(prisma, u.id, r.state);
+            const sym = r.state.currencySymbol || "$";
+            const undidIntent = r.event.undid && r.event.undid.intent;
+            const desc = undidIntent ? fmtIntent(undidIntent, sym) : "last action";
+            // Strip the Undo button on the original message.
+            await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
+            await ctx.reply("↶ Undone: " + desc + "\n" + heroLine(r.state, sym), { parse_mode: "Markdown", reply_markup: mainKeyboard() }).catch(() => {});
+          } catch (e) {
+            await ctx.reply("Couldn't undo: " + e.message).catch(() => {});
+          }
+        });
+        return;
+      }
+
       if (!data.startsWith("yes:") && !data.startsWith("no:")) return;
       const isYes = data.startsWith("yes:");
       const token = data.slice(4);
@@ -342,7 +466,15 @@ function attach(prisma) {
           const sym = state.currencySymbol || "$";
           const lines = applied.map(i => "✓ " + fmtIntent(i, sym));
           lines.push(heroLine(state, sym));
-          await ctx.editMessageText(lines.join("\n"), { parse_mode: "Markdown" }).catch(() => {});
+          // Attach Undo button tied to the LAST event applied.
+          const lastEventId = state.events && state.events.length
+            ? state.events[state.events.length - 1].id
+            : null;
+          const opts = { parse_mode: "Markdown" };
+          if (lastEventId) {
+            opts.reply_markup = undoButton(setUndoToken(lastEventId, u.id)).reply_markup;
+          }
+          await ctx.editMessageText(lines.join("\n"), opts).catch(() => {});
         } catch (e) {
           console.error("[v4 confirm apply]", e);
           await ctx.editMessageText("Couldn't apply that: " + e.message).catch(() => {});

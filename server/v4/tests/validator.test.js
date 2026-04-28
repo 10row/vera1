@@ -50,10 +50,10 @@ test("setup with payday in past asks to confirm", () => {
   assertTrue(/past/i.test(v.reason));
 });
 
-test("small spend auto-applies", () => {
+test("small spend now requires confirm (Step 1: promise — no auto-tier)", () => {
   const s = freshSetup();
   const v = validateIntent(s, { kind: "record_spend", params: { amountCents: 10_00 } }, TODAY);
-  assertEq(v.severity, "auto");
+  assertEq(v.severity, "confirm");
 });
 
 test("spend over $50 needs confirm", () => {

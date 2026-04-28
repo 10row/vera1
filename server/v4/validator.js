@@ -134,15 +134,29 @@ function validateIntent(state, intent, todayStr) {
         if (!state.envelopes[k]) return reject("Envelope not found: " + p.envelopeKey);
       }
       if (!state.setup) return reject("Set up your account first");
-      // Anomaly tiers
+      // Promise: nothing logs without your tap. Every spend gets a confirm
+      // card. Anomalies upgrade the message; the severity stays "confirm".
       if (abs > state.balanceCents && state.balanceCents >= 0) {
         return confirm("That's more than your current balance — confirm?");
       }
       if (state.balanceCents > 0 && abs > state.balanceCents * HALF_BALANCE_FACTOR) {
         return confirm("That's over half your balance — confirm?");
       }
-      if (abs > AUTO_SPEND_LIMIT_CENTS) return confirm("Confirm spend?");
-      return auto("Logged");
+      return confirm("Confirm spend?");
+    }
+
+    case "undo_last": {
+      // Undo is the user's explicit action — auto-severity. The bot routes
+      // /undo and the inline ↶ Undo button straight through.
+      if (!state.setup) return reject("Nothing to undo yet");
+      if (!Array.isArray(state.events) || state.events.length <= 1) {
+        return reject("Nothing to undo");
+      }
+      const last = state.events[state.events.length - 1];
+      if (last && last.intent && last.intent.kind === "setup_account") {
+        return reject("Can't undo setup — say \"reset\" to wipe everything");
+      }
+      return auto("Undone");
     }
 
     case "record_income": {

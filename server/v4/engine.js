@@ -270,6 +270,32 @@ function applyIntent(state, intent) {
       break;
     }
 
+    case "undo_last": {
+      // Drop the last event and re-fold remaining events from a fresh state.
+      // This makes undo byte-perfect: the resulting state is exactly what
+      // you would have had if the undone action never happened.
+      // Note: the undo event itself is NOT pushed onto state.events — that
+      // would corrupt the next undo. The undone event is gone, period.
+      if (!Array.isArray(s.events) || s.events.length <= 1) {
+        throw new Error("undo_last: nothing to undo");
+      }
+      const lastEvent = s.events[s.events.length - 1];
+      if (lastEvent && lastEvent.intent && lastEvent.intent.kind === "setup_account") {
+        throw new Error("undo_last: cannot undo setup");
+      }
+      const remaining = s.events.slice(0, -1);
+      let fresh = m.createFreshState();
+      // Preserve schema label so v4 readers don't fall back to fresh.
+      fresh.schema = s.schema;
+      for (const ev of remaining) {
+        fresh = applyIntent(fresh, ev.intent).state;
+      }
+      // Return the new state. The 'event' field carries the descriptor
+      // of WHAT was undone so the bot can show "↶ Undone: spent $5".
+      const undoDescriptor = makeEvent(intent, prevBalance, fresh.balanceCents, { undid: lastEvent });
+      return { state: fresh, event: undoDescriptor };
+    }
+
     case "reset": {
       const fresh = m.createFreshState();
       // Preserve event log across resets for audit. State is wiped.

@@ -152,7 +152,7 @@ test("pipeline: talk message returns kind=talk", async () => {
   assertEq(r.message, "All good.");
 });
 
-test("pipeline: small spend → kind=do, decision auto", async () => {
+test("pipeline: small spend → kind=do, decision confirm (Step 1: no auto-tier)", async () => {
   const s = freshSetup();
   const r = await processMessage(s, "$5 coffee", [], {
     _aiCall: stub({
@@ -163,7 +163,7 @@ test("pipeline: small spend → kind=do, decision auto", async () => {
   });
   assertEq(r.kind, "do");
   assertEq(r.decisions.length, 1);
-  assertEq(r.decisions[0].verdict.severity, "auto");
+  assertEq(r.decisions[0].verdict.severity, "confirm");
 });
 
 test("pipeline: large spend → kind=do, decision confirm", async () => {
