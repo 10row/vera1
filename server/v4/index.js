@@ -126,6 +126,25 @@ app.get("/api/v4/whoami", (req, res) => {
   }
 });
 
+// ── LOCALE ENDPOINT (Mini App fetches strings) ──
+// Returns the locale dictionary for the requested language plus the
+// English fallback. Mini App combines them client-side with same
+// fallback semantics as server t(). Cached aggressively client-side.
+app.get("/api/v4/locale", (req, res) => {
+  try {
+    const lang = String(req.query.lang || "en").toLowerCase().split("-")[0];
+    const { LOCALES } = require("./locales");
+    res.set("Cache-Control", "public, max-age=300"); // 5 min cache
+    res.json({
+      lang: LOCALES[lang] ? lang : "en",
+      strings: LOCALES[lang] || LOCALES.en,
+      fallback: LOCALES.en,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── VIEW ENDPOINT ───────────────────────────────
 // Returns the full picture the Mini App needs:
 //   view             — derived display state from view.compute()
@@ -264,6 +283,12 @@ function migrateDb() {
 async function start() {
   // Skip migrate if explicitly disabled (e.g. local dev with manual control).
   if (process.env.SKIP_MIGRATE !== "1") migrateDb();
+
+  // Refresh currency rates at startup, then daily. Failures fall back
+  // to baked-in approximate rates (no crash).
+  const { refreshRates } = require("./currency");
+  refreshRates().catch(() => {});
+  setInterval(() => { refreshRates().catch(() => {}); }, 24 * 60 * 60 * 1000);
 
   app.listen(PORT, async () => {
     console.log("SpendYes v4 listening on :" + PORT);

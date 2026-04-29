@@ -9,6 +9,24 @@
 // Rules are intentionally strict and small. Add a rule, don't bend one.
 
 const m = require("./model");
+const currency = require("./currency");
+
+// If the intent specifies originalAmountCents + originalCurrency in a
+// non-base currency, convert to base BEFORE the validator does sanity
+// checks. Mutates intent.params in place to add amountCents (base-currency).
+// Idempotent: calling twice with already-converted intent is a no-op.
+function ensureBaseAmount(state, intent) {
+  if (!intent || !intent.params) return;
+  const p = intent.params;
+  if (typeof p.originalAmountCents !== "number") return;
+  if (!p.originalCurrency) return;
+  const baseCode = (state && state.currency) || "USD";
+  const fromCode = String(p.originalCurrency).toUpperCase();
+  // If amountCents is missing OR matches the original currency code, derive.
+  if (typeof p.amountCents !== "number" || !Number.isFinite(p.amountCents)) {
+    p.amountCents = currency.convertSync(p.originalAmountCents, fromCode, baseCode);
+  }
+}
 
 const reject = (reason, hint) => ({ ok: false, severity: "reject", reason, hint });
 const confirm = (reason, hint) => ({ ok: true, severity: "confirm", reason, hint });
@@ -31,6 +49,8 @@ function validateIntent(state, intent, todayStr) {
   if (!intent || typeof intent.kind !== "string") {
     return reject("Invalid intent shape");
   }
+  // Multi-currency: derive base-currency amountCents before per-kind rules.
+  ensureBaseAmount(state, intent);
   const today = todayStr || m.today(state.timezone || "UTC");
   const p = intent.params || {};
 

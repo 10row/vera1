@@ -13,6 +13,49 @@ const { processMessage } = require("./pipeline");
 const tts = require("./tts");
 const proactive = require("./proactive");
 const db = require("./db");
+const { t, normalizeLang, defaultCurrencyForLang } = require("./locales");
+const currency = require("./currency");
+
+// Detect & commit the user's locale on first contact. Called at the top
+// of every text/voice handler. Idempotent — only writes state on the
+// FIRST turn (when state.language is still the engine default "en" AND
+// the Telegram client signals a different language).
+//
+// We trust ctx.from.language_code as the canonical signal (Telegram's
+// device locale). User can override anytime in chat with "switch to X".
+async function commitTelegramLocale(prisma, ctx, userId) {
+  try {
+    const tgLang = (ctx.from && ctx.from.language_code) || "";
+    if (!tgLang) return null;
+    const lang = normalizeLang(tgLang);
+    const state = await db.loadState(prisma, userId);
+    // Only commit on a fresh state (never set up yet, no envelopes, no txs).
+    // After the user starts using the bot, language is stable.
+    const isVirgin = !state.setup
+      && (!state.transactions || state.transactions.length === 0)
+      && Object.keys(state.envelopes || {}).length === 0;
+    if (!isVirgin) return state.language || "en";
+    if (state.language === lang) return lang; // already committed
+    state.language = lang;
+    const def = defaultCurrencyForLang(lang);
+    state.currency = def.code;
+    state.currencySymbol = def.symbol;
+    await db.saveState(prisma, userId, state);
+    return lang;
+  } catch (e) {
+    console.warn("[v4 commitTelegramLocale]", e.message);
+    return null;
+  }
+}
+
+// Per-context language helper: load state, return state.language or fallback to "en".
+async function userLang(prisma, telegramId) {
+  try {
+    const u = await db.resolveUser(prisma, "tg_" + telegramId);
+    const state = await db.loadState(prisma, u.id);
+    return state.language || "en";
+  } catch { return "en"; }
+}
 
 // Trim BOT_TOKEN — Railway/.env paste often leaves a trailing newline which
 // silently breaks initData HMAC validation while still working for API calls.
@@ -79,11 +122,9 @@ function takeUndoToken(token) {
   return e;
 }
 
-function undoButton(token) {
-  return { reply_markup: { inline_keyboard: [[{ text: "↶ Undo", callback_data: "undo:" + token }]] } };
+function undoButton(token, lang) {
+  return { reply_markup: { inline_keyboard: [[{ text: t("undo.button", lang || "en"), callback_data: "undo:" + token }]] } };
 }
-
-const PROMISE = "_I'll never log anything you don't tap. Anything I do is undoable._";
 
 function takePending(token) {
   const entry = pending.get(token);
@@ -93,59 +134,114 @@ function takePending(token) {
 }
 
 // ── HELPERS ─────────────────────────────────────────────
-function fmtIntent(intent, sym) {
+// fmtIntent renders a short user-facing description of an intent for the
+// confirm card. Localized via t(). Multi-currency: if intent has
+// originalAmountCents + originalCurrency, show "€50 (≈$54)".
+function fmtIntent(intent, opts) {
   const p = intent.params || {};
-  const M = c => m.toMoney(typeof c === "number" ? c : 0, sym || "$");
+  const lang = (opts && opts.lang) || "en";
+  const sym = (opts && opts.sym) || "$";
+  const baseCode = (opts && opts.currencyCode) || "USD";
+  const M = (c) => currency.fmtMoney(typeof c === "number" ? c : 0, baseCode);
+  const fmtAmtPair = (cents) => {
+    if (typeof p.originalAmountCents === "number" && p.originalCurrency
+        && p.originalCurrency !== baseCode) {
+      return currency.fmtMoney(p.originalAmountCents, p.originalCurrency)
+        + " (≈" + currency.fmtMoney(cents, baseCode) + ")";
+    }
+    return M(cents);
+  };
+
+  const recurrenceWord = (rec) => {
+    if (!rec || rec === "once") return null;
+    return t("recurrence." + rec, lang);
+  };
+
   switch (intent.kind) {
     case "setup_account":
-      return "Set up account · balance " + M(p.balanceCents) +
-        (p.payday ? ", payday " + p.payday : "") +
-        (p.payFrequency ? ", " + p.payFrequency : "");
+      return t("intent.setup", lang, {
+        balance: M(p.balanceCents),
+        paydayClause: p.payday ? ", " + p.payday : "",
+        freqClause: p.payFrequency ? ", " + p.payFrequency : "",
+      });
     case "adjust_balance":
-      return "Update balance to " + M(p.newBalanceCents);
+      return t("intent.adjust", lang, { balance: M(p.newBalanceCents) });
     case "add_envelope": {
-      // Make kind UNMISTAKABLE so a misclassification is visible at a glance.
-      const kindIcon = p.kind === "bill" ? "📌" : p.kind === "budget" ? "📊" : p.kind === "goal" ? "🎯" : "•";
-      const kindLabel = p.kind === "bill" ? "Bill (recurring)"
-        : p.kind === "budget" ? "Budget (ongoing spend allowance)"
-        : p.kind === "goal" ? "Goal (saving toward target)"
-        : "Envelope";
-      const recurrence = p.recurrence && p.recurrence !== "once" ? " · " + p.recurrence : "";
-      const due = p.dueDate ? " · due " + p.dueDate : "";
-      return kindIcon + " *" + kindLabel + "*\n     " + p.name + " · " + M(p.amountCents) + recurrence + due;
+      const recur = recurrenceWord(p.recurrence);
+      const recurrenceClause = recur ? " · " + recur : "";
+      const dueClause = p.dueDate ? " · " + p.dueDate : "";
+      if (p.kind === "bill") {
+        return t("intent.addBill", lang, {
+          name: p.name, amount: M(p.amountCents), recurrenceClause, dueClause,
+        });
+      }
+      if (p.kind === "budget") {
+        return t("intent.addBudget", lang, { name: p.name, amount: M(p.amountCents) });
+      }
+      if (p.kind === "goal") {
+        const targetClause = p.targetCents ? " · target " + M(p.targetCents) : "";
+        return t("intent.addGoal", lang, { name: p.name, amount: M(p.amountCents), targetClause });
+      }
+      return t("intent.unknown", lang, { kind: intent.kind });
     }
     case "update_envelope":
-      return "Update " + (p.key || p.name);
+      return t("intent.update", lang, { name: p.name || p.key });
     case "remove_envelope":
-      return "Remove " + (p.key || p.name);
-    case "record_spend":
-      return "Spend " + M(p.amountCents) + (p.note ? " · " + p.note : "") +
-        (p.envelopeKey ? " · " + p.envelopeKey : "");
+      return t("intent.remove", lang, { name: p.name || p.key });
+    case "record_spend": {
+      const noteClause = p.note ? " · " + p.note : "";
+      const envelopeClause = ""; // envelope name shown in card meta separately if needed
+      const isForeign = typeof p.originalAmountCents === "number" && p.originalCurrency
+        && p.originalCurrency !== baseCode;
+      if (isForeign) {
+        return t("intent.spendForeign", lang, {
+          originalAmount: currency.fmtMoney(p.originalAmountCents, p.originalCurrency),
+          amount: M(p.amountCents),
+          noteClause, envelopeClause,
+        });
+      }
+      return t("intent.spend", lang, { amount: M(p.amountCents), noteClause, envelopeClause });
+    }
     case "record_income":
-      return "Income " + M(p.amountCents) + (p.note ? " · " + p.note : "");
+      return t("intent.income", lang, { amount: M(p.amountCents), noteClause: p.note ? " · " + p.note : "" });
     case "fund_envelope":
-      return "Move " + M(p.amountCents) + " into " + (p.name || p.envelopeKey);
+      return t("intent.fundEnvelope", lang, { amount: M(p.amountCents), name: p.name || p.envelopeKey });
     case "pay_bill":
-      return "Mark " + (p.name || p.envelopeKey) + " paid";
+      return t("intent.payBill", lang, { name: p.name || p.envelopeKey });
     case "skip_bill":
-      return "Skip " + (p.name || p.envelopeKey) + " this cycle";
+      return t("intent.skipBill", lang, { name: p.name || p.envelopeKey });
     case "edit_transaction":
-      return "Edit transaction" + (p.newAmountCents !== undefined ? " → " + M(p.newAmountCents) : "");
+      return t("intent.editTx", lang, { amount: p.newAmountCents !== undefined ? M(p.newAmountCents) : "" });
     case "delete_transaction":
-      return "Delete transaction";
+      return t("intent.deleteTx", lang);
     case "update_settings":
-      return "Update settings";
+      return t("intent.updateSettings", lang);
     case "reset":
-      return "Reset everything";
+      return t("intent.reset", lang);
     default:
-      return intent.kind;
+      return t("intent.unknown", lang, { kind: intent.kind });
   }
 }
 
+// Localized hero line. For English, uses the day-stable variant pool from
+// view.js. For other languages, emits a single calibrated template per state.
 function heroLine(state) {
   const v = compute(state);
   if (!v.setup) return "";
-  return viewHeroLine(v, m.today(state.timezone || "UTC"));
+  const lang = state.language || "en";
+  const baseCode = state.currency || "USD";
+  if (lang === "en") return viewHeroLine(v, m.today(state.timezone || "UTC"));
+  // Replace the formatted amounts on the view with current-base-currency
+  // formatted versions (view.dailyPaceFormatted may use a different symbol).
+  const dailyFmt = currency.fmtMoney(v.dailyPaceCents, baseCode);
+  const deficitFmt = currency.fmtMoney(v.deficitCents, baseCode);
+  if (v.state === "over") {
+    return "🔴 *" + t("status.over", lang) + "* — " + deficitFmt;
+  }
+  if (v.state === "tight") {
+    return "🟡 *" + t("status.tight", lang) + "* — " + dailyFmt + (lang === "ru" ? "/день · " : "/day · ") + v.daysToPayday + (lang === "ru" ? " дн" : " days");
+  }
+  return "🟢 *" + t("status.calm", lang) + "* — " + dailyFmt + (lang === "ru" ? "/день · " : "/day · ") + v.daysToPayday + (lang === "ru" ? " дн до зарплаты" : " days to payday");
 }
 
 // Reply keyboard is dead weight: it eats screen space on every message,
@@ -158,15 +254,16 @@ function mainKeyboard() {
 }
 
 // Greeting patterns: deterministic intercept for fresh users who say
-// hi/hello/hey/etc. Bypasses the AI entirely so the response is reliable.
-const GREETING_PATTERNS = /^\s*(hi+|hello+|hey+|yo+|sup|hola|namaste|howdy|hii+|heya|good\s*(morning|afternoon|evening|day|night)|what['s ]*up|h r u|hru)\s*[!.?]*\s*$/i;
+// hi/hello/hey/etc. (English + Russian + universal). Bypasses the AI
+// entirely so the response is reliable.
+const GREETING_PATTERNS = /^\s*(hi+|hello+|hey+|yo+|sup|hola|namaste|howdy|hii+|heya|good\s*(morning|afternoon|evening|day|night)|what['s ]*up|h r u|hru|привет|здравствуй(те)?|добрый\s*(день|утро|вечер)|здарова|hellooo)\s*[!.?]*\s*$/i;
 
-function welcomeMessage() {
-  return (
-    "Hey 👋 I'm SpendYes — your money friend.\n\n" +
-    PROMISE + "\n\n" +
-    "What's the rough balance in your main account right now? Just say a number — like *$5,000* or *5k*."
-  );
+// Welcome — refresh + confidence + ask. Three lines. Localized.
+// Used on /start (fresh user), greeting intercept, and post-reset.
+function welcomeMessage(lang, opts) {
+  const fresh = !!(opts && opts.afterReset);
+  const ask = fresh ? t("welcome.afterReset", lang) : t("welcome.askBalance", lang);
+  return t("welcome.identity", lang) + "\n\n" + t("welcome.value", lang) + "\n\n" + ask;
 }
 
 function confirmCard(token, opts) {
@@ -206,6 +303,10 @@ async function processText(prisma, ctx, telegramId, text, opts) {
     const state = await db.loadState(prisma, u.id);
     const history = await db.loadHistory(prisma, u.id);
     const voiceMode = isVoice && !!state.voiceReplies;
+    const lang = state.language || "en";
+    const baseCode = state.currency || "USD";
+    const sym = state.currencySymbol || "$";
+    const fmtOpts = { lang, sym, currencyCode: baseCode };
 
     const result = await processMessage(state, text, history);
 
@@ -224,31 +325,31 @@ async function processText(prisma, ctx, telegramId, text, opts) {
     // DECISION SUPPORT: read-only simulate. Show projected hero + delta,
     // offer "Log it now" button that converts to a real record_spend confirm.
     if (result.kind === "decision") {
-      const sym = state.currencySymbol || "$";
       const sim = result.simulate;
       const proj = sim.projected;
       const cur = sim.current;
-      const M = c => m.toMoney(c, sym);
+      const M = c => currency.fmtMoney(c, baseCode);
       const amt = result.intent.params.amountCents;
+      const dailyFmt = (s) => currency.fmtMoney(s.dailyPaceCents || 0, baseCode);
 
+      // Localized verdict copy. Keep tight; keep numerical authority.
       let verdict;
       if (proj.state === "over") {
-        verdict = "*Over.* That'd put you " + M(proj.deficitCents) + " over for the cycle.";
+        verdict = (lang === "ru" ? "*Перерасход.* Это даст " : "*Over.* That'd put you ") + M(proj.deficitCents) + (lang === "ru" ? " дефицита в этом периоде." : " over for the cycle.");
       } else if (proj.state === "tight") {
-        verdict = "*Tight.* You'd drop to " + proj.dailyPaceFormatted + "/day for " + proj.daysToPayday + " days.";
+        verdict = (lang === "ru" ? "*Впритык.* Останется " : "*Tight.* You'd drop to ") + dailyFmt(proj) + (lang === "ru" ? "/день на " + proj.daysToPayday + " дн." : "/day for " + proj.daysToPayday + " days.");
       } else if (cur.state !== "green") {
-        verdict = "*Green.* You'd jump from " + cur.dailyPaceFormatted + "/day up to " + proj.dailyPaceFormatted + "/day.";
+        verdict = (lang === "ru" ? "*Спокойнее.* Вернёт к " : "*Green.* You'd jump from ") + dailyFmt(cur) + (lang === "ru" ? "/день → " : "/day up to ") + dailyFmt(proj) + "/day.";
       } else {
-        verdict = "*Easy.* You'd still have " + proj.dailyPaceFormatted + "/day for " + proj.daysToPayday + " days.";
+        verdict = (lang === "ru" ? "*Спокойно.* Останется " : "*Easy.* You'd still have ") + dailyFmt(proj) + (lang === "ru" ? "/день на " + proj.daysToPayday + " дн." : "/day for " + proj.daysToPayday + " days.");
       }
 
       const lines = [];
       if (result.message) lines.push(result.message);
       lines.push("");
       lines.push(verdict);
-      lines.push("_Spend: " + M(amt) + (result.intent.params.note ? " on " + result.intent.params.note : "") + "_");
+      lines.push("_" + (lang === "ru" ? "Трата: " : "Spend: ") + M(amt) + (result.intent.params.note ? (lang === "ru" ? " на " : " on ") + result.intent.params.note : "") + "_");
 
-      // Offer to log it now: token holds the equivalent record_spend intent.
       const recordIntent = {
         kind: "record_spend",
         params: {
@@ -258,12 +359,14 @@ async function processText(prisma, ctx, telegramId, text, opts) {
         },
       };
       const token = setPending([recordIntent], u.id);
+      const yesLabel = lang === "ru" ? "Записать сейчас" : "Log it now";
+      const noLabel = lang === "ru" ? "Пропустить" : "Skip";
       await ctx.reply(lines.join("\n"), {
         parse_mode: "Markdown",
         reply_markup: {
           inline_keyboard: [[
-            { text: "Log it now", callback_data: "yes:" + token },
-            { text: "Skip", callback_data: "no:" + token },
+            { text: yesLabel, callback_data: "yes:" + token },
+            { text: noLabel, callback_data: "no:" + token },
           ]],
         },
       });
@@ -271,11 +374,7 @@ async function processText(prisma, ctx, telegramId, text, opts) {
     }
 
     // DO mode: bucket decisions by severity.
-    // - auto    → apply immediately (we'll send one summary at the end)
-    // - confirm → collect into a single batch confirm card
-    // - reject  → send error inline (one combined message if multiple)
     let curState = state;
-    const sym = (curState.currencySymbol) || "$";
     const autoApplied = [];
     const toConfirm = [];
     const rejections = [];
@@ -291,7 +390,7 @@ async function processText(prisma, ctx, telegramId, text, opts) {
           curState = r.state;
           autoApplied.push(d.intent);
         } catch (e) {
-          rejections.push("Couldn't log: " + e.message);
+          rejections.push(t("error.couldntLog", lang, { error: e.message }));
         }
         continue;
       }
@@ -300,59 +399,58 @@ async function processText(prisma, ctx, telegramId, text, opts) {
 
     if (autoApplied.length > 0) await db.saveState(prisma, u.id, curState);
 
-    // Compose one outgoing message stack: rejections (if any), auto summary
-    // (if any), single batch confirm card (if any).
     if (rejections.length > 0) {
-      const text = (result.message ? result.message + "\n\n" : "")
+      const txt = (result.message ? result.message + "\n\n" : "")
         + rejections.map(r => "_" + r + "_").join("\n");
-      await ctx.reply(text, { parse_mode: "Markdown", reply_markup: mainKeyboard() });
+      await ctx.reply(txt, { parse_mode: "Markdown", reply_markup: mainKeyboard() });
     }
 
     if (autoApplied.length > 0) {
-      const lines = autoApplied.map(i => "✓ " + fmtIntent(i, sym));
-      lines.push(heroLine(curState, sym));
-      // Get the most recent event id for the Undo token.
+      const lines = autoApplied.map(i => "✓ " + fmtIntent(i, fmtOpts));
+      lines.push(heroLine(curState));
       const lastEventId = curState.events && curState.events.length
         ? curState.events[curState.events.length - 1].id
         : null;
       const opts = { parse_mode: "Markdown", reply_markup: mainKeyboard() };
       if (lastEventId) {
         const undoTok = setUndoToken(lastEventId, u.id);
-        opts.reply_markup = undoButton(undoTok).reply_markup;
+        opts.reply_markup = undoButton(undoTok, lang).reply_markup;
       }
       await sayMaybeVoice(ctx, lines.join("\n"), opts, voiceMode);
     }
 
     if (toConfirm.length === 1) {
       const { intent, verdict } = toConfirm[0];
-      // QUEUE-AWARE: if pipeline returned a queueAfter, attach it to the
-      // pending token. The callback handler will advance through it on Yes.
       const queueAfter = result.queueAfter || null;
       const queueTotal = result.queueTotal || 1;
       const queueIndex = result.queueIndex || 1;
 
       const token = setPending([intent], u.id, { queueAfter, queueTotal, queueIndex });
 
-      // Header shows "1 of N" when sequencing
-      const stepLabel = queueTotal > 1 ? "*Step " + queueIndex + " of " + queueTotal + "*\n" : "";
+      const stepLabel = queueTotal > 1 ? "*" + t("confirm.stepOf", lang, { n: queueIndex, m: queueTotal }) + "*\n" : "";
       const intro = (result.message && rejections.length === 0 && autoApplied.length === 0)
         ? result.message + "\n\n" : "";
 
       const cardText = intro + stepLabel
-        + fmtIntent(intent, sym)
+        + fmtIntent(intent, fmtOpts)
         + (verdict.reason && verdict.reason !== "Set up your account?" ? "\n_" + verdict.reason + "_" : "");
 
-      const yesLabel = queueTotal > 1 ? "Confirm · next" : "Yes, do it";
-      const noLabel = queueTotal > 1 ? "Skip" : "Cancel";
+      const yesLabel = queueTotal > 1 ? t("confirm.next", lang) : t("confirm.yes", lang);
+      const noLabel = queueTotal > 1 ? t("confirm.skip", lang) : t("confirm.cancel", lang);
       await ctx.reply(cardText, { parse_mode: "Markdown", ...confirmCard(token, { yesLabel, noLabel }) });
     } else if (toConfirm.length > 1) {
       const intents = toConfirm.map(c => c.intent);
       const token = setPending(intents, u.id);
-      const lines = ["*I'd like to:*"];
-      intents.forEach((i, idx) => lines.push((idx + 1) + ". " + fmtIntent(i, sym)));
+      const intro = lang === "ru" ? "*Хочу:*" : "*I'd like to:*";
+      const confirmAll = lang === "ru" ? "_Подтвердить всё?_" : "_Confirm all?_";
+      const lines = [intro];
+      intents.forEach((i, idx) => lines.push((idx + 1) + ". " + fmtIntent(i, fmtOpts)));
       lines.push("");
-      lines.push("_Confirm all?_");
-      await ctx.reply(lines.join("\n"), { parse_mode: "Markdown", ...confirmCard(token) });
+      lines.push(confirmAll);
+      await ctx.reply(lines.join("\n"), {
+        parse_mode: "Markdown",
+        ...confirmCard(token, { yesLabel: t("confirm.yes", lang), noLabel: t("confirm.cancel", lang) }),
+      });
     }
 
     if (rejections.length === 0 && autoApplied.length === 0 && toConfirm.length === 0 && result.message) {
@@ -369,34 +467,33 @@ function attach(prisma) {
   bot.command("start", async (ctx) => {
     try {
       const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+      await commitTelegramLocale(prisma, ctx, u.id);
       const state = await db.loadState(prisma, u.id);
+      const lang = state.language || "en";
       if (!state.setup) {
-        await ctx.reply(
-          "Hey 👋 I'm SpendYes — your money friend.\n\n" +
-          PROMISE + "\n\n" +
-          "Tell me your starting balance, when you next get paid, and any bills or budgets you've got. " +
-          "You can hold the mic and just talk.",
-          { parse_mode: "Markdown", reply_markup: mainKeyboard() }
-        );
+        await ctx.reply(welcomeMessage(lang), {
+          parse_mode: "Markdown",
+          reply_markup: mainKeyboard(),
+        });
       } else {
-        const sym = state.currencySymbol || "$";
-        await ctx.reply("Welcome back. " + heroLine(state, sym), {
+        await ctx.reply(heroLine(state), {
           parse_mode: "Markdown",
           reply_markup: mainKeyboard(),
         });
       }
     } catch (e) {
       console.error("[v4 /start]", e);
-      await ctx.reply("Something went wrong. Try again?").catch(() => {});
+      await ctx.reply(t("error.couldntStart", "en")).catch(() => {});
     }
   });
 
   bot.command("mute", async (ctx) => {
     try {
+      const lang = await userLang(prisma, ctx.from.id);
       const arg = (ctx.match || "").toString().trim().toLowerCase();
       const valid = ["bills", "pace", "milestones", "all"];
       if (!valid.includes(arg)) {
-        await ctx.reply("Use `/mute bills`, `/mute pace`, `/mute milestones`, or `/mute all`.", { parse_mode: "Markdown" });
+        await ctx.reply(t("mute.usage", lang), { parse_mode: "Markdown" });
         return;
       }
       const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
@@ -409,20 +506,21 @@ function attach(prisma) {
           state.mute[arg] = true;
         }
         await db.saveState(prisma, u.id, state);
-        await ctx.reply("✓ Muted " + arg + ". Use `/unmute " + arg + "` to turn back on.", { parse_mode: "Markdown" });
+        await ctx.reply(t("mute.muted", lang, { what: arg }), { parse_mode: "Markdown" });
       });
     } catch (e) {
       console.error("[v4 /mute]", e);
-      await ctx.reply("Couldn't update mute setting.").catch(() => {});
+      await ctx.reply(t("mute.couldnt", await userLang(prisma, ctx.from.id))).catch(() => {});
     }
   });
 
   bot.command("unmute", async (ctx) => {
     try {
+      const lang = await userLang(prisma, ctx.from.id);
       const arg = (ctx.match || "").toString().trim().toLowerCase();
       const valid = ["bills", "pace", "milestones", "all"];
       if (!valid.includes(arg)) {
-        await ctx.reply("Use `/unmute bills`, `/unmute pace`, `/unmute milestones`, or `/unmute all`.", { parse_mode: "Markdown" });
+        await ctx.reply(t("mute.unmuteUsage", lang), { parse_mode: "Markdown" });
         return;
       }
       const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
@@ -435,16 +533,17 @@ function attach(prisma) {
           state.mute[arg] = false;
         }
         await db.saveState(prisma, u.id, state);
-        await ctx.reply("✓ Unmuted " + arg + ".");
+        await ctx.reply(t("mute.unmuted", lang, { what: arg }));
       });
     } catch (e) {
       console.error("[v4 /unmute]", e);
-      await ctx.reply("Couldn't update mute setting.").catch(() => {});
+      await ctx.reply(t("mute.couldnt", await userLang(prisma, ctx.from.id))).catch(() => {});
     }
   });
 
   bot.command("voice", async (ctx) => {
     try {
+      const lang = await userLang(prisma, ctx.from.id);
       const arg = (ctx.match || "").toString().trim().toLowerCase();
       const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
       await db.withUserLock(u.id, async () => {
@@ -452,104 +551,110 @@ function attach(prisma) {
         if (arg === "on") {
           state.voiceReplies = true;
           await db.saveState(prisma, u.id, state);
-          await ctx.reply("✓ Voice replies on. I'll speak when you speak.", { reply_markup: mainKeyboard() });
+          await ctx.reply(t("voice.on", lang), { reply_markup: mainKeyboard() });
         } else if (arg === "off") {
           state.voiceReplies = false;
           await db.saveState(prisma, u.id, state);
-          await ctx.reply("✓ Voice replies off.", { reply_markup: mainKeyboard() });
+          await ctx.reply(t("voice.off", lang), { reply_markup: mainKeyboard() });
         } else {
-          await ctx.reply("Voice replies are " + (state.voiceReplies ? "on" : "off") + ". Use `/voice on` or `/voice off`.", {
+          await ctx.reply(state.voiceReplies ? t("voice.statusOn", lang) : t("voice.statusOff", lang), {
             parse_mode: "Markdown", reply_markup: mainKeyboard(),
           });
         }
       });
     } catch (e) {
       console.error("[v4 /voice]", e);
-      await ctx.reply("Couldn't update voice setting.").catch(() => {});
+      await ctx.reply(t("voice.couldnt", await userLang(prisma, ctx.from.id))).catch(() => {});
     }
   });
 
   bot.command("today", async (ctx) => {
     try {
+      const lang = await userLang(prisma, ctx.from.id);
       const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
       const state = await db.loadState(prisma, u.id);
       if (!state.setup) {
-        await ctx.reply("Not set up yet — say hi and tell me your balance.", { reply_markup: mainKeyboard() });
+        await ctx.reply(t("today.notSetUp", lang), { reply_markup: mainKeyboard() });
         return;
       }
       // Just the hero. Nothing else. The daily ritual.
       await ctx.reply(heroLine(state), { parse_mode: "Markdown", reply_markup: mainKeyboard() });
     } catch (e) {
       console.error("[v4 /today]", e);
-      await ctx.reply("Couldn't load that.").catch(() => {});
+      await ctx.reply(t("today.couldntLoad", await userLang(prisma, ctx.from.id))).catch(() => {});
     }
   });
 
   bot.command("help", async (ctx) => {
-    await ctx.reply(
-      "*SpendYes — what I do*\n\n" +
-      PROMISE + "\n\n" +
-      "Just talk to me about your money — text or voice. I'll show a confirm card before anything changes.\n\n" +
-      "*Commands*\n" +
-      "/start — say hi or set up\n" +
-      "/today — just the hero number\n" +
-      "/app — open your dashboard\n" +
-      "/undo — roll back my last action\n" +
-      "/voice on|off — talk back when you talk to me\n" +
-      "/reset — wipe everything (asks first)",
-      { parse_mode: "Markdown", reply_markup: mainKeyboard() }
-    );
+    const lang = await userLang(prisma, ctx.from.id);
+    const lines = [
+      t("help.intro", lang),
+      "",
+      "*" + t("help.commands.title", lang) + "*",
+      t("help.commands.start", lang),
+      t("help.commands.today", lang),
+      t("help.commands.app", lang),
+      t("help.commands.undo", lang),
+      t("help.commands.voice", lang),
+      t("help.commands.mute", lang),
+      t("help.commands.reset", lang),
+    ];
+    await ctx.reply(lines.join("\n"), { parse_mode: "Markdown", reply_markup: mainKeyboard() });
   });
 
   bot.command("undo", async (ctx) => {
     try {
+      const lang = await userLang(prisma, ctx.from.id);
       const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
       await db.withUserLock(u.id, async () => {
         const state = await db.loadState(prisma, u.id);
         if (!state.setup || !Array.isArray(state.events) || state.events.length <= 1) {
-          await ctx.reply("Nothing to undo yet.", { reply_markup: mainKeyboard() });
+          await ctx.reply(t("undo.nothingYet", lang), { reply_markup: mainKeyboard() });
           return;
         }
         const last = state.events[state.events.length - 1];
         if (last && last.intent && last.intent.kind === "setup_account") {
-          await ctx.reply("Can't undo setup — say /reset to wipe everything instead.", { reply_markup: mainKeyboard() });
+          await ctx.reply(t("undo.cantUndoSetup", lang), { reply_markup: mainKeyboard() });
           return;
         }
         try {
           const r = applyIntent(state, { kind: "undo_last", params: {} });
           await db.saveState(prisma, u.id, r.state);
-          const sym = r.state.currencySymbol || "$";
           const undidIntent = r.event.undid && r.event.undid.intent;
-          const desc = undidIntent ? fmtIntent(undidIntent, sym) : "last action";
-          await ctx.reply("↶ Undone: " + desc + "\n" + heroLine(r.state, sym), {
+          const desc = undidIntent
+            ? fmtIntent(undidIntent, { lang, sym: r.state.currencySymbol, currencyCode: r.state.currency })
+            : t("intent.unknown", lang, { kind: "" });
+          await ctx.reply(t("undo.undone", lang, { what: desc }) + "\n" + heroLine(r.state), {
             parse_mode: "Markdown",
             reply_markup: mainKeyboard(),
           });
         } catch (e) {
-          await ctx.reply("Couldn't undo: " + e.message).catch(() => {});
+          await ctx.reply(t("undo.couldnt", lang, { error: e.message })).catch(() => {});
         }
       });
     } catch (e) {
       console.error("[v4 /undo]", e);
-      await ctx.reply("Something went wrong with undo.").catch(() => {});
+      await ctx.reply(t("error.somethingWrong", await userLang(prisma, ctx.from.id))).catch(() => {});
     }
   });
 
   bot.command("app", async (ctx) => {
+    const lang = await userLang(prisma, ctx.from.id);
     const url = process.env.MINIAPP_URL;
-    if (!url) return ctx.reply("Mini App is not configured.");
-    await ctx.reply("Open your dashboard:", {
+    if (!url) return ctx.reply(t("app.notConfigured", lang));
+    await ctx.reply(t("app.openIntro", lang), {
       reply_markup: {
-        inline_keyboard: [[{ text: "📊 Open Dashboard", web_app: { url } }]],
+        inline_keyboard: [[{ text: t("app.openButton", lang), web_app: { url } }]],
       },
     });
   });
 
   bot.command("reset", async (ctx) => {
+    const lang = await userLang(prisma, ctx.from.id);
     const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
     const token = setPending([{ kind: "reset", params: {} }], u.id);
-    await ctx.reply("This will erase everything. Confirm?", {
-      ...confirmCard(token, { yesLabel: "Yes, wipe it" }),
+    await ctx.reply(t("reset.confirm", lang), {
+      ...confirmCard(token, { yesLabel: t("reset.confirmYes", lang), noLabel: t("reset.cancel", lang) }),
     });
   });
 
@@ -561,16 +666,17 @@ function attach(prisma) {
     try {
       const text = ctx.message.text;
       if (!text || text.startsWith("/")) return; // commands handled above
-      if (text.length > 2000) return ctx.reply("That message is too long — keep it under 2000 chars.");
+      // Lang resolution: commit Telegram client locale on first contact.
+      const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+      const lang = (await commitTelegramLocale(prisma, ctx, u.id)) || "en";
+      if (text.length > 2000) return ctx.reply(t("error.tooLong", lang));
 
       // Deterministic onboarding intercept: fresh users sending a greeting
-      // get a hardcoded warm welcome that asks for balance. Reliable —
-      // doesn't depend on the AI following a prompt rule.
+      // get a hardcoded warm welcome that asks for balance.
       if (GREETING_PATTERNS.test(text)) {
-        const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
         const state = await db.loadState(prisma, u.id);
         if (!state.setup) {
-          await ctx.reply(welcomeMessage(), {
+          await ctx.reply(welcomeMessage(state.language || lang), {
             parse_mode: "Markdown",
             reply_markup: mainKeyboard(),
           });
@@ -581,33 +687,38 @@ function attach(prisma) {
       await processText(prisma, ctx, ctx.from.id, text);
     } catch (e) {
       console.error("[v4 text]", e);
-      await ctx.reply("Hmm, something went wrong. Try again?").catch(() => {});
+      const lang = await userLang(prisma, ctx.from.id);
+      await ctx.reply(t("error.generic", lang)).catch(() => {});
     }
   });
 
   bot.on("message:voice", async (ctx) => {
-    if (!process.env.OPENAI_API_KEY) return ctx.reply("Voice not enabled.");
+    const lang = await userLang(prisma, ctx.from.id);
+    if (!process.env.OPENAI_API_KEY) return ctx.reply(t("error.voiceDisabled", lang));
     let statusMsg;
     try { statusMsg = await ctx.reply("🎙"); } catch {}
     const typing = setInterval(() => ctx.replyWithChatAction("typing").catch(() => {}), 4000);
     try {
+      const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+      await commitTelegramLocale(prisma, ctx, u.id);
       const file = await ctx.getFile();
       const url = "https://api.telegram.org/file/bot" + BOT_TOKEN + "/" + file.file_path;
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 10000);
+      const tt = setTimeout(() => ctrl.abort(), 10000);
       const resp = await fetch(url, { signal: ctrl.signal });
       const buf = Buffer.from(await resp.arrayBuffer());
-      clearTimeout(t);
+      clearTimeout(tt);
       const audioFile = await toFile(buf, "voice.ogg", { type: "audio/ogg" });
       const tr = await openai.audio.transcriptions.create({ file: audioFile, model: "whisper-1" }, { timeout: 15000 });
       const text = (tr.text || "").slice(0, 2000);
       if (statusMsg) ctx.api.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
-      if (!text) return ctx.reply("Couldn't catch that — try again?");
+      if (!text) return ctx.reply(t("error.couldntCatch", lang));
       await processText(prisma, ctx, ctx.from.id, text, { isVoice: true });
     } catch (e) {
       console.error("[v4 voice]", e);
-      if (statusMsg) ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, "Couldn't process voice — try again?").catch(() => {});
-      else ctx.reply("Couldn't process voice — try again?").catch(() => {});
+      const langLatest = await userLang(prisma, ctx.from.id);
+      if (statusMsg) ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, t("error.voiceProcessing", langLatest)).catch(() => {});
+      else ctx.reply(t("error.voiceProcessing", langLatest)).catch(() => {});
     } finally {
       clearInterval(typing);
     }
@@ -621,34 +732,36 @@ function attach(prisma) {
       if (data.startsWith("undo:")) {
         const token = data.slice(5);
         const entry = takeUndoToken(token);
+        const lang = await userLang(prisma, ctx.from.id);
         if (!entry) {
           await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
-          await ctx.reply("That undo expired — say /undo to roll back the latest.", { reply_markup: mainKeyboard() }).catch(() => {});
+          await ctx.reply(t("undo.expired", lang), { reply_markup: mainKeyboard() }).catch(() => {});
           return;
         }
         const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
         if (entry.userId !== u.id) {
-          await ctx.reply("That wasn't yours.").catch(() => {});
+          await ctx.reply(t("undo.notYours", lang)).catch(() => {});
           return;
         }
         await db.withUserLock(u.id, async () => {
           const state = await db.loadState(prisma, u.id);
+          const stateLang = state.language || "en";
+          const fmtOpts = { lang: stateLang, sym: state.currencySymbol, currencyCode: state.currency };
           const last = state.events && state.events.length ? state.events[state.events.length - 1] : null;
           if (!last || last.id !== entry.eventId) {
-            await ctx.reply("Other things happened since — say /undo to roll back the latest.", { reply_markup: mainKeyboard() }).catch(() => {});
+            await ctx.reply(t("undo.staleSinceOthers", stateLang), { reply_markup: mainKeyboard() }).catch(() => {});
             return;
           }
           try {
             const r = applyIntent(state, { kind: "undo_last", params: {} });
             await db.saveState(prisma, u.id, r.state);
-            const sym = r.state.currencySymbol || "$";
             const undidIntent = r.event.undid && r.event.undid.intent;
-            const desc = undidIntent ? fmtIntent(undidIntent, sym) : "last action";
-            // Strip the Undo button on the original message.
+            const desc = undidIntent ? fmtIntent(undidIntent, fmtOpts) : t("intent.unknown", stateLang, { kind: "" });
             await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
-            await ctx.reply("↶ Undone: " + desc + "\n" + heroLine(r.state, sym), { parse_mode: "Markdown", reply_markup: mainKeyboard() }).catch(() => {});
+            await ctx.reply(t("undo.undone", stateLang, { what: desc }) + "\n" + heroLine(r.state),
+              { parse_mode: "Markdown", reply_markup: mainKeyboard() }).catch(() => {});
           } catch (e) {
-            await ctx.reply("Couldn't undo: " + e.message).catch(() => {});
+            await ctx.reply(t("undo.couldnt", stateLang, { error: e.message })).catch(() => {});
           }
         });
         return;
@@ -658,25 +771,27 @@ function attach(prisma) {
       const isYes = data.startsWith("yes:");
       const token = data.slice(4);
       const entry = takePending(token);
+      const lang = await userLang(prisma, ctx.from.id);
       if (!entry) {
-        await ctx.editMessageText("That request expired. Try again?").catch(() => {});
+        await ctx.editMessageText(t("confirm.expired", lang)).catch(() => {});
         return;
       }
       const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
       if (entry.userId !== u.id) {
-        await ctx.editMessageText("Hmm, that wasn't yours.").catch(() => {});
+        await ctx.editMessageText(t("confirm.notYours", lang)).catch(() => {});
         return;
       }
       if (!isYes) {
-        // Cancel: drops the rest of the queue too. User can re-describe.
         const wasInQueue = entry.queueAfter && entry.queueAfter.length > 0;
-        await ctx.editMessageText(wasInQueue ? "Stopped — nothing else changed." : "Cancelled.").catch(() => {});
+        await ctx.editMessageText(wasInQueue ? t("confirm.queueStopped", lang) : t("confirm.cancelled", lang)).catch(() => {});
         return;
       }
       // Yes → apply each pending intent in order under one lock.
       // Then, if a queue exists, present the NEXT confirm card.
       await db.withUserLock(u.id, async () => {
         let state = await db.loadState(prisma, u.id);
+        const stateLang = state.language || "en";
+        const fmtOpts = { lang: stateLang, sym: state.currencySymbol, currencyCode: state.currency };
         const applied = [];
         try {
           for (const intent of entry.intents) {
@@ -685,29 +800,23 @@ function attach(prisma) {
             applied.push(intent);
           }
           await db.saveState(prisma, u.id, state);
-          const sym = state.currencySymbol || "$";
           const wasReset = applied.some(i => i && i.kind === "reset");
 
           if (wasReset) {
-            // Special case: after a reset, don't show "✓ Done" then leave
-            // the user staring at a void. Acknowledge the reset and
-            // immediately kick off onboarding with the warm welcome.
-            await ctx.editMessageText("✓ Wiped clean.", { parse_mode: "Markdown" }).catch(() => {});
-            await ctx.reply(welcomeMessage(), {
+            // Re-load state after reset (currency/language may have been wiped).
+            const fresh = await db.loadState(prisma, u.id);
+            const langAfter = fresh.language || stateLang;
+            await ctx.editMessageText(t("reset.done", langAfter), { parse_mode: "Markdown" }).catch(() => {});
+            await ctx.reply(welcomeMessage(langAfter, { afterReset: true }), {
               parse_mode: "Markdown",
               reply_markup: mainKeyboard(),
             });
-            // Clear conversation history so AI doesn't carry over old turns.
             await db.appendHistory(prisma, u.id, "system", "[user reset — fresh start]").catch(() => {});
             return;
           }
 
-          const lines = applied.map(i => "✓ " + fmtIntent(i, sym));
+          const lines = applied.map(i => "✓ " + fmtIntent(i, fmtOpts));
 
-          // QUEUE ADVANCEMENT: if there are more intents queued, validate the
-          // next one and present a fresh confirm card. Auto-applies are
-          // applied silently and we keep walking; rejections are reported
-          // and we keep walking; confirms become the new card.
           let nextQueue = (entry.queueAfter || []).slice();
           let nextIndex = (entry.queueIndex || 1) + 1;
           const total = entry.queueTotal || 1;
@@ -719,7 +828,7 @@ function attach(prisma) {
             const candidate = nextQueue.shift();
             const verdict = validateIntent(state, candidate, m.today(state.timezone || "UTC"));
             if (!verdict.ok) {
-              queueRejections.push("Skipped: " + verdict.reason);
+              queueRejections.push((stateLang === "ru" ? "Пропущено: " : "Skipped: ") + verdict.reason);
               nextIndex++;
               continue;
             }
@@ -730,58 +839,53 @@ function attach(prisma) {
                 applied.push(candidate);
                 nextIndex++;
               } catch (e) {
-                queueRejections.push("Couldn't apply: " + e.message);
+                queueRejections.push(t("error.couldntLog", stateLang, { error: e.message }));
                 nextIndex++;
               }
               continue;
             }
-            // confirm tier — pause and show this card
             nextConfirmIntent = candidate;
             nextConfirmVerdict = verdict;
             break;
           }
 
-          // Persist any auto-applies that ran during queue walk
           if (applied.length > entry.intents.length) {
             await db.saveState(prisma, u.id, state);
           }
 
-          // Edit the original card to a tight summary
           const summary = lines.concat(queueRejections.map(r => "_" + r + "_")).join("\n");
           await ctx.editMessageText(summary, { parse_mode: "Markdown" }).catch(() => {});
 
           if (nextConfirmIntent) {
-            // Present the next queued confirm
             const newToken = setPending([nextConfirmIntent], u.id, {
               queueAfter: nextQueue,
               queueTotal: total,
               queueIndex: nextIndex,
             });
-            const stepLabel = "*Step " + nextIndex + " of " + total + "*\n";
-            const cardText = stepLabel + fmtIntent(nextConfirmIntent, sym) +
+            const stepLabel = "*" + t("confirm.stepOf", stateLang, { n: nextIndex, m: total }) + "*\n";
+            const cardText = stepLabel + fmtIntent(nextConfirmIntent, fmtOpts) +
               (nextConfirmVerdict.reason && nextConfirmVerdict.reason !== "Set up your account?"
                 ? "\n_" + nextConfirmVerdict.reason + "_" : "");
-            const yesLabel = (nextIndex < total) ? "Confirm · next" : "Confirm";
-            const noLabel = "Skip";
+            const yesLabel = (nextIndex < total) ? t("confirm.next", stateLang) : t("confirm.yes", stateLang);
+            const noLabel = t("confirm.skip", stateLang);
             await ctx.reply(cardText, { parse_mode: "Markdown", ...confirmCard(newToken, { yesLabel, noLabel }) });
             return;
           }
 
-          // No more queued items — final summary message with hero line
           const lastEventId = state.events && state.events.length
             ? state.events[state.events.length - 1].id
             : null;
           const finalLines = [];
-          if (total > 1) finalLines.push("*All set.*");
-          finalLines.push(heroLine(state, sym));
+          if (total > 1) finalLines.push(t("confirm.allSet", stateLang));
+          finalLines.push(heroLine(state));
           const finalOpts = { parse_mode: "Markdown" };
           if (lastEventId) {
-            finalOpts.reply_markup = undoButton(setUndoToken(lastEventId, u.id)).reply_markup;
+            finalOpts.reply_markup = undoButton(setUndoToken(lastEventId, u.id), stateLang).reply_markup;
           }
           await ctx.reply(finalLines.join("\n"), finalOpts);
         } catch (e) {
           console.error("[v4 confirm apply]", e);
-          await ctx.editMessageText("Couldn't apply that: " + e.message).catch(() => {});
+          await ctx.editMessageText(t("confirm.couldntApply", stateLang, { error: e.message })).catch(() => {});
         }
       });
     } catch (e) {

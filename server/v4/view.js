@@ -150,6 +150,7 @@ function compute(state, todayStr) {
   return {
     setup: true,
     state: displayState,
+    language: state.language || "en",
     currency: state.currency || "USD",
     currencySymbol: sym,
     balanceCents: state.balanceCents, balanceFormatted: M(state.balanceCents),

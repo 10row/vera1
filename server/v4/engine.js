@@ -181,6 +181,13 @@ function applyIntent(state, intent) {
         note: p.note || "",
         envelopeKey: key, date: todayStr,
       };
+      // Multi-currency: if the user spent in a non-base currency, the
+      // validator has already converted to base for amountCents. Preserve
+      // the original on the tx so the UI can show "€50 (≈$54)".
+      if (typeof p.originalAmountCents === "number" && p.originalCurrency) {
+        tx.originalAmountCents = p.originalAmountCents;
+        tx.originalCurrency = String(p.originalCurrency).toUpperCase();
+      }
       s.transactions.push(tx);
       event = makeEvent(intent, prevBalance, s.balanceCents, { envelopeKey: key, txId: tx.id });
       break;
@@ -192,6 +199,13 @@ function applyIntent(state, intent) {
         throw new Error("record_income: amountCents must be a positive number");
       }
       s.balanceCents += p.amountCents;
+      // Multi-currency: same pattern as record_spend
+      var incomeOriginal = null;
+      var incomeOriginalCurrency = null;
+      if (typeof p.originalAmountCents === "number" && p.originalCurrency) {
+        incomeOriginal = p.originalAmountCents;
+        incomeOriginalCurrency = String(p.originalCurrency).toUpperCase();
+      }
       // Reset budget envelopes' spent for the new cycle.
       for (const env of Object.values(s.envelopes)) {
         if (env.active && env.kind === "budget") env.spentCents = 0;
@@ -203,12 +217,17 @@ function applyIntent(state, intent) {
       } else if (s.payday) {
         s.payday = m.advancePayday(s.payday, s.payFrequency || "monthly", todayStr);
       }
-      s.transactions.push({
+      const incomeTx = {
         id: m.uid(), ts: Date.now(), kind: "income",
         amountCents: p.amountCents,
         note: p.note || "Income",
         envelopeKey: null, date: todayStr,
-      });
+      };
+      if (incomeOriginal != null && incomeOriginalCurrency) {
+        incomeTx.originalAmountCents = incomeOriginal;
+        incomeTx.originalCurrency = incomeOriginalCurrency;
+      }
+      s.transactions.push(incomeTx);
       event = makeEvent(intent, prevBalance, s.balanceCents);
       break;
     }

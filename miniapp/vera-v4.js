@@ -16,6 +16,44 @@ var useMemo = React.useMemo;
 
 var API_BASE = "";
 
+// ── i18n ─────────────────────────────────────────────────────
+// Mini App locale layer. Strings are fetched once per session from
+// /api/v4/locale?lang=X (X comes from view.language). English is the
+// fallback. NEVER hardcode user-facing strings in components — always
+// call t(key, params).
+var _strings = {};       // active locale strings
+var _fallback = {};      // English fallback
+var _activeLang = "en";
+
+function t(key, params) {
+  var str = _strings[key];
+  if (str === undefined) str = _fallback[key];
+  if (str === undefined) {
+    if (typeof console !== "undefined") console.warn("[locale] missing: " + key);
+    return key;
+  }
+  if (params) {
+    Object.keys(params).forEach(function(k) {
+      str = str.split("{" + k + "}").join(params[k] == null ? "" : String(params[k]));
+    });
+  }
+  return str;
+}
+
+function loadLocale(lang, cb) {
+  if (!lang) lang = "en";
+  if (lang === _activeLang && Object.keys(_strings).length > 0) { cb && cb(); return; }
+  fetch(API_BASE + "/api/v4/locale?lang=" + encodeURIComponent(lang))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d && d.strings) _strings = d.strings;
+      if (d && d.fallback) _fallback = d.fallback;
+      _activeLang = (d && d.lang) || "en";
+      if (cb) cb();
+    })
+    .catch(function() { if (cb) cb(); });
+}
+
 // ── DESIGN TOKENS ────────────────────────────────────────────
 var C = {
   bg: "#0F0F0F", card: "#171717", cardHi: "#1F1F1F",
@@ -97,20 +135,17 @@ function txLabel(tx, nameMap) {
 // "5m ago" / "2h ago" / "today" / "yesterday" / "Apr 28"
 function relativeTime(ts, now) {
   if (!ts) return "";
-  const n = (typeof now === "number" ? now : Date.now());
-  const diff = n - ts;
-  if (diff < 30_000) return "just now";
-  if (diff < 60_000 * 60) return Math.round(diff / 60_000) + "m ago";
-  if (diff < 60_000 * 60 * 24) {
-    const h = Math.round(diff / (60_000 * 60));
-    return h + "h ago";
-  }
-  if (diff < 60_000 * 60 * 24 * 2) return "yesterday";
-  if (diff < 60_000 * 60 * 24 * 7) return Math.round(diff / (60_000 * 60 * 24)) + "d ago";
+  var n = (typeof now === "number" ? now : Date.now());
+  var diff = n - ts;
+  if (diff < 30000) return t("time.justNow");
+  if (diff < 60000 * 60) return t("time.minAgo", { n: Math.round(diff / 60000) });
+  if (diff < 60000 * 60 * 24) return t("time.hAgo", { n: Math.round(diff / (60000 * 60)) });
+  if (diff < 60000 * 60 * 24 * 2) return t("time.yesterday");
+  if (diff < 60000 * 60 * 24 * 7) return t("time.daysAgo", { n: Math.round(diff / (60000 * 60 * 24)) });
   try {
-    const d = new Date(ts);
+    var d = new Date(ts);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  } catch { return ""; }
+  } catch (e) { return ""; }
 }
 
 // Highlight envelopes/transactions added recently (last hour).
@@ -120,23 +155,24 @@ function isRecent(ts, now) {
   return (n - ts) < 60 * 60 * 1000; // 1 hour
 }
 
-// Pretty due-date label: "today", "tomorrow", "in 3 days", "overdue"
+// Pretty due-date label, localized.
 function dueDateLabel(daysUntilDue) {
-  if (daysUntilDue == null) return "no date";
-  if (daysUntilDue < 0) return "overdue";
-  if (daysUntilDue === 0) return "today";
-  if (daysUntilDue === 1) return "tomorrow";
-  if (daysUntilDue <= 7) return "in " + daysUntilDue + " days";
-  return "in " + daysUntilDue + " days";
+  if (daysUntilDue == null) return t("miniapp.bills.due.noDate");
+  if (daysUntilDue < 0) return t("miniapp.bills.due.overdue");
+  if (daysUntilDue === 0) return t("miniapp.bills.due.today");
+  if (daysUntilDue === 1) return t("miniapp.bills.due.tomorrow");
+  return t("miniapp.bills.due.inDays", { days: daysUntilDue });
 }
 
-// Format an arrival-date ISO string into "by Jul 15" style.
+// Format an arrival-date ISO string into "by Jul 15" style — bare date,
+// the surrounding template (miniapp.goals.arrival) wraps it.
 function arrivalLabel(dateStr) {
   if (!dateStr) return null;
   try {
-    const d = new Date(dateStr + "T12:00:00Z");
-    return "by " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  } catch { return null; }
+    var d = new Date(dateStr + "T12:00:00Z");
+    var locale = _activeLang === "ru" ? "ru-RU" : "en-US";
+    return d.toLocaleDateString(locale, { month: "short", day: "numeric" });
+  } catch (e) { return null; }
 }
 
 // Safe localStorage wrapper — privacy modes / embedded webviews can throw.
@@ -145,6 +181,33 @@ function lsGet(k) {
 }
 function lsSet(k, v) {
   try { localStorage.setItem(k, v); return true; } catch { return false; }
+}
+
+// Format a transaction's display amount. If the tx has originalAmount +
+// originalCurrency in a foreign currency, return "€50 (≈$54)".
+function fmtTxAmount(tx, baseSymbol, baseCode) {
+  if (tx && typeof tx.originalAmountCents === "number" && tx.originalCurrency
+      && String(tx.originalCurrency).toUpperCase() !== String(baseCode || "").toUpperCase()) {
+    return fmtCurrencySymbol(tx.originalCurrency) + (Math.abs(tx.originalAmountCents) / 100).toLocaleString("en-US")
+      + " (≈" + fmtMoney(Math.abs(tx.amountCents), baseSymbol) + ")";
+  }
+  return fmtMoney(Math.abs(tx.amountCents), baseSymbol);
+}
+
+// Currency symbol lookup mirroring server/currency.js. Best-effort.
+var CURRENCY_SYMBOLS = {
+  USD: "$", EUR: "€", GBP: "£", JPY: "¥", CNY: "¥", RUB: "₽", INR: "₹",
+  BRL: "R$", VND: "₫", THB: "฿", KRW: "₩", PLN: "zł", CZK: "Kč", TRY: "₺",
+  AUD: "A$", CAD: "C$", NZD: "NZ$", SGD: "S$", HKD: "HK$", MXN: "$",
+  CHF: "CHF", SEK: "kr", NOK: "kr", DKK: "kr", ZAR: "R", HUF: "Ft",
+  ILS: "₪", AED: "د.إ", SAR: "﷼", PHP: "₱", IDR: "Rp", MYR: "RM",
+  UAH: "₴", RON: "lei", BGN: "лв", CLP: "$", COP: "$", ARS: "$",
+  EGP: "E£", PKR: "₨", BDT: "৳", NGN: "₦",
+};
+function fmtCurrencySymbol(code) {
+  if (!code) return "$";
+  var u = String(code).toUpperCase();
+  return CURRENCY_SYMBOLS[u] || u + " ";
 }
 
 function relativeDay(dateStr, today) {
@@ -178,18 +241,18 @@ function Hero(props) {
     },
   },
     h("span", { style: { width: 6, height: 6, borderRadius: "50%", background: col } }),
-    v.statusWord || (v.state === "over" ? "Over" : v.state === "tight" ? "Tight" : "Calm")
+    v.state === "over" ? t("status.over") : v.state === "tight" ? t("status.tight") : t("status.calm")
   );
 
   var heroNumber, heroLabel, subContext;
   if (v.state === "over") {
     heroNumber = v.deficitFormatted;
-    heroLabel = "over for this period";
-    subContext = v.daysToPayday + " days to payday · " + v.dailyPaceFormatted + "/day after that";
+    heroLabel = t("miniapp.hero.overForPeriod");
+    subContext = t("miniapp.hero.afterPayday", { days: v.daysToPayday, pace: v.dailyPaceFormatted });
   } else {
     heroNumber = v.todayRemainingFormatted;
-    heroLabel = "free today";
-    subContext = v.dailyPaceFormatted + "/day · " + v.daysToPayday + " days to payday";
+    heroLabel = t("miniapp.hero.freeToday");
+    subContext = t("miniapp.hero.beforePayday", { pace: v.dailyPaceFormatted, days: v.daysToPayday });
   }
 
   return h("div", { style: { padding: "32px 20px 22px", textAlign: "center" } },
@@ -242,12 +305,12 @@ function Heatmap(props) {
 
   return h("div", { style: { padding: "8px 16px 0" } },
     h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
-      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, "Last 30 days"),
+      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, t("miniapp.heatmap.last30")),
       h("div", { style: { display: "flex", gap: 6, alignItems: "center", fontSize: 10, color: C.muted } },
         h("div", { style: { width: 8, height: 8, borderRadius: 2, background: "rgba(79,184,136,0.55)" } }),
-        h("span", null, "under"),
+        h("span", null, t("miniapp.heatmap.under")),
         h("div", { style: { width: 8, height: 8, borderRadius: 2, background: "rgba(240,160,80,0.85)", marginLeft: 4 } }),
-        h("span", null, "over")
+        h("span", null, t("miniapp.heatmap.over"))
       )
     ),
     h("div", {
@@ -294,10 +357,10 @@ function DayDetail(props) {
   },
     h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
       h("div", { style: { fontSize: 12, fontWeight: 600 } }, dateLabel),
-      h("div", { style: { fontSize: 11, color: C.sub } }, fmtMoney(total, props.sym) + " spent")
+      h("div", { style: { fontSize: 11, color: C.sub } }, t("miniapp.heatmap.spent", { amount: fmtMoney(total, props.sym) }))
     ),
     dayTxs.length === 0
-      ? h("div", { style: { fontSize: 11, color: C.muted, padding: "6px 0" } }, "Nothing logged.")
+      ? h("div", { style: { fontSize: 11, color: C.muted, padding: "6px 0" } }, t("miniapp.heatmap.empty"))
       : dayTxs.map(function(tx) {
           var lbl = txLabel(tx, props.nameMap);
           return h("div", {
@@ -328,9 +391,9 @@ function TodayStrip(props) {
 
   return h("div", { style: { padding: "20px 16px 0" } },
     h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 } },
-      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, "Today"),
+      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, t("miniapp.today.label")),
       h("div", { style: { fontSize: 11, color: C.sub } },
-        "spent " + v.todaySpentFormatted)
+        t("miniapp.today.spent", { amount: v.todaySpentFormatted }))
     ),
     todayTxs.length === 0
       ? h("div", {
@@ -338,7 +401,7 @@ function TodayStrip(props) {
             background: C.card, border: "1px dashed " + C.border, borderRadius: 12,
             padding: "16px 14px", textAlign: "center", fontSize: 12, color: C.muted,
           },
-        }, "Nothing yet today. Send your bot a voice note 👇")
+        }, t("miniapp.today.empty"))
       : h("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 12, overflow: "hidden" } },
           todayTxs.map(function(tx, i) {
             var lbl = txLabel(tx, nameMap);
@@ -393,10 +456,8 @@ function FirstTimeCard(props) {
       borderRadius: 12, position: "relative",
     },
   },
-    h("div", { style: { fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 4 } },
-      "✨ You're set up"),
-    h("div", { style: { fontSize: 12, color: C.text, lineHeight: 1.5 } },
-      "Tap around — this is your money, your way. Everything happens in chat."),
+    h("div", { style: { fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 4 } }, t("miniapp.firstTime.title")),
+    h("div", { style: { fontSize: 12, color: C.text, lineHeight: 1.5 } }, t("miniapp.firstTime.body")),
     h("div", {
       onClick: function() { setSeen(true); },
       style: {
@@ -430,7 +491,7 @@ function AnticipationStrip(props) {
     },
       h("div", {
         style: { fontSize: 10, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 },
-      }, "Coming up"),
+      }, t("miniapp.comingUp")),
       top.map(function(e) {
         return h("div", {
           key: e.key,
@@ -539,7 +600,7 @@ function BillCard(props) {
           setShowConfirm(false);
           if (onPaid) onPaid(res.body.view);
         } else {
-          setErr((res.body && (res.body.error || res.body.reason)) || "Couldn't mark paid");
+          setErr((res.body && (res.body.error || res.body.reason)) || t("miniapp.bills.couldntPay"));
         }
       })
       .catch(function(e2) { setErr(e2.message); })
@@ -564,7 +625,7 @@ function BillCard(props) {
           e.name,
           isRecent(e.createdAt) ? h("span", {
             style: { fontSize: 9, color: C.green, marginLeft: 6, padding: "1px 6px", borderRadius: 999, background: C.greenSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" },
-          }, "new") : null
+          }, t("miniapp.newBadge")) : null
         ),
         h("div", { style: { fontSize: 11, color: col, marginTop: 3 } },
           label,
@@ -582,12 +643,9 @@ function BillCard(props) {
               fontSize: 12, color: C.sub, cursor: "pointer",
               display: "inline-flex", alignItems: "center", gap: 6,
             },
-          },
-            h("span", null, "✓"),
-            h("span", null, "Mark paid")
-          )
+          }, t("miniapp.bills.markPaid"))
         : h("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
-            h("div", { style: { fontSize: 12, color: C.sub } }, "Pay " + e.amountFormatted + "?"),
+            h("div", { style: { fontSize: 12, color: C.sub } }, t("miniapp.bills.confirmPay", { amount: e.amountFormatted })),
             h("button", {
               onClick: markPaid,
               disabled: busy,
@@ -597,7 +655,7 @@ function BillCard(props) {
                 fontFamily: "'Inter',sans-serif",
                 opacity: busy ? 0.6 : 1,
               },
-            }, busy ? "…" : "Yes, paid"),
+            }, busy ? "…" : t("miniapp.bills.yesPaid")),
             h("button", {
               onClick: function() { setShowConfirm(false); setErr(null); },
               disabled: busy,
@@ -605,7 +663,7 @@ function BillCard(props) {
                 background: "transparent", color: C.sub, border: "1px solid " + C.border, borderRadius: 8,
                 padding: "6px 12px", fontSize: 12, cursor: "pointer", fontFamily: "'Inter',sans-serif",
               },
-            }, "Cancel")
+            }, t("miniapp.bills.cancel"))
           ),
       err ? h("div", { style: { fontSize: 11, color: C.red, marginTop: 6 } }, err) : null
     ) : null
@@ -643,7 +701,7 @@ function BudgetCard(props) {
         },
       })
     ),
-    h("div", { style: { fontSize: 10, color: C.muted, marginTop: 4 } }, pct + "% used")
+    h("div", { style: { fontSize: 10, color: C.muted, marginTop: 4 } }, t("miniapp.budgets.percentUsed", { pct: pct }))
   );
 }
 
@@ -671,16 +729,16 @@ function GoalCard(props) {
           e.name,
           isRecent(e.createdAt) ? h("span", {
             style: { fontSize: 9, color: C.green, marginLeft: 6, padding: "1px 6px", borderRadius: 999, background: C.greenSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" },
-          }, "new") : null
+          }, t("miniapp.newBadge")) : null
         ),
         h("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } },
-          fmtMoney(funded, sym) + " of " + fmtMoney(target, sym))
+          t("miniapp.goals.ofTarget", { funded: fmtMoney(funded, sym), target: fmtMoney(target, sym) }))
       ),
       h("div", { style: { textAlign: "right" } },
         h("div", { style: { fontFamily: "'Lora',serif", fontSize: 18, color: col, lineHeight: 1 } }, pct + "%"),
         remaining > 0
-          ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 4 } }, fmtMoney(remaining, sym) + " to go")
-          : h("div", { style: { fontSize: 10, color: C.green, marginTop: 4, fontWeight: 600 } }, "🎉 reached")
+          ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 4 } }, t("miniapp.goals.toGo", { amount: fmtMoney(remaining, sym) }))
+          : h("div", { style: { fontSize: 10, color: C.green, marginTop: 4, fontWeight: 600 } }, t("miniapp.goals.reached"))
       )
     ),
     h("div", {
@@ -700,10 +758,10 @@ function GoalCard(props) {
     // Arrival estimate — only when there's funding history AND target not yet hit.
     arrival && remaining > 0
       ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 8, textAlign: "right" } },
-          "✨ ~" + arrival + " at " + (e.monthlyFundingFormatted || "current") + "/mo")
+          t("miniapp.goals.arrival", { date: arrival, rate: e.monthlyFundingFormatted || "—" }))
       : (remaining > 0 && !arrival
           ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 8, textAlign: "right" } },
-              "fund this and I'll project arrival")
+              t("miniapp.goals.fundToProject"))
           : null)
   );
 }
@@ -753,14 +811,14 @@ function History(props) {
             fontSize: 13, color: C.text, fontFamily: "'Inter',sans-serif",
             display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
           },
-        }, h("span", { style: { fontSize: 14 } }, "📜"), "View history (" + allTxs.length + ")")
+        }, h("span", { style: { fontSize: 14 } }, "📜"), t("miniapp.history.viewHistory", { count: allTxs.length }))
       : h("div", null,
           h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
-            h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, "History"),
+            h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, t("miniapp.history.title")),
             h("div", {
               onClick: function() { setOpen(false); },
               style: { fontSize: 11, color: C.sub, cursor: "pointer", padding: "2px 8px" },
-            }, "Close")
+            }, t("miniapp.history.close"))
           ),
           // Chips
           h("div", { style: { display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" } },
@@ -775,12 +833,12 @@ function History(props) {
                   fontWeight: on ? 600 : 500, cursor: "pointer",
                   textTransform: "capitalize",
                 },
-              }, c === "big" ? "$50+" : c);
+              }, c === "big" ? "50+" : t("miniapp.history.chip." + c));
             })
           ),
           // Groups
           filtered.length === 0
-            ? h("div", { style: { textAlign: "center", padding: "24px 0", color: C.muted, fontSize: 12 } }, "Nothing here.")
+            ? h("div", { style: { textAlign: "center", padding: "24px 0", color: C.muted, fontSize: 12 } }, t("miniapp.history.empty"))
             : groups.map(function(date) {
                 return h("div", { key: date, style: { marginBottom: 14 } },
                   h("div", { style: { fontSize: 11, color: C.muted, marginBottom: 4 } },
@@ -852,6 +910,7 @@ function ErrorState(props) {
       .then(function() { setLoadingDiag(false); });
   }
 
+  var isAuthIssue = /telegram|identity/i.test(props.errMsg || "");
   return h("div", {
     style: {
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -860,11 +919,9 @@ function ErrorState(props) {
   },
     h("div", { style: { fontSize: 32, marginBottom: 16 } }, "·  ·"),
     h("div", { style: { fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 500, textAlign: "center", marginBottom: 10 } },
-      /telegram|identity/i.test(props.errMsg || "") ? "Can't see your Telegram" : "Couldn't load"),
+      t(isAuthIssue ? "miniapp.error.cantSeeTitle" : "miniapp.error.couldntLoadTitle")),
     h("div", { style: { color: C.sub, fontSize: 14, lineHeight: 1.5, textAlign: "center", maxWidth: 300, marginBottom: 24 } },
-      /telegram|identity/i.test(props.errMsg || "")
-        ? "Open from inside Telegram — tap the ≡ Dashboard button or send /app to your bot."
-        : "Tap retry."),
+      t(isAuthIssue ? "miniapp.error.cantSeeBody" : "miniapp.error.couldntLoadBody")),
     h("button", {
       onClick: props.onRetry,
       style: {
@@ -872,11 +929,11 @@ function ErrorState(props) {
         padding: "12px 28px", fontSize: 14, fontWeight: 600, cursor: "pointer",
         fontFamily: "'Inter',sans-serif",
       },
-    }, "Try again"),
+    }, t("miniapp.error.tryAgain")),
     !diag && !loadingDiag
-      ? h("div", { onClick: fetchDiag, style: { marginTop: 28, color: C.muted, fontSize: 12, cursor: "pointer", borderBottom: "1px dotted " + C.muted } }, "Diagnostics")
+      ? h("div", { onClick: fetchDiag, style: { marginTop: 28, color: C.muted, fontSize: 12, cursor: "pointer", borderBottom: "1px dotted " + C.muted } }, t("miniapp.error.diagnostics"))
       : null,
-    loadingDiag ? h("div", { style: { marginTop: 28, color: C.muted, fontSize: 12 } }, "Checking…") : null,
+    loadingDiag ? h("div", { style: { marginTop: 28, color: C.muted, fontSize: 12 } }, t("miniapp.error.checking")) : null,
     diag ? h("div", { style: { marginTop: 24, padding: "14px 16px", maxWidth: 320, width: "100%", background: C.card, border: "1px solid " + C.border, borderRadius: 12, fontSize: 12, lineHeight: 1.5 } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } },
         h("div", { style: { width: 8, height: 8, borderRadius: "50%", background: diag.status === "ok" ? C.green : (diag.status === "stale" ? C.amber : C.red) } }),
@@ -902,9 +959,8 @@ function NotSetUpState() {
         justifyContent: "center", marginBottom: 22, fontSize: 32,
       },
     }, "👋"),
-    h("div", { style: { fontFamily: "'Lora',serif", fontSize: 24, fontWeight: 500, marginBottom: 10, textAlign: "center" } }, "Hey"),
-    h("div", { style: { color: C.sub, fontSize: 14, lineHeight: 1.55, textAlign: "center", maxWidth: 280 } },
-      "Send your bot a voice note — your balance, when you get paid, any bills. Your dashboard fills in from there.")
+    h("div", { style: { fontFamily: "'Lora',serif", fontSize: 24, fontWeight: 500, marginBottom: 10, textAlign: "center" } }, t("miniapp.notSetUp.title")),
+    h("div", { style: { color: C.sub, fontSize: 14, lineHeight: 1.55, textAlign: "center", maxWidth: 280 } }, t("miniapp.notSetUp.body"))
   );
 }
 
@@ -943,24 +999,24 @@ function Dashboard(props) {
     h(TodayStrip, { view: v, txs: txs, today: today, nameMap: nameMap }),
     bills.length > 0 ? h("div", null,
       h(DueBanner, { envelopes: bills, sym: sym }),
-      h(SectionHeader, { icon: "📌", title: "Bills", count: bills.length }),
+      h(SectionHeader, { icon: "📌", title: t("miniapp.bills.label"), count: bills.length }),
       h("div", { style: { padding: "0 16px" } },
         bills.map(function(e) { return h(BillCard, { key: e.key, env: e, sym: sym, sid: props.sid, onPaid: props.onViewUpdate }); }))
     ) : null,
     budgets.length > 0 ? h("div", null,
-      h(SectionHeader, { icon: "📊", title: "Budgets", count: budgets.length }),
+      h(SectionHeader, { icon: "📊", title: t("miniapp.budgets.label"), count: budgets.length }),
       h("div", { style: { padding: "0 16px" } },
         budgets.map(function(e) { return h(BudgetCard, { key: e.key, env: e, sym: sym }); }))
     ) : null,
     goals.length > 0 ? h("div", null,
-      h(SectionHeader, { icon: "🎯", title: "Goals", count: goals.length }),
+      h(SectionHeader, { icon: "🎯", title: t("miniapp.goals.label"), count: goals.length }),
       h("div", { style: { padding: "0 16px" } },
         goals.map(function(e) { return h(GoalCard, { key: e.key, env: e, sym: sym }); }))
     ) : null,
     h(History, { txs: txs, sym: sym, today: today, dateMinusN: dateMinusN, nameMap: nameMap }),
     h("div", {
       style: { textAlign: "center", padding: "28px 16px 32px", color: C.muted, fontSize: 11 },
-    }, "Most changes happen in chat. Tap *Mark paid* on a bill for quick update.")
+    }, t("miniapp.footer"))
   );
 }
 
@@ -986,12 +1042,18 @@ function App() {
         return r.json();
       })
       .then(function(d) {
-        setData({
-          view: d.view || { setup: false },
-          txs: d.recentTransactions || [],
-          heatmap: d.heatmap || [],
+        var v = d.view || { setup: false };
+        // Load matching locale before showing the dashboard for the first
+        // time. On subsequent refreshes the locale is already cached.
+        var lang = (v && v.language) || "en";
+        loadLocale(lang, function() {
+          setData({
+            view: v,
+            txs: d.recentTransactions || [],
+            heatmap: d.heatmap || [],
+          });
+          setError(false);
         });
-        setError(false);
       })
       .catch(function(e) {
         setLastErr(e.message);

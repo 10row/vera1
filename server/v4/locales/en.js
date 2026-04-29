@@ -1,0 +1,182 @@
+"use strict";
+// English locale. Keys are stable IDs. Use {placeholder} for params.
+// Every string the user might see should have an entry here.
+
+module.exports = {
+  // ── Welcome / onboarding ─────────────────────────────
+  "welcome.identity": "Hi 👋 I'm SpendYes — your money friend on Telegram.",
+  "welcome.value": "Just talk to me about your money — I'll work out what you can freely spend each day.",
+  "welcome.askBalance": "What's roughly in your account today?",
+  "welcome.afterReset": "Fresh start. What's roughly in your account today?",
+
+  // ── /help ────────────────────────────────────────────
+  "help.intro": "Talk to me — say what's happening with your money. I'll handle the rest.",
+  "help.commands.title": "Commands",
+  "help.commands.start": "/start — say hi or set up",
+  "help.commands.today": "/today — just the hero number",
+  "help.commands.app": "/app — open your dashboard",
+  "help.commands.undo": "/undo — roll back my last action",
+  "help.commands.voice": "/voice on|off — talk back when you talk to me",
+  "help.commands.mute": "/mute bills|pace|milestones|all — quiet proactive nudges",
+  "help.commands.reset": "/reset — wipe everything (asks first)",
+
+  // ── /reset ───────────────────────────────────────────
+  "reset.confirm": "This will erase everything. Confirm?",
+  "reset.confirmYes": "Yes, wipe it",
+  "reset.cancel": "Cancel",
+  "reset.done": "✓ Wiped clean.",
+
+  // ── /undo ────────────────────────────────────────────
+  "undo.nothingYet": "Nothing to undo yet.",
+  "undo.cantUndoSetup": "Can't undo setup — say /reset to wipe everything instead.",
+  "undo.undone": "↶ Undone: {what}",
+  "undo.couldnt": "Couldn't undo: {error}",
+  "undo.button": "↶ Undo",
+  "undo.expired": "That undo expired — say /undo to roll back the latest.",
+  "undo.staleSinceOthers": "Other things happened since — say /undo to roll back the latest.",
+  "undo.notYours": "That wasn't yours.",
+
+  // ── /today ───────────────────────────────────────────
+  "today.notSetUp": "Not set up yet — say hi and tell me your balance.",
+  "today.couldntLoad": "Couldn't load that.",
+
+  // ── /voice ───────────────────────────────────────────
+  "voice.on": "✓ Voice replies on. I'll speak when you speak.",
+  "voice.off": "✓ Voice replies off.",
+  "voice.statusOn": "Voice replies are on. Use `/voice off` to turn off.",
+  "voice.statusOff": "Voice replies are off. Use `/voice on` to enable.",
+  "voice.couldnt": "Couldn't update voice setting.",
+
+  // ── /mute ────────────────────────────────────────────
+  "mute.usage": "Use `/mute bills`, `/mute pace`, `/mute milestones`, or `/mute all`.",
+  "mute.unmuteUsage": "Use `/unmute bills`, `/unmute pace`, `/unmute milestones`, or `/unmute all`.",
+  "mute.muted": "✓ Muted {what}. Use `/unmute {what}` to turn back on.",
+  "mute.unmuted": "✓ Unmuted {what}.",
+  "mute.couldnt": "Couldn't update mute setting.",
+
+  // ── /app ─────────────────────────────────────────────
+  "app.notConfigured": "Mini App is not configured.",
+  "app.openIntro": "Open your dashboard:",
+  "app.openButton": "📊 Open Dashboard",
+
+  // ── Confirm card chrome ──────────────────────────────
+  "confirm.yes": "Yes, do it",
+  "confirm.next": "Confirm · next",
+  "confirm.cancel": "Cancel",
+  "confirm.skip": "Skip",
+  "confirm.stepOf": "Step {n} of {m}",
+  "confirm.cancelled": "Cancelled.",
+  "confirm.queueStopped": "Stopped — nothing else changed.",
+  "confirm.expired": "That request expired. Try again?",
+  "confirm.notYours": "Hmm, that wasn't yours.",
+  "confirm.couldntApply": "Couldn't apply that: {error}",
+  "confirm.allSet": "*All set.*",
+
+  // ── Intent labels (for confirm cards) ────────────────
+  "intent.setup": "Set up account · balance {balance}{paydayClause}{freqClause}",
+  "intent.adjust": "Update balance to {balance}",
+  "intent.addBill": "📌 Add bill · {name} · {amount}{recurrenceClause}{dueClause}",
+  "intent.addBudget": "📊 Add budget · {name} · {amount}",
+  "intent.addGoal": "🎯 Add goal · {name} · {amount}{targetClause}",
+  "intent.update": "Update {name}",
+  "intent.remove": "Remove {name}",
+  "intent.spend": "Spend {amount}{noteClause}{envelopeClause}",
+  "intent.spendForeign": "Spend {originalAmount} (≈{amount}){noteClause}{envelopeClause}",
+  "intent.income": "Income {amount}{noteClause}",
+  "intent.payBill": "Mark {name} paid",
+  "intent.skipBill": "Skip {name} this cycle",
+  "intent.editTx": "Edit transaction → {amount}",
+  "intent.deleteTx": "Delete transaction",
+  "intent.updateSettings": "Update settings",
+  "intent.fundEnvelope": "Move {amount} into {name}",
+  "intent.reset": "Reset everything",
+  "intent.unknown": "{kind}",
+
+  // Recurrence words (used inline)
+  "recurrence.weekly": "weekly",
+  "recurrence.biweekly": "every 2 weeks",
+  "recurrence.monthly": "monthly",
+  "recurrence.quarterly": "every 3 months",
+  "recurrence.semiannual": "every 6 months",
+  "recurrence.annual": "yearly",
+  "recurrence.once": "one-time",
+
+  // ── Errors / generic ─────────────────────────────────
+  "error.generic": "Hmm, something went wrong. Try again?",
+  "error.tooLong": "That message is too long — keep it under 2000 chars.",
+  "error.voiceDisabled": "Voice not enabled.",
+  "error.couldntCatch": "Couldn't catch that — try again?",
+  "error.voiceProcessing": "Couldn't process voice — try again?",
+  "error.somethingWrong": "Something went wrong.",
+  "error.couldntLog": "Couldn't log that: {error}",
+  "error.couldntStart": "Something went wrong. Try again?",
+
+  // ── Hero / status ────────────────────────────────────
+  "status.calm": "Calm",
+  "status.tight": "Tight",
+  "status.over": "Over",
+
+  // ── Mini App ─────────────────────────────────────────
+  "miniapp.error.cantSeeTitle": "Can't see your Telegram",
+  "miniapp.error.cantSeeBody": "Open from inside Telegram — tap the ≡ Dashboard button or send /app to your bot.",
+  "miniapp.error.couldntLoadTitle": "Couldn't load",
+  "miniapp.error.couldntLoadBody": "Tap retry.",
+  "miniapp.error.tryAgain": "Try again",
+  "miniapp.error.diagnostics": "Diagnostics",
+  "miniapp.error.checking": "Checking…",
+  "miniapp.notSetUp.title": "Hey",
+  "miniapp.notSetUp.body": "Send your bot a voice note — your balance, when you get paid, any bills. Your dashboard fills in from there.",
+  "miniapp.firstTime.title": "✨ You're set up",
+  "miniapp.firstTime.body": "Tap around — this is your money, your way. Most changes happen in chat.",
+  "miniapp.hero.freeToday": "free today",
+  "miniapp.hero.overForPeriod": "over for this period",
+  "miniapp.hero.afterPayday": "{days} days to payday · {pace}/day after that",
+  "miniapp.hero.beforePayday": "{pace}/day · {days} days to payday",
+  "miniapp.heatmap.last30": "Last 30 days",
+  "miniapp.heatmap.under": "under",
+  "miniapp.heatmap.over": "over",
+  "miniapp.heatmap.spent": "{amount} spent",
+  "miniapp.heatmap.empty": "Nothing logged.",
+  "miniapp.today.label": "Today",
+  "miniapp.today.empty": "Nothing yet today. Send your bot a voice note 👇",
+  "miniapp.today.spent": "spent {amount}",
+  "miniapp.comingUp": "Coming up",
+  "miniapp.bills.label": "Bills",
+  "miniapp.budgets.label": "Budgets",
+  "miniapp.goals.label": "Goals",
+  "miniapp.bills.due.today": "today",
+  "miniapp.bills.due.tomorrow": "tomorrow",
+  "miniapp.bills.due.overdue": "overdue",
+  "miniapp.bills.due.inDays": "in {days} days",
+  "miniapp.bills.due.noDate": "no date",
+  "miniapp.bills.markPaid": "✓ Mark paid",
+  "miniapp.bills.confirmPay": "Pay {amount}?",
+  "miniapp.bills.yesPaid": "Yes, paid",
+  "miniapp.bills.cancel": "Cancel",
+  "miniapp.bills.couldntPay": "Couldn't mark paid",
+  "miniapp.budgets.percentUsed": "{pct}% used",
+  "miniapp.goals.toGo": "{amount} to go",
+  "miniapp.goals.reached": "🎉 reached",
+  "miniapp.goals.arrival": "✨ ~by {date} at {rate}/mo",
+  "miniapp.goals.fundToProject": "fund this and I'll project arrival",
+  "miniapp.goals.ofTarget": "{funded} of {target}",
+  "miniapp.history.viewHistory": "View history ({count})",
+  "miniapp.history.title": "History",
+  "miniapp.history.close": "Close",
+  "miniapp.history.empty": "Nothing here.",
+  "miniapp.history.chip.all": "all",
+  "miniapp.history.chip.week": "week",
+  "miniapp.history.chip.month": "month",
+  "miniapp.history.chip.big": "big",
+  "miniapp.footer": "Most changes happen in chat. Tap *Mark paid* on a bill for quick update.",
+  "miniapp.newBadge": "new",
+
+  // ── Relative time ────────────────────────────────────
+  "time.justNow": "just now",
+  "time.minAgo": "{n}m ago",
+  "time.hAgo": "{n}h ago",
+  "time.yesterday": "yesterday",
+  "time.daysAgo": "{n}d ago",
+  "time.todayWord": "Today",
+  "time.yesterdayWord": "Yesterday",
+};
