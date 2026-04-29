@@ -127,14 +127,59 @@ app.get("/api/v4/whoami", (req, res) => {
 });
 
 // ── VIEW ENDPOINT ───────────────────────────────
+// Returns the full picture the Mini App needs:
+//   view             — derived display state from view.compute()
+//   recentTxs        — last 200 user-facing transactions (for today,
+//                      history view, and heatmap calendar)
+//   heatmap          — per-day spend totals for the last 30 days
+//                      (computed server-side so the client is dumb)
 app.get("/api/v4/view/:sid", requireTelegramAuth, async (req, res) => {
   try {
     const u = await db.resolveUser(prisma, req.params.sid);
     const state = await db.loadState(prisma, u.id);
     const view = compute(state);
-    res.json({ view });
+    const recentTxs = (state.transactions || []).slice(-200).reverse().map(tx => ({
+      id: tx.id, kind: tx.kind, amountCents: tx.amountCents,
+      note: tx.note || "", envelopeKey: tx.envelopeKey || null,
+      date: tx.date, ts: tx.ts,
+    }));
+    // Heatmap: 30 days, including today. For each day produce spentCents.
+    const tz = state.timezone || "UTC";
+    const today = require("./model").today(tz);
+    const addDays = require("./model").addDays;
+    const heatmap = [];
+    for (let i = 29; i >= 0; i--) {
+      const day = addDays(today, -i);
+      let spent = 0;
+      for (const tx of state.transactions || []) {
+        if (tx.date !== day) continue;
+        if (tx.kind === "spend" || tx.kind === "refund" || tx.kind === "bill_payment") {
+          spent += tx.amountCents;
+        }
+      }
+      heatmap.push({ date: day, spentCents: spent });
+    }
+    res.json({ view, recentTransactions: recentTxs, heatmap });
   } catch (e) {
     console.error("[v4 view]", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── SIMULATE ENDPOINT ───────────────────────────
+// Read-only "Can I afford X?" — no mutation. Used by the Mini App
+// inline simulate input.
+app.get("/api/v4/simulate/:sid", requireTelegramAuth, async (req, res) => {
+  try {
+    const amt = parseInt(req.query.amountCents || "0", 10);
+    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "amountCents must be positive" });
+    const u = await db.resolveUser(prisma, req.params.sid);
+    const state = await db.loadState(prisma, u.id);
+    const { simulate } = require("./view");
+    const result = simulate(state, { amountCents: amt });
+    res.json({ result });
+  } catch (e) {
+    console.error("[v4 simulate]", e);
     res.status(500).json({ error: e.message });
   }
 });

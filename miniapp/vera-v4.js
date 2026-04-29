@@ -1,20 +1,33 @@
 "use strict";
-// SpendYes v4 Mini App. React 18, no JSX, no build step.
+// SpendYes v4 Mini App — AAA redesign.
 // Reads /api/v4/view/:sid. Read-only. All state changes happen in chat.
+//
+// The product compressed: open the app, see ONE number, feel calm,
+// close. Everything below the hero exists to support that moment.
+//
+// React 18, no JSX, no build step. Single file ~700 LOC.
 
 var h = React.createElement;
 var useState = React.useState;
 var useEffect = React.useEffect;
 var useRef = React.useRef;
 var useCallback = React.useCallback;
+var useMemo = React.useMemo;
 
 var API_BASE = "";
+
+// ── DESIGN TOKENS ────────────────────────────────────────────
 var C = {
-  bg: "#0F0F0F", card: "#1A1A1A", border: "#2A2A2A", muted: "#555",
-  text: "#E8E4DF", sub: "#999", green: "#4CAF87", amber: "#F0A050",
-  red: "#E05555",
+  bg: "#0F0F0F", card: "#171717", cardHi: "#1F1F1F",
+  border: "#262626", borderHi: "#333",
+  text: "#EFEAE2", sub: "#9A9A9A", muted: "#5A5A5A",
+  green: "#4FB888", amber: "#F0A050", red: "#E45656",
+  greenSoft: "rgba(79,184,136,0.14)",
+  amberSoft: "rgba(240,160,80,0.14)",
+  redSoft: "rgba(228,86,86,0.14)",
 };
 
+// ── HELPERS ──────────────────────────────────────────────────
 function authHeaders() {
   var initData = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp.initData : "";
   if (!initData && window.TG_INIT_DATA) initData = window.TG_INIT_DATA;
@@ -23,56 +36,561 @@ function authHeaders() {
   return headers;
 }
 
+function fmtMoney(cents, sym) {
+  var s = sym || "$";
+  if (cents == null) return s + "0";
+  var neg = cents < 0;
+  var abs = Math.abs(cents);
+  var dollars = Math.floor(abs / 100);
+  var change = abs % 100;
+  // Compact: hide cents on whole-dollar values for readability.
+  var str = dollars.toLocaleString("en-US") + (change ? "." + String(change).padStart(2, "0") : "");
+  return (neg ? "-" : "") + s + str;
+}
+
+function fmtMoneyFull(cents, sym) {
+  var s = sym || "$";
+  if (cents == null) return s + "0.00";
+  var neg = cents < 0;
+  var abs = Math.abs(cents);
+  return (neg ? "-" : "") + s + Math.floor(abs / 100).toLocaleString("en-US") + "." + String(abs % 100).padStart(2, "0");
+}
+
 function colorForState(s) {
   if (s === "over") return C.red;
   if (s === "tight") return C.amber;
   return C.green;
 }
 
-// ── FUEL GAUGE ───────────────────────────────────────────────
-function FuelGauge(props) {
-  var ratio = Math.max(0, Math.min(1, props.ratio || 0));
-  var size = props.size || 150;
-  var col = props.color || C.green;
-  var r = (size - 14) / 2, cx = size / 2, cy = size / 2;
-  var startA = 135, endA = 405;
-  var fillA = startA + ratio * (endA - startA);
-  function rad(a) { return (a - 90) * Math.PI / 180; }
-  function arc(a, b) {
-    var sx = cx + r * Math.cos(rad(a)), sy = cy + r * Math.sin(rad(a));
-    var ex = cx + r * Math.cos(rad(b)), ey = cy + r * Math.sin(rad(b));
-    var large = (b - a) > 180 ? 1 : 0;
-    return "M " + sx + " " + sy + " A " + r + " " + r + " 0 " + large + " 1 " + ex + " " + ey;
+function softColorForState(s) {
+  if (s === "over") return C.redSoft;
+  if (s === "tight") return C.amberSoft;
+  return C.greenSoft;
+}
+
+function relativeDay(dateStr, today) {
+  if (!dateStr) return "";
+  if (dateStr === today) return "Today";
+  var d1 = new Date(dateStr + "T00:00:00Z").getTime();
+  var d2 = new Date(today + "T00:00:00Z").getTime();
+  var diff = Math.round((d1 - d2) / 86400000);
+  if (diff === -1) return "Yesterday";
+  if (diff < -1 && diff >= -6) return Math.abs(diff) + " days ago";
+  var d = new Date(dateStr + "T12:00:00Z");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// ── HERO ─────────────────────────────────────────────────────
+// The product compressed: status pill + huge number + sub-context.
+// Plus inline "Can I afford?" input. This is the entire app, really.
+function Hero(props) {
+  var v = props.view;
+  var sym = v.currencySymbol || "$";
+  var col = colorForState(v.state);
+
+  var simState = useState({ amount: "", result: null, loading: false });
+  var sim = simState[0], setSim = simState[1];
+
+  function runSimulate() {
+    var raw = sim.amount.replace(/[^0-9.]/g, "");
+    var n = parseFloat(raw);
+    if (!isFinite(n) || n <= 0) return;
+    var cents = Math.round(n * 100);
+    setSim(Object.assign({}, sim, { loading: true, result: null }));
+    fetch(API_BASE + "/api/v4/simulate/" + props.sid + "?amountCents=" + cents, { headers: authHeaders() })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        setSim(Object.assign({}, sim, { loading: false, result: d.result || null }));
+      })
+      .catch(function() { setSim(Object.assign({}, sim, { loading: false, result: null })); });
   }
-  return h("svg", { width: size, height: size, viewBox: "0 0 " + size + " " + size },
-    h("path", { d: arc(startA, endA), fill: "none", stroke: C.border, strokeWidth: 8, strokeLinecap: "round" }),
-    ratio > 0.01 ? h("path", { d: arc(startA, fillA), fill: "none", stroke: col, strokeWidth: 8, strokeLinecap: "round" }) : null
+
+  function clearSim() { setSim({ amount: "", result: null, loading: false }); }
+
+  // Status pill
+  var pill = h("div", {
+    style: {
+      display: "inline-flex", alignItems: "center", gap: 6,
+      background: softColorForState(v.state),
+      color: col, fontSize: 12, fontWeight: 600,
+      padding: "5px 12px", borderRadius: 999,
+      letterSpacing: "0.02em", marginBottom: 14,
+    },
+  },
+    h("span", { style: { width: 6, height: 6, borderRadius: "50%", background: col } }),
+    v.statusWord || (v.state === "over" ? "Over" : v.state === "tight" ? "Tight" : "Calm")
+  );
+
+  // Hero number — the morning glance
+  var heroNumber, heroLabel, subContext;
+  if (v.state === "over") {
+    heroNumber = v.deficitFormatted;
+    heroLabel = "over for this period";
+    subContext = v.daysToPayday + " days to payday · " + v.dailyPaceFormatted + "/day after that";
+  } else {
+    heroNumber = v.todayRemainingFormatted;
+    heroLabel = "free today";
+    subContext = v.dailyPaceFormatted + "/day · " + v.daysToPayday + " days to payday";
+  }
+
+  return h("div", { style: { padding: "28px 20px 18px", textAlign: "center" } },
+    pill,
+    h("div", {
+      style: {
+        fontFamily: "'Lora',serif", fontSize: 56, fontWeight: 500,
+        color: col, lineHeight: 1.0, letterSpacing: "-0.02em",
+        transition: "color 0.4s ease",
+      },
+    }, heroNumber),
+    h("div", { style: { fontSize: 13, color: C.sub, marginTop: 8, letterSpacing: "0.02em" } }, heroLabel),
+    h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, subContext),
+
+    // Inline simulate
+    h("div", { style: { marginTop: 24, padding: "12px 14px", background: C.card, border: "1px solid " + C.border, borderRadius: 14 } },
+      h("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+        h("div", { style: { fontSize: 11, color: C.sub, fontWeight: 500, flexShrink: 0 } }, "Can I afford"),
+        h("div", { style: { display: "flex", alignItems: "center", flex: 1, background: C.bg, borderRadius: 8, padding: "6px 10px", border: "1px solid " + C.border } },
+          h("div", { style: { color: C.sub, fontSize: 14, marginRight: 4 } }, sym),
+          h("input", {
+            type: "text",
+            inputMode: "decimal",
+            placeholder: "200",
+            value: sim.amount,
+            onChange: function(e) { setSim(Object.assign({}, sim, { amount: e.target.value, result: null })); },
+            onKeyDown: function(e) { if (e.key === "Enter") runSimulate(); },
+            style: {
+              flex: 1, background: "transparent", border: "none", outline: "none",
+              color: C.text, fontSize: 14, fontFamily: "'Inter',sans-serif",
+              padding: 0, width: "100%",
+            },
+          })
+        ),
+        h("button", {
+          onClick: runSimulate,
+          disabled: !sim.amount || sim.loading,
+          style: {
+            background: col, color: "#0F0F0F", border: "none", borderRadius: 8,
+            padding: "7px 14px", fontSize: 12, fontWeight: 600,
+            cursor: "pointer", fontFamily: "'Inter',sans-serif",
+            opacity: !sim.amount ? 0.4 : 1,
+          },
+        }, sim.loading ? "…" : "Show")
+      ),
+      sim.result ? SimulateResult({ result: sim.result, sym: sym, onClear: clearSim }) : null
+    )
   );
 }
 
-// ── COMMON STATES ────────────────────────────────────────────
+function SimulateResult(props) {
+  var r = props.result;
+  var col = colorForState(r.projected.state);
+  var verdict;
+  if (r.projected.state === "over") verdict = "Over — that'd put you " + fmtMoneyFull(r.projected.deficitCents, props.sym) + " short.";
+  else if (r.projected.state === "tight") verdict = "Tight — drops you to " + r.projected.dailyPaceFormatted + "/day.";
+  else if (r.current.state !== "green") verdict = "Easier — back to " + r.projected.dailyPaceFormatted + "/day.";
+  else verdict = "Easy — " + r.projected.dailyPaceFormatted + "/day for " + r.projected.daysToPayday + " days.";
+
+  return h("div", {
+    style: {
+      marginTop: 10, padding: "10px 12px", background: softColorForState(r.projected.state),
+      borderRadius: 10, textAlign: "left",
+    },
+  },
+    h("div", { style: { fontSize: 13, color: col, fontWeight: 500 } }, verdict),
+    h("div", {
+      onClick: props.onClear,
+      style: { fontSize: 11, color: C.muted, marginTop: 6, cursor: "pointer", display: "inline-block" },
+    }, "Clear")
+  );
+}
+
+// ── HEATMAP CALENDAR ─────────────────────────────────────────
+// 30 days as colored squares. Color from spend vs that day's safe
+// pace. Tap a square → expand inline showing that day's transactions.
+function Heatmap(props) {
+  var heatmap = props.heatmap || [];
+  var dailyPace = props.dailyPaceCents || 0;
+  var sym = props.sym || "$";
+  var txs = props.txs || [];
+  var openState = useState(null);
+  var open = openState[0], setOpen = openState[1];
+
+  // Color thresholds: 0 spend = dim grey, <50% pace = green,
+  // 50-100% pace = green-medium, 100-150% = amber, >150% = red
+  function colorForDay(spent) {
+    if (spent === 0) return { bg: C.cardHi, fg: C.muted };
+    if (dailyPace <= 0) return { bg: C.cardHi, fg: C.muted };
+    var ratio = spent / dailyPace;
+    if (ratio <= 0.5) return { bg: "rgba(79,184,136,0.55)", fg: "#0F0F0F" };
+    if (ratio <= 1.0) return { bg: "rgba(79,184,136,0.85)", fg: "#0F0F0F" };
+    if (ratio <= 1.5) return { bg: "rgba(240,160,80,0.85)", fg: "#0F0F0F" };
+    return { bg: "rgba(228,86,86,0.85)", fg: "#FFFFFF" };
+  }
+
+  function dayLabel(d) { return d.slice(8); /* day-of-month */ }
+
+  return h("div", { style: { padding: "8px 16px 0" } },
+    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
+      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, "Last 30 days"),
+      h("div", { style: { display: "flex", gap: 6, alignItems: "center", fontSize: 10, color: C.muted } },
+        h("div", { style: { width: 8, height: 8, borderRadius: 2, background: "rgba(79,184,136,0.55)" } }),
+        h("span", null, "under"),
+        h("div", { style: { width: 8, height: 8, borderRadius: 2, background: "rgba(240,160,80,0.85)", marginLeft: 4 } }),
+        h("span", null, "over")
+      )
+    ),
+    h("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(10, 1fr)",
+        gap: 4,
+      },
+    },
+      heatmap.map(function(d, i) {
+        var col = colorForDay(d.spentCents);
+        var isOpen = open === d.date;
+        return h("div", {
+          key: d.date,
+          onClick: function() { setOpen(isOpen ? null : d.date); },
+          style: {
+            aspectRatio: "1 / 1",
+            background: isOpen ? C.text : col.bg,
+            color: isOpen ? "#0F0F0F" : col.fg,
+            borderRadius: 4,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 9, fontWeight: 600,
+            cursor: "pointer",
+            border: isOpen ? "2px solid " + C.text : "none",
+            transition: "all 0.15s ease",
+          },
+        }, dayLabel(d.date));
+      })
+    ),
+    open ? DayDetail({ date: open, txs: txs, sym: sym, onClose: function() { setOpen(null); } }) : null
+  );
+}
+
+function DayDetail(props) {
+  var dayTxs = (props.txs || []).filter(function(tx) { return tx.date === props.date; });
+  var total = dayTxs.reduce(function(a, tx) {
+    if (tx.kind === "spend" || tx.kind === "bill_payment") return a + tx.amountCents;
+    if (tx.kind === "refund") return a - Math.abs(tx.amountCents);
+    return a;
+  }, 0);
+  return h("div", {
+    style: { marginTop: 10, padding: "12px 14px", background: C.card, borderRadius: 10, border: "1px solid " + C.border },
+  },
+    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+      h("div", { style: { fontSize: 12, fontWeight: 600 } }, props.date),
+      h("div", { style: { fontSize: 11, color: C.sub } }, fmtMoney(total, props.sym) + " spent")
+    ),
+    dayTxs.length === 0
+      ? h("div", { style: { fontSize: 11, color: C.muted, padding: "6px 0" } }, "Nothing logged.")
+      : dayTxs.map(function(tx) {
+          return h("div", {
+            key: tx.id,
+            style: { display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: 12, borderTop: "1px solid " + C.border },
+          },
+            h("div", { style: { color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 } },
+              tx.note || (tx.envelopeKey ? tx.envelopeKey : "—")
+            ),
+            h("div", { style: { color: tx.kind === "refund" ? C.green : C.text, fontFamily: "'Lora',serif" } },
+              (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), props.sym)
+            )
+          );
+        })
+  );
+}
+
+// ── TODAY STRIP ──────────────────────────────────────────────
+function TodayStrip(props) {
+  var v = props.view;
+  var sym = v.currencySymbol || "$";
+  var todayTxs = (props.txs || []).filter(function(tx) {
+    if (tx.date !== props.today) return false;
+    return tx.kind === "spend" || tx.kind === "refund" || tx.kind === "bill_payment";
+  });
+
+  return h("div", { style: { padding: "20px 16px 0" } },
+    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 } },
+      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, "Today"),
+      h("div", { style: { fontSize: 11, color: C.sub } },
+        "spent " + v.todaySpentFormatted)
+    ),
+    todayTxs.length === 0
+      ? h("div", {
+          style: {
+            background: C.card, border: "1px dashed " + C.border, borderRadius: 12,
+            padding: "16px 14px", textAlign: "center", fontSize: 12, color: C.muted,
+          },
+        }, "Nothing yet today. Send your bot a voice note 👇")
+      : h("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 12, overflow: "hidden" } },
+          todayTxs.map(function(tx, i) {
+            return h("div", {
+              key: tx.id,
+              style: {
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "10px 14px", borderTop: i === 0 ? "none" : "1px solid " + C.border,
+              },
+            },
+              h("div", { style: { flex: 1, overflow: "hidden" } },
+                h("div", { style: { fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+                  tx.note || (tx.envelopeKey ? tx.envelopeKey : "—")),
+                tx.envelopeKey && tx.note
+                  ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 1 } }, tx.envelopeKey)
+                  : null
+              ),
+              h("div", {
+                style: {
+                  fontFamily: "'Lora',serif", fontSize: 14,
+                  color: tx.kind === "refund" ? C.green : C.text, marginLeft: 8,
+                },
+              }, (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), sym))
+            );
+          })
+        )
+  );
+}
+
+// ── ENVELOPE SECTIONS (Bills / Budgets / Goals) ─────────────
+function SectionHeader(props) {
+  return h("div", {
+    style: { display: "flex", alignItems: "center", padding: "20px 16px 8px", gap: 8 },
+  },
+    h("div", { style: { fontSize: 16 } }, props.icon),
+    h("div", { style: { fontSize: 12, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, props.title),
+    props.count != null ? h("div", { style: { fontSize: 12, color: C.muted } }, "· " + props.count) : null
+  );
+}
+
+function BillCard(props) {
+  var e = props.env;
+  var sym = props.sym;
+  var label;
+  var col = C.text;
+  if (e.daysUntilDue == null) label = "no date";
+  else if (e.daysUntilDue < 0) { label = "overdue"; col = C.red; }
+  else if (e.daysUntilDue === 0) { label = "today"; col = C.amber; }
+  else if (e.daysUntilDue === 1) { label = "tomorrow"; col = C.amber; }
+  else if (e.daysUntilDue <= 7) { label = "in " + e.daysUntilDue + " days"; col = C.amber; }
+  else label = "in " + e.daysUntilDue + " days";
+
+  return h("div", {
+    style: {
+      background: C.card, border: "1px solid " + C.border, borderRadius: 12,
+      padding: "12px 14px", marginBottom: 8,
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+    },
+  },
+    h("div", null,
+      h("div", { style: { fontSize: 14, fontWeight: 500 } }, e.name),
+      h("div", { style: { fontSize: 11, color: col, marginTop: 3 } }, label)
+    ),
+    h("div", { style: { fontFamily: "'Lora',serif", fontSize: 16 } }, e.amountFormatted)
+  );
+}
+
+function BudgetCard(props) {
+  var e = props.env;
+  var sym = props.sym;
+  var amt = e.amountCents || 0;
+  var spent = e.spentCents || 0;
+  var pct = amt > 0 ? Math.min(100, Math.round((spent / amt) * 100)) : 0;
+  var col = pct >= 100 ? C.red : pct >= 80 ? C.amber : C.green;
+  return h("div", {
+    style: {
+      background: C.card, border: "1px solid " + C.border, borderRadius: 12,
+      padding: "12px 14px", marginBottom: 8,
+    },
+  },
+    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } },
+      h("div", { style: { fontSize: 14, fontWeight: 500 } }, e.name),
+      h("div", { style: { fontFamily: "'Lora',serif", fontSize: 14 } },
+        fmtMoney(spent, sym) + " / " + e.amountFormatted)
+    ),
+    h("div", {
+      style: {
+        height: 4, background: C.border, borderRadius: 2,
+        overflow: "hidden", marginTop: 8,
+      },
+    },
+      h("div", {
+        style: {
+          height: "100%", width: pct + "%", background: col,
+          transition: "width 0.4s ease",
+        },
+      })
+    ),
+    h("div", { style: { fontSize: 10, color: C.muted, marginTop: 4 } }, pct + "% used")
+  );
+}
+
+function GoalCard(props) {
+  var e = props.env;
+  var sym = props.sym;
+  var target = e.targetCents || e.amountCents || 0;
+  var funded = e.fundedCents || 0;
+  var pct = target > 0 ? Math.min(100, Math.round((funded / target) * 100)) : 0;
+  var col = pct >= 100 ? C.green : C.green;
+  var remaining = Math.max(0, target - funded);
+  return h("div", {
+    style: {
+      background: C.card, border: "1px solid " + C.border, borderRadius: 12,
+      padding: "14px 14px", marginBottom: 8,
+    },
+  },
+    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 } },
+      h("div", null,
+        h("div", { style: { fontSize: 14, fontWeight: 500 } }, e.name),
+        h("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } },
+          fmtMoney(funded, sym) + " of " + fmtMoney(target, sym))
+      ),
+      h("div", { style: { textAlign: "right" } },
+        h("div", { style: { fontFamily: "'Lora',serif", fontSize: 18, color: col, lineHeight: 1 } }, pct + "%"),
+        remaining > 0
+          ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 4 } }, fmtMoney(remaining, sym) + " to go")
+          : h("div", { style: { fontSize: 10, color: C.green, marginTop: 4, fontWeight: 600 } }, "🎉 reached")
+      )
+    ),
+    h("div", {
+      style: {
+        height: 6, background: C.border, borderRadius: 3,
+        overflow: "hidden",
+      },
+    },
+      h("div", {
+        style: {
+          height: "100%", width: pct + "%", background: col,
+          transition: "width 0.4s ease",
+          boxShadow: pct >= 100 ? "0 0 8px " + C.green : "none",
+        },
+      })
+    )
+  );
+}
+
+// ── HISTORY (collapsed; chip filters) ───────────────────────
+function History(props) {
+  var openState = useState(false);
+  var open = openState[0], setOpen = openState[1];
+  var filterState = useState("all");
+  var filter = filterState[0], setFilter = filterState[1];
+
+  var allTxs = (props.txs || []).filter(function(tx) {
+    return tx.kind === "spend" || tx.kind === "refund" || tx.kind === "bill_payment";
+  });
+
+  // Filter chips
+  var today = props.today;
+  function applyFilter(txs) {
+    if (filter === "all") return txs;
+    if (filter === "week") {
+      var wkAgo = props.dateMinusN ? props.dateMinusN(today, 6) : today;
+      return txs.filter(function(tx) { return tx.date >= wkAgo; });
+    }
+    if (filter === "month") return txs.filter(function(tx) { return tx.date.startsWith(today.slice(0, 7)); });
+    if (filter === "big") return txs.filter(function(tx) { return Math.abs(tx.amountCents) >= 50_00; });
+    return txs;
+  }
+
+  var filtered = applyFilter(allTxs);
+
+  // Group by date
+  var groups = [];
+  var byDate = {};
+  filtered.forEach(function(tx) {
+    if (!byDate[tx.date]) { byDate[tx.date] = []; groups.push(tx.date); }
+    byDate[tx.date].push(tx);
+  });
+
+  return h("div", { style: { padding: "20px 16px 0" } },
+    !open
+      ? h("button", {
+          onClick: function() { setOpen(true); },
+          style: {
+            width: "100%", background: C.card, border: "1px solid " + C.border,
+            borderRadius: 12, padding: "12px", cursor: "pointer",
+            fontSize: 13, color: C.text, fontFamily: "'Inter',sans-serif",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          },
+        }, h("span", { style: { fontSize: 14 } }, "📜"), "View history (" + allTxs.length + ")")
+      : h("div", null,
+          h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
+            h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, "History"),
+            h("div", {
+              onClick: function() { setOpen(false); },
+              style: { fontSize: 11, color: C.sub, cursor: "pointer", padding: "2px 8px" },
+            }, "Close")
+          ),
+          // Chips
+          h("div", { style: { display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" } },
+            ["all", "week", "month", "big"].map(function(c) {
+              var on = c === filter;
+              return h("div", {
+                key: c, onClick: function() { setFilter(c); },
+                style: {
+                  padding: "5px 12px", borderRadius: 999, fontSize: 11,
+                  background: on ? C.text : C.card, color: on ? "#0F0F0F" : C.sub,
+                  border: "1px solid " + (on ? C.text : C.border),
+                  fontWeight: on ? 600 : 500, cursor: "pointer",
+                  textTransform: "capitalize",
+                },
+              }, c === "big" ? "$50+" : c);
+            })
+          ),
+          // Groups
+          filtered.length === 0
+            ? h("div", { style: { textAlign: "center", padding: "24px 0", color: C.muted, fontSize: 12 } }, "Nothing here.")
+            : groups.map(function(date) {
+                return h("div", { key: date, style: { marginBottom: 14 } },
+                  h("div", { style: { fontSize: 11, color: C.muted, marginBottom: 4 } },
+                    relativeDay(date, today) + (date === today ? "" : " · " + date)),
+                  h("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 10, overflow: "hidden" } },
+                    byDate[date].map(function(tx, i) {
+                      return h("div", {
+                        key: tx.id,
+                        style: {
+                          display: "flex", justifyContent: "space-between", padding: "9px 12px",
+                          fontSize: 12, borderTop: i === 0 ? "none" : "1px solid " + C.border,
+                        },
+                      },
+                        h("div", { style: { flex: 1, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 } },
+                          tx.note || (tx.envelopeKey ? tx.envelopeKey : "—")
+                        ),
+                        h("div", { style: { fontFamily: "'Lora',serif", color: tx.kind === "refund" ? C.green : C.text } },
+                          (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), props.sym))
+                      );
+                    })
+                  )
+                );
+              })
+        )
+  );
+}
+
+// ── ERROR / EMPTY STATES ────────────────────────────────────
 function Skeleton() {
   var sh = {
-    background: "linear-gradient(90deg, " + C.card + " 25%, " + C.border + " 50%, " + C.card + " 75%)",
-    backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite", borderRadius: 8,
+    background: "linear-gradient(90deg," + C.card + " 25%," + C.border + " 50%," + C.card + " 75%)",
+    backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite", borderRadius: 12,
   };
-  return h("div", { style: { padding: 24 } },
+  return h("div", { style: { padding: 20 } },
     h("style", null, "@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }"),
-    h("div", { style: Object.assign({}, sh, { width: 150, height: 150, borderRadius: "50%", margin: "20px auto" }) }),
-    h("div", { style: Object.assign({}, sh, { height: 60, marginBottom: 12 }) }),
-    h("div", { style: Object.assign({}, sh, { height: 60, marginBottom: 12 }) }),
-    h("div", { style: Object.assign({}, sh, { height: 60 }) })
+    h("div", { style: Object.assign({}, sh, { width: 80, height: 22, margin: "20px auto", borderRadius: 999 }) }),
+    h("div", { style: Object.assign({}, sh, { width: "60%", height: 56, margin: "0 auto 8px" }) }),
+    h("div", { style: Object.assign({}, sh, { width: "40%", height: 14, margin: "0 auto 24px" }) }),
+    h("div", { style: Object.assign({}, sh, { height: 60, marginBottom: 16 }) }),
+    h("div", { style: Object.assign({}, sh, { height: 100, marginBottom: 12 }) }),
+    h("div", { style: Object.assign({}, sh, { height: 70, marginBottom: 8 }) }),
+    h("div", { style: Object.assign({}, sh, { height: 70, marginBottom: 8 }) })
   );
 }
 
 function statusLabel(s) {
   return ({
-    "ok": "Authenticated",
-    "no-init-data": "No Telegram session",
-    "bad-signature": "Server token mismatch",
-    "stale": "Session expired",
-    "no-bot-token": "Bot not configured",
-    "malformed": "Malformed session",
+    "ok": "Authenticated", "no-init-data": "No Telegram session",
+    "bad-signature": "Server token mismatch", "stale": "Session expired",
+    "no-bot-token": "Bot not configured", "malformed": "Malformed session",
     "parse-error": "Couldn't read session",
   })[s] || (s || "Unknown");
 }
@@ -81,47 +599,46 @@ function ErrorState(props) {
   var diagState = useState(null);
   var diag = diagState[0], setDiag = diagState[1];
   var loadState = useState(false);
-  var loadingDiag = loadState[0], setLoading = loadState[1];
+  var loadingDiag = loadState[0], setLoadingDiag = loadState[1];
 
   function fetchDiag() {
-    if (loadingDiag) return;
-    setLoading(true); setDiag(null);
+    setLoadingDiag(true);
     fetch(API_BASE + "/api/v4/whoami", { headers: authHeaders() })
       .then(function(r) { return r.json(); })
       .then(function(d) { setDiag(d); })
       .catch(function(e) { setDiag({ status: "network", hint: e.message }); })
-      .then(function() { setLoading(false); });
+      .then(function() { setLoadingDiag(false); });
   }
 
-  function title() {
-    if (!props.errMsg) return "Couldn't load your data";
-    if (/identity|telegram/i.test(props.errMsg)) return "We can't see your Telegram identity";
-    return "Couldn't load your data";
-  }
-  function body() {
-    if (!props.errMsg) return "Tap retry to try again.";
-    if (/identity|telegram/i.test(props.errMsg)) {
-      return "Open this Mini App from inside Telegram. Tap the ≡ Dashboard button next to your message box, or send /app to your bot.";
-    }
-    return "Tap retry to try again.";
-  }
-
-  return h("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, padding: "48px 24px", minHeight: "70vh" } },
-    h("div", { style: { width: 64, height: 64, borderRadius: "50%", background: C.card, border: "1px solid " + C.border, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20, fontSize: 28, color: C.sub } }, "·  ·"),
-    h("div", { style: { fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 500, textAlign: "center", marginBottom: 10 } }, title()),
-    h("div", { style: { color: C.sub, fontSize: 14, lineHeight: 1.5, textAlign: "center", maxWidth: 300, marginBottom: 24 } }, body()),
+  return h("div", {
+    style: {
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      flex: 1, padding: "48px 24px", minHeight: "70vh",
+    },
+  },
+    h("div", { style: { fontSize: 32, marginBottom: 16 } }, "·  ·"),
+    h("div", { style: { fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 500, textAlign: "center", marginBottom: 10 } },
+      /telegram|identity/i.test(props.errMsg || "") ? "Can't see your Telegram" : "Couldn't load"),
+    h("div", { style: { color: C.sub, fontSize: 14, lineHeight: 1.5, textAlign: "center", maxWidth: 300, marginBottom: 24 } },
+      /telegram|identity/i.test(props.errMsg || "")
+        ? "Open from inside Telegram — tap the ≡ Dashboard button or send /app to your bot."
+        : "Tap retry."),
     h("button", {
       onClick: props.onRetry,
-      style: { background: C.green, color: "#fff", border: "none", borderRadius: 10, padding: "12px 28px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter',sans-serif" },
+      style: {
+        background: C.green, color: "#0F0F0F", border: "none", borderRadius: 10,
+        padding: "12px 28px", fontSize: 14, fontWeight: 600, cursor: "pointer",
+        fontFamily: "'Inter',sans-serif",
+      },
     }, "Try again"),
-    diag === null && !loadingDiag
-      ? h("div", { onClick: fetchDiag, style: { marginTop: 28, color: C.muted, fontSize: 12, cursor: "pointer", borderBottom: "1px dotted " + C.muted, paddingBottom: 1 } }, "Diagnostics")
+    !diag && !loadingDiag
+      ? h("div", { onClick: fetchDiag, style: { marginTop: 28, color: C.muted, fontSize: 12, cursor: "pointer", borderBottom: "1px dotted " + C.muted } }, "Diagnostics")
       : null,
     loadingDiag ? h("div", { style: { marginTop: 28, color: C.muted, fontSize: 12 } }, "Checking…") : null,
-    diag ? h("div", { style: { marginTop: 24, padding: "14px 16px", maxWidth: 320, width: "100%", background: C.card, border: "1px solid " + C.border, borderRadius: 10, fontSize: 12, lineHeight: 1.5 } },
+    diag ? h("div", { style: { marginTop: 24, padding: "14px 16px", maxWidth: 320, width: "100%", background: C.card, border: "1px solid " + C.border, borderRadius: 12, fontSize: 12, lineHeight: 1.5 } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } },
         h("div", { style: { width: 8, height: 8, borderRadius: "50%", background: diag.status === "ok" ? C.green : (diag.status === "stale" ? C.amber : C.red) } }),
-        h("div", { style: { fontWeight: 600, color: C.text } }, statusLabel(diag.status))
+        h("div", { style: { fontWeight: 600 } }, statusLabel(diag.status))
       ),
       diag.hint ? h("div", { style: { color: C.sub } }, diag.hint) : null,
       diag.user ? h("div", { style: { color: C.muted, fontSize: 11, marginTop: 8 } }, "Signed in as " + (diag.user.first_name || "user") + " · id " + diag.user.id) : null
@@ -130,10 +647,22 @@ function ErrorState(props) {
 }
 
 function NotSetUpState() {
-  return h("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, padding: "48px 24px", minHeight: "70vh" } },
-    h("div", { style: { width: 64, height: 64, borderRadius: "50%", background: C.card, border: "1px solid " + C.border, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20, fontSize: 28 } }, "👋"),
-    h("div", { style: { fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 500, textAlign: "center", marginBottom: 10 } }, "Welcome"),
-    h("div", { style: { color: C.sub, fontSize: 14, lineHeight: 1.5, textAlign: "center", maxWidth: 300 } }, "Send your bot a message — your starting balance, when you get paid, any bills. Your dashboard fills in from there.")
+  return h("div", {
+    style: {
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      flex: 1, padding: "48px 24px", minHeight: "70vh",
+    },
+  },
+    h("div", {
+      style: {
+        width: 72, height: 72, borderRadius: "50%", background: C.card,
+        border: "1px solid " + C.border, display: "flex", alignItems: "center",
+        justifyContent: "center", marginBottom: 22, fontSize: 32,
+      },
+    }, "👋"),
+    h("div", { style: { fontFamily: "'Lora',serif", fontSize: 24, fontWeight: 500, marginBottom: 10, textAlign: "center" } }, "Hey"),
+    h("div", { style: { color: C.sub, fontSize: 14, lineHeight: 1.55, textAlign: "center", maxWidth: 280 } },
+      "Send your bot a voice note — your balance, when you get paid, any bills. Your dashboard fills in from there.")
   );
 }
 
@@ -141,129 +670,58 @@ function NotSetUpState() {
 function Dashboard(props) {
   var v = props.view;
   var sym = v.currencySymbol || "$";
-  var col = colorForState(v.state);
+  var txs = props.txs || [];
+  var heatmap = props.heatmap || [];
+  var today = (heatmap.length ? heatmap[heatmap.length - 1].date : "");
 
-  // Hero ratio: dailyPace as a fraction of disposable / daysToPayday baseline.
-  // Show full when green, partial as state degrades. For simplicity: ratio = todayRemaining / dailyPace.
-  var ratio = v.dailyPaceCents > 0 ? Math.max(0, Math.min(1, v.todayRemainingCents / v.dailyPaceCents)) : 0;
-
-  // Group envelopes by kind
   var envs = v.envelopes || [];
   var bills = envs.filter(function(e) { return e.kind === "bill"; });
   var budgets = envs.filter(function(e) { return e.kind === "budget"; });
   var goals = envs.filter(function(e) { return e.kind === "goal"; });
 
-  var hero;
-  if (v.state === "over") {
-    hero = h("div", { style: { textAlign: "center" } },
-      h("div", { style: { fontSize: 13, color: C.sub, marginBottom: 4 } }, "Over for this period"),
-      h("div", { style: { fontFamily: "'Lora',serif", fontSize: 38, fontWeight: 500, color: C.red, lineHeight: 1.1 } }, v.deficitFormatted),
-      h("div", { style: { fontSize: 12, color: C.sub, marginTop: 8 } }, v.daysToPayday + " days to payday")
-    );
-  } else {
-    hero = h("div", { style: { textAlign: "center", padding: "20px 16px 8px" } },
-      h("div", { style: { position: "relative", display: "inline-block" } },
-        h(FuelGauge, { ratio: ratio, color: col, size: 160 }),
-        h("div", { style: { position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", textAlign: "center" } },
-          h("div", { style: { fontFamily: "'Lora',serif", fontSize: 32, fontWeight: 500, color: col } }, v.todayRemainingFormatted),
-          h("div", { style: { fontSize: 11, color: C.sub, marginTop: 4 } }, "free today")
-        )
-      ),
-      h("div", { style: { fontSize: 12, color: C.sub, marginTop: 10 } },
-        v.dailyPaceFormatted + "/day · " + v.daysToPayday + " days left")
-    );
+  // dueNow appears as part of bills card sort (most urgent first), not a separate section.
+  bills.sort(function(a, b) {
+    var da = a.daysUntilDue == null ? 9999 : a.daysUntilDue;
+    var db = b.daysUntilDue == null ? 9999 : b.daysUntilDue;
+    return da - db;
+  });
+
+  function dateMinusN(d, n) {
+    var dt = new Date(d + "T00:00:00Z");
+    dt.setUTCDate(dt.getUTCDate() - n);
+    return dt.toISOString().slice(0, 10);
   }
 
   return h("div", null,
-    hero,
-    // Stats row
-    h("div", { style: { display: "flex", gap: 8, padding: "12px 16px" } },
-      Stat({ label: "Balance", value: v.balanceFormatted }),
-      Stat({ label: "Reserved", value: v.obligatedFormatted }),
-      Stat({ label: "Disposable", value: v.disposableFormatted })
-    ),
-    // Due now
-    v.dueNow && v.dueNow.length > 0 ? Section({ title: "Due now",
-      children: v.dueNow.map(function(d) {
-        return h("div", { key: d.key, style: cardStyle() },
-          h("div", null,
-            h("div", { style: { fontWeight: 500 } }, d.name),
-            h("div", { style: { fontSize: 11, color: C.sub } }, d.dueDate)
-          ),
-          h("div", { style: { color: C.amber, fontWeight: 500 } }, d.amountFormatted)
-        );
-      }),
-    }) : null,
-    // Upcoming
-    v.upcoming && v.upcoming.length > 0 ? Section({ title: "Upcoming",
-      children: v.upcoming.map(function(u) {
-        return h("div", { key: u.key, style: cardStyle() },
-          h("div", null,
-            h("div", { style: { fontWeight: 500 } }, u.name),
-            h("div", { style: { fontSize: 11, color: C.sub } }, "in " + u.daysUntilDue + " days")
-          ),
-          h("div", { style: { color: C.text } }, u.amountFormatted)
-        );
-      }),
-    }) : null,
-    // Bills
-    bills.length > 0 ? Section({ title: "Bills",
-      children: bills.map(function(e) { return EnvelopeRow(e); }),
-    }) : null,
-    // Budgets
-    budgets.length > 0 ? Section({ title: "Budgets",
-      children: budgets.map(function(e) { return EnvelopeRow(e); }),
-    }) : null,
-    // Goals
-    goals.length > 0 ? Section({ title: "Goals",
-      children: goals.map(function(e) { return EnvelopeRow(e); }),
-    }) : null,
-    // Footer note
-    h("div", { style: { textAlign: "center", padding: "24px 16px 32px", color: C.muted, fontSize: 11 } },
-      "Read-only view. Send your bot a message to make changes.")
-  );
-}
-
-function Stat(props) {
-  return h("div", { style: { flex: 1, background: C.card, border: "1px solid " + C.border, borderRadius: 10, padding: "10px 12px" } },
-    h("div", { style: { fontSize: 10, color: C.sub, textTransform: "uppercase", letterSpacing: "0.06em" } }, props.label),
-    h("div", { style: { fontFamily: "'Lora',serif", fontSize: 16, marginTop: 4 } }, props.value)
-  );
-}
-
-function Section(props) {
-  return h("div", null,
-    h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, padding: "20px 16px 8px" } }, props.title),
-    h("div", { style: { padding: "0 16px" } }, props.children)
-  );
-}
-
-function cardStyle() {
-  return {
-    background: C.card, border: "1px solid " + C.border, borderRadius: 10,
-    padding: "12px 14px", marginBottom: 8,
-    display: "flex", justifyContent: "space-between", alignItems: "center",
-  };
-}
-
-function EnvelopeRow(e) {
-  return h("div", { key: e.key, style: cardStyle() },
-    h("div", null,
-      h("div", { style: { fontWeight: 500 } }, e.name),
-      h("div", { style: { fontSize: 11, color: C.sub, marginTop: 2 } },
-        e.kind === "bill" && e.dueDate ? "due " + e.dueDate :
-        e.kind === "goal" && e.targetCents ? "target" :
-        "spent " + e.spentFormatted
-      )
-    ),
-    h("div", { style: { fontFamily: "'Lora',serif" } }, e.amountFormatted)
+    h(Hero, { view: v, sid: props.sid }),
+    h(Heatmap, { heatmap: heatmap, dailyPaceCents: v.dailyPaceCents, sym: sym, txs: txs }),
+    h(TodayStrip, { view: v, txs: txs, today: today }),
+    bills.length > 0 ? h("div", null,
+      h(SectionHeader, { icon: "📌", title: "Bills", count: bills.length }),
+      h("div", { style: { padding: "0 16px" } },
+        bills.map(function(e) { return h(BillCard, { key: e.key, env: e, sym: sym }); }))
+    ) : null,
+    budgets.length > 0 ? h("div", null,
+      h(SectionHeader, { icon: "📊", title: "Budgets", count: budgets.length }),
+      h("div", { style: { padding: "0 16px" } },
+        budgets.map(function(e) { return h(BudgetCard, { key: e.key, env: e, sym: sym }); }))
+    ) : null,
+    goals.length > 0 ? h("div", null,
+      h(SectionHeader, { icon: "🎯", title: "Goals", count: goals.length }),
+      h("div", { style: { padding: "0 16px" } },
+        goals.map(function(e) { return h(GoalCard, { key: e.key, env: e, sym: sym }); }))
+    ) : null,
+    h(History, { txs: txs, sym: sym, today: today, dateMinusN: dateMinusN }),
+    h("div", {
+      style: { textAlign: "center", padding: "28px 16px 32px", color: C.muted, fontSize: 11 },
+    }, "Read-only · changes happen in chat")
   );
 }
 
 // ── APP ──────────────────────────────────────────────────────
 function App() {
-  var viewState = useState(null);
-  var view = viewState[0], setView = viewState[1];
+  var dataState = useState(null);
+  var data = dataState[0], setData = dataState[1];
   var loadingState = useState(true);
   var loading = loadingState[0], setLoading = loadingState[1];
   var errorState = useState(false);
@@ -275,18 +733,21 @@ function App() {
 
   var loadView = useCallback(function() {
     if (!sid.current) return;
-    setLoading(true); setError(false);
+    setError(false);
     fetch(API_BASE + "/api/v4/view/" + sid.current, { headers: authHeaders() })
       .then(function(r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       })
       .then(function(d) {
-        setView(d.view || { setup: false });
+        setData({
+          view: d.view || { setup: false },
+          txs: d.recentTransactions || [],
+          heatmap: d.heatmap || [],
+        });
         setError(false);
       })
       .catch(function(e) {
-        console.error("[v4] view error:", e.message);
         setLastErr(e.message);
         setError(true);
       })
@@ -316,7 +777,7 @@ function App() {
     tryStart();
   }, []);
 
-  // Auto-refresh on visibility change
+  // Refresh on visibility change (when user comes back to app after chatting).
   useEffect(function() {
     function onVis() { if (!document.hidden && sid.current) loadView(); }
     document.addEventListener("visibilitychange", onVis);
@@ -324,10 +785,12 @@ function App() {
   }, [loadView]);
 
   var content;
-  if (loading && !view) content = h(Skeleton, null);
-  else if (error && !view) content = h(ErrorState, { onRetry: loadView, errMsg: lastErr });
-  else if (!view || !view.setup) content = h(NotSetUpState, null);
-  else content = h(Dashboard, { view: view });
+  if (loading && !data) content = h(Skeleton, null);
+  else if (error && !data) content = h(ErrorState, { onRetry: loadView, errMsg: lastErr });
+  else if (!data || !data.view || !data.view.setup) content = h(NotSetUpState, null);
+  else content = h(Dashboard, {
+    view: data.view, txs: data.txs, heatmap: data.heatmap, sid: sid.current,
+  });
 
   return h("div", {
     style: {
