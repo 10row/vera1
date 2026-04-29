@@ -160,6 +160,22 @@ function buildSystemPrompt(state) {
     "    - User can say \"skip\" / \"not now\" / \"later\" at any phase — advance gracefully.",
     "    - If user goes off-script (says something irrelevant during setup), gently redirect with the current phase's question.",
   ];
+  // Pending question carry-over: if the bot asked something on a prior
+  // turn and the user hasn't answered, the AI should re-ask gently
+  // instead of letting the question evaporate.
+  if (state && state.pendingQuestion && state.pendingQuestion.text) {
+    lines.push("");
+    lines.push("PENDING QUESTION (from a previous turn):");
+    lines.push("  Text: \"" + state.pendingQuestion.text + "\"");
+    lines.push("  If the user's CURRENT message answers this, proceed normally and DO NOT include pendingQuestion in your output.");
+    lines.push("  If their message does NOT answer it, weave a gentle re-ask into your reply (e.g. \"Sure — and circling back, X?\") and include pendingQuestion in your output to keep tracking it.");
+  }
+
+  // Schema for the optional pendingQuestion in your output:
+  //   pendingQuestion?: { text: "your one-sentence question", kind: "balance|payday|amount|date|name|yes_no|general" }
+  // ONLY set pendingQuestion when you ARE asking the user a specific
+  // factual question that needs a follow-up answer. Conversational
+  // chit-chat does not count.
   return lines.join("\n");
 }
 
@@ -197,6 +213,7 @@ async function parseProposal(state, userMessage, history, options) {
       mode: "talk",
       message: "Sorry, I had a brain blip — try again?",
       intents: [],
+      pendingQuestion: null,
       transcript: userMessage,
       warnings: ["ai_call_failed: " + e.message],
     };
@@ -209,6 +226,7 @@ async function parseProposal(state, userMessage, history, options) {
       mode: "talk",
       message: typeof raw === "string" && raw.length > 0 && raw.length < 400 ? raw : "Hmm, didn't catch that — say it another way?",
       intents: [],
+      pendingQuestion: null,
       transcript: userMessage,
       warnings: ["json_parse_failed"],
     };
@@ -236,10 +254,23 @@ async function parseProposal(state, userMessage, history, options) {
   // Drop any intent that isn't an object with a kind string.
   intents = intents.filter(i => i && typeof i.kind === "string");
 
+  // PENDING QUESTION extraction. AI emits an optional pendingQuestion
+  // field of shape { text, kind } when it's asked the user something
+  // that needs follow-up. Sanitize it; the engine clamps + validates.
+  let pendingQuestion = null;
+  const pq = parsed.pendingQuestion;
+  if (pq && typeof pq === "object" && typeof pq.text === "string" && pq.text.trim().length > 0) {
+    pendingQuestion = {
+      text: pq.text.trim().slice(0, 240),
+      kind: typeof pq.kind === "string" ? pq.kind : "general",
+    };
+  }
+
   return {
     mode,
     message: message || (mode === "do" ? "Got it — let me confirm." : ""),
     intents,
+    pendingQuestion,
     transcript: userMessage,
     warnings: [],
   };

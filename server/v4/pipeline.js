@@ -70,10 +70,15 @@ function rewriteSetupOnAlreadySetup(state, intents) {
 
 async function processMessage(state, userMessage, history, options) {
   const proposal = await parseProposal(state, userMessage, history, options);
+  // pendingQuestion travels through every result shape so the bot can
+  // persist it onto state after each turn (or clear it).
+  const pq = proposal.pendingQuestion || null;
+
   if (proposal.mode === "talk" || proposal.intents.length === 0) {
     return {
       kind: "talk",
       message: proposal.message,
+      pendingQuestion: pq,
       warnings: proposal.warnings || [],
     };
   }
@@ -91,6 +96,7 @@ async function processMessage(state, userMessage, history, options) {
         kind: "do",
         message: proposal.message,
         decisions: [{ intent, verdict }],
+        pendingQuestion: pq,
         warnings: proposal.warnings || [],
       };
     }
@@ -100,6 +106,7 @@ async function processMessage(state, userMessage, history, options) {
       message: proposal.message,
       intent,
       simulate: sim,
+      pendingQuestion: pq,
       warnings: proposal.warnings || [],
     };
   }
@@ -119,6 +126,7 @@ async function processMessage(state, userMessage, history, options) {
     return {
       kind: "talk",
       message: proposal.message,
+      pendingQuestion: pq,
       warnings: proposal.warnings || [],
     };
   }
@@ -140,6 +148,7 @@ async function processMessage(state, userMessage, history, options) {
       kind: "do",
       message: proposal.message,
       decisions: [{ intent: intents[0], verdict: verdicts[0] }],
+      pendingQuestion: pq,
       warnings: proposal.warnings || [],
     };
   }
@@ -156,6 +165,7 @@ async function processMessage(state, userMessage, history, options) {
     queueAfter,
     queueTotal: intents.length,
     queueIndex: 1, // 1-based; the user sees "1 of N"
+    pendingQuestion: pq,
     warnings: proposal.warnings || [],
   };
 }

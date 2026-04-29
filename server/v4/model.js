@@ -142,7 +142,13 @@ function createFreshState() {
     envelopes: {},        // keyed by ekey(name)
     transactions: [],     // append-only [{ id, ts, kind, amountCents, note, envelopeKey, date }]
     events: [],           // append-only audit log [{ id, ts, intent, prevBalance, newBalance, ... }]
-    voiceReplies: false,  // when true and incoming message was voice, also send a voice reply
+    voiceReplies: false,  // legacy — voice playback was removed; field kept for back-compat
+    // Pending question — when the bot asks something, this captures what
+    // it asked so the next turn can re-ask if the user didn't answer.
+    // Cleared automatically when answered or after a few turns.
+    //   { text: "What's roughly in your account?", kind: "balance",
+    //     askedAt: ts, turnsAlive: 1 }
+    pendingQuestion: null,
   };
 }
 
@@ -157,10 +163,53 @@ function escapeMd(s) {
   return String(s).replace(/([_*`\[\]])/g, "\\$1");
 }
 
+// ── PENDING QUESTION ─────────────────────────────────────────
+// When the bot asks a question, we store it on state.pendingQuestion.
+// On the next turn the AI sees it. If the user answered, the AI omits
+// pendingQuestion in its output → we clear it. If they didn't answer,
+// the AI re-asks and returns the same pendingQuestion → we increment
+// turnsAlive. After 3 turns we auto-clear so the bot doesn't badger
+// the user forever about a question they obviously don't want to answer.
+//
+// pq input shape (from AI): { text: "What's payday?", kind: "payday" }
+//   kind ∈ ["balance","payday","amount","date","name","yes_no","general"]
+// Returns mutated state. Pure aside from that mutation.
+const PQ_VALID_KINDS = ["balance", "payday", "amount", "date", "name", "yes_no", "general"];
+const PQ_MAX_TURNS = 3;
+function updatePendingQuestion(state, pq) {
+  if (!pq || typeof pq !== "object" || !pq.text || typeof pq.text !== "string") {
+    state.pendingQuestion = null;
+    return state;
+  }
+  const text = pq.text.trim().slice(0, 240);
+  if (!text) {
+    state.pendingQuestion = null;
+    return state;
+  }
+  const kind = PQ_VALID_KINDS.includes(pq.kind) ? pq.kind : "general";
+  const prev = state.pendingQuestion;
+  let turnsAlive = 1;
+  if (prev && prev.text === text && prev.kind === kind) {
+    turnsAlive = (prev.turnsAlive || 1) + 1;
+  }
+  if (turnsAlive > PQ_MAX_TURNS) {
+    state.pendingQuestion = null;
+    return state;
+  }
+  state.pendingQuestion = {
+    text,
+    kind,
+    askedAt: Date.now(),
+    turnsAlive,
+  };
+  return state;
+}
+
 module.exports = {
   toCents, toMoney, toShort,
   today, daysBetween, daysUntil, normalizeDate, addDays, advancePayday,
   ENVELOPE_KINDS, RECURRENCES, PAY_FREQS, TX_KINDS,
   ekey, uid, escapeMd,
   createFreshState,
+  updatePendingQuestion,
 };

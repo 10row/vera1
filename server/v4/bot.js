@@ -15,56 +15,6 @@ const db = require("./db");
 const { t, normalizeLang, defaultCurrencyForLang } = require("./locales");
 const currency = require("./currency");
 
-// updatePinnedStatus — keeps a single message pinned at the top of the
-// chat showing the user's current hero state. Updated on every state
-// change. Closes the "empty when I land" gap: regardless of how the
-// user arrives at the chat, the baseline is at the top of the screen.
-//
-// Idempotent. Failsafe: if pinning is denied (rare in private chats),
-// logs and continues — no user-visible error. The pinned message id
-// lives in state.pinnedMessageId.
-async function updatePinnedStatus(prisma, ctx, userId) {
-  try {
-    const state = await db.loadState(prisma, userId);
-    if (!state.setup) return; // nothing to pin yet
-    const lang = state.language || "en";
-    const heroText = heroLine(state);
-    if (!heroText) return;
-    const text = "📌 " + heroText;
-    const chatId = ctx.chat ? ctx.chat.id : (ctx.from && ctx.from.id);
-    if (!chatId) return;
-
-    if (state.pinnedMessageId) {
-      // Edit the existing pinned message
-      try {
-        await ctx.api.editMessageText(chatId, state.pinnedMessageId, text, { parse_mode: "Markdown" });
-        return;
-      } catch (e) {
-        // If edit fails (deleted, unpinned), fall through to re-create.
-        const msg = (e && e.message) || "";
-        if (!/not modified/i.test(msg)) {
-          console.warn("[v4 pinned edit]", msg);
-        } else {
-          return;
-        }
-      }
-    }
-    // Create + pin a fresh status message
-    try {
-      const sent = await ctx.api.sendMessage(chatId, text, { parse_mode: "Markdown" });
-      try { await ctx.api.pinChatMessage(chatId, sent.message_id, { disable_notification: true }); }
-      catch (e) { console.warn("[v4 pin]", e && e.message); }
-      state.pinnedMessageId = sent.message_id;
-      await db.saveState(prisma, userId, state);
-    } catch (e) {
-      console.warn("[v4 pin send]", e && e.message);
-    }
-  } catch (e) {
-    // Pinning is best-effort. Never break a flow over it.
-    console.warn("[v4 updatePinnedStatus]", e && e.message);
-  }
-}
-
 // renderVerdict — the seam between engineering rules and user voice.
 // The validator emits a machine-readable { code, context }; this wraps
 // it in t() to produce a conversational, locale-aware sentence. Schema
@@ -425,7 +375,16 @@ async function processText(prisma, ctx, telegramId, text, opts) {
     await db.appendHistory(prisma, u.id, "user", text);
     if (result.message) await db.appendHistory(prisma, u.id, "assistant", result.message);
 
+    // PENDING QUESTION TRACKING — update state.pendingQuestion based on
+    // what the AI returned. If AI omitted it (user answered, or just a
+    // statement) → cleared. If AI re-asked → turnsAlive++, auto-clear
+    // after 3 turns so we don't badger.
+    const beforePq = JSON.stringify(state.pendingQuestion || null);
+    m.updatePendingQuestion(state, result.pendingQuestion || null);
+    const pqChanged = JSON.stringify(state.pendingQuestion || null) !== beforePq;
+
     if (result.kind === "talk") {
+      if (pqChanged) await db.saveState(prisma, u.id, state);
       await sayMaybeVoice(ctx, result.message || "…", {
         parse_mode: "Markdown",
         reply_markup: mainKeyboard(),
@@ -436,6 +395,7 @@ async function processText(prisma, ctx, telegramId, text, opts) {
     // DECISION SUPPORT: read-only simulate. Show projected hero + delta,
     // offer "Log it now" button that converts to a real record_spend confirm.
     if (result.kind === "decision") {
+      if (pqChanged) await db.saveState(prisma, u.id, state);
       const sim = result.simulate;
       const proj = sim.projected;
       const cur = sim.current;
@@ -508,7 +468,10 @@ async function processText(prisma, ctx, telegramId, text, opts) {
       toConfirm.push({ intent: d.intent, verdict: d.verdict });
     }
 
-    if (autoApplied.length > 0) await db.saveState(prisma, u.id, curState);
+    // Save state if anything mutated it: auto-applied intents OR pq update.
+    // (curState is the same object reference as `state`, so the pq update
+    // we did above already lives on curState — one save covers both.)
+    if (autoApplied.length > 0 || pqChanged) await db.saveState(prisma, u.id, curState);
 
     if (rejections.length > 0) {
       const txt = (result.message ? result.message + "\n\n" : "")
@@ -577,7 +540,6 @@ async function processText(prisma, ctx, telegramId, text, opts) {
   });
 
   // Refresh pinned status (best-effort, never blocks the user-facing flow).
-  updatePinnedStatus(prisma, ctx, u.id).catch(() => {});
 }
 
 // ── HANDLERS ───────────────────────────────────────────
@@ -723,8 +685,7 @@ function attach(prisma) {
             parse_mode: "Markdown",
             reply_markup: mainKeyboard(),
           });
-          updatePinnedStatus(prisma, ctx, u.id).catch(() => {});
-        } catch (e) {
+                } catch (e) {
           await ctx.reply(t("undo.couldnt", lang, { error: e.message })).catch(() => {});
         }
       });
@@ -856,8 +817,7 @@ function attach(prisma) {
             await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
             await ctx.reply(t("undo.undone", stateLang, { what: desc }) + "\n" + heroLine(r.state),
               { parse_mode: "Markdown", reply_markup: mainKeyboard() }).catch(() => {});
-            updatePinnedStatus(prisma, ctx, u.id).catch(() => {});
-          } catch (e) {
+                    } catch (e) {
             await ctx.reply(t("undo.couldnt", stateLang, { error: e.message })).catch(() => {});
           }
         });
@@ -995,8 +955,7 @@ function attach(prisma) {
             finalOpts.reply_markup = undoButton(setUndoToken(lastEventId, u.id), stateLang).reply_markup;
           }
           await safeReply(ctx, finalLines.filter(Boolean).join("\n"), finalOpts);
-          updatePinnedStatus(prisma, ctx, u.id).catch(() => {});
-        } catch (e) {
+                } catch (e) {
           console.error("[v4 confirm apply]", e);
           await ctx.editMessageText(t("confirm.couldntApply", stateLang, { error: e.message })).catch(() => {});
         }
