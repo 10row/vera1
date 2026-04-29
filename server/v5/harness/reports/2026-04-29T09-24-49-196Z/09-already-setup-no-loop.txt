@@ -1,0 +1,110 @@
+# 09-already-setup-no-loop
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 1st
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-01.
+       
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ set up my account again
+
+[bot] ► Your account is already set up! If you need to reset everything and start fresh, just say 'reset'. Otherwise, I'm ready to help — what would you like to do?
+
+                              [you] ◄ I have like 5000
+
+[bot] ► Got it — updating your balance to $5,000.00.
+       
+       Set balance to $5,000.00
+       [Yes] [Cancel]
+
+                              [you] ◄ actually I have 7000 now
+
+[bot] ► Updating your balance to $7,000.00.
+       
+       Set balance to $7,000.00
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Set balance to $7,000.00
+       [Yes] [Cancel]
+
+[bot] ► 🟢 *Calm* — $3,500.00/day, 2 days to payday.
+       [Undo]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $3,500.00/day, 2 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+null
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 700000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-01",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "f68ab0a1cc94a245e8532793",
+      "ts": 1777454697233,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    },
+    {
+      "id": "67a2b66a3d473dc6bce95976",
+      "ts": 1777454701696,
+      "kind": "correction",
+      "amountCents": 200000,
+      "note": "balance correction",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "e3d92b44cfc369ff22dc4dc9",
+      "ts": 1777454697233,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-01",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "1cb006b267d95071489e9d4d",
+      "ts": 1777454701696,
+      "intent": {
+        "kind": "adjust_balance",
+        "params": {
+          "newBalanceCents": 700000
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 700000,
+      "delta": 200000
+    }
+  ],
+  "onboardingDraft": null
+}

@@ -1,0 +1,64 @@
+# 02-onboarding-dump
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ Hey, I have about 5000 in my account and I get paid the 15th of each month
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-15.
+       
+       🟢 *Calm* — $312.50/day, 16 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $312.50/day, 16 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+null
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "972128669dde1864408775f0",
+      "ts": 1777454773448,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "b18c2c15b85933b0214a3e4e",
+      "ts": 1777454773448,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

@@ -1,0 +1,103 @@
+# 05-add-bill
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-25.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ rent is 1400 due the 1st
+
+[bot] ► Logging rent: $1,400/month, due May 1st.
+       
+       Add bill *Rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Add bill *Rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+       [Undo]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+null
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {
+    "rent": {
+      "name": "Rent",
+      "amountCents": 140000,
+      "dueDate": "2026-05-01",
+      "recurrence": "monthly",
+      "paidThisCycle": false,
+      "createdAt": 1777454779831
+    }
+  },
+  "transactions": [
+    {
+      "id": "12b284f2caa1e11ac076c9a1",
+      "ts": 1777454778278,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "7edc8262754b3728f70581f8",
+      "ts": 1777454778278,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "75c23fb18781d049c67affd4",
+      "ts": 1777454779831,
+      "intent": {
+        "kind": "add_bill",
+        "params": {
+          "name": "Rent",
+          "amountCents": 140000,
+          "dueDate": "2026-05-01",
+          "recurrence": "monthly"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 500000,
+      "billKey": "rent"
+    }
+  ],
+  "onboardingDraft": null
+}

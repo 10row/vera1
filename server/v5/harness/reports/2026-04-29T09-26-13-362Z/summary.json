@@ -1,0 +1,107 @@
+{
+  "runId": "2026-04-29T09-26-13-362Z",
+  "total": 11,
+  "passed": 11,
+  "failed": 0,
+  "results": [
+    {
+      "name": "01-onboarding-clean",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "02-onboarding-dump",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "03-onboarding-vague",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "04-spend-and-confirm",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "05-add-bill",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "06-cancel-confirm",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "07-undo-flow",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "08-can-i-afford",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "09-already-setup-no-loop",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "10-russian-onboarding",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "11-typos",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    }
+  ]
+}

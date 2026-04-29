@@ -1,0 +1,128 @@
+# 05-add-bill
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ rent is 1400 due the 1st
+
+[bot] ► Logging rent: $1,400/month, due the 1st. You've got $3,600 left after that. 💪
+       
+       Add bill *Rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Add bill *Rent* — $1,400.00 · 2026-05-01 · monthly
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+       [Undo]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 8,
+    "warm": 9,
+    "safe": 9
+  },
+  "overall": 8.6,
+  "verdict": "pass",
+  "critique": [
+    "Flow is smooth and conversational—bot mirrors user language ('rent is 1400') naturally",
+    "Confirmation step is crisp: shows parsed data, math, and clear action buttons",
+    "One tiny friction: bot says 'Logging rent' then asks for confirmation—minor double-speak, but doesn't break trust",
+    "Math is transparent ($5k → $3.6k remaining after $1.4k rent) and builds confidence",
+    "No loops, no re-asking, no false 'setting up' messages—safe execution",
+    "Tone is encouraging ('You've got', '💪') without being saccharine; status emoji (🟢) is helpful",
+    "User can jump to /today and get instant status—good affordance discovery"
+  ],
+  "fixes": [
+    "After 'Logging rent' + confirmation, don't repeat the action line as '(edit) ✓ Add bill...'—feels redundant. Just confirm once: 'Got it. Rent added.' Then show new status.",
+    "Consider: after bill is added, proactively suggest next logical step ('Want to add more bills, or shall we check spending?') to reduce dead air",
+    "The 'remaining balance' callout ($3.6k) should persist in next status—user may not recall it. Show: 'Budget: $3.6k after rent' in the Calm line."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {
+    "rent": {
+      "name": "Rent",
+      "amountCents": 140000,
+      "dueDate": "2026-05-01",
+      "recurrence": "monthly",
+      "paidThisCycle": false,
+      "createdAt": 1777455729389
+    }
+  },
+  "transactions": [
+    {
+      "id": "105e58175c669f39c9bb6501",
+      "ts": 1777455727540,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "cdd315a4b91b6fa5b93f9ba1",
+      "ts": 1777455727540,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "02171d9a2cfcd74122d43d74",
+      "ts": 1777455729389,
+      "intent": {
+        "kind": "add_bill",
+        "params": {
+          "name": "Rent",
+          "amountCents": 140000,
+          "dueDate": "2026-05-01",
+          "recurrence": "monthly"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 500000,
+      "billKey": "rent"
+    }
+  ],
+  "onboardingDraft": null
+}

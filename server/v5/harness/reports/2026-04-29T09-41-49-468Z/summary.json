@@ -1,0 +1,348 @@
+{
+  "runId": "2026-04-29T09-41-49-468Z",
+  "total": 11,
+  "passed": 9,
+  "failed": 2,
+  "results": [
+    {
+      "name": "01-onboarding-clean",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 9,
+          "clear": 9,
+          "efficient": 10,
+          "warm": 9,
+          "safe": 10
+        },
+        "overall": 9.4,
+        "verdict": "pass",
+        "critique": [
+          "Onboarding is crisp: 3 turns, zero friction, user never confused.",
+          "Tone hits the sweet spot—friendly ('money buddy', emoji use) without saccharine.",
+          "Bot never asks for redundant info; respects what user gave.",
+          "Clear next-step framing: sets expectation for conversational usage.",
+          "Payday inference from 'the 15th' → 2026-05-15 is smart; no false 'confirm?' loops.",
+          "Opening balance typo risk mitigated: user types '5000', bot echoes formatted '$5,000.00'.",
+          "Final state immediate—no fake 'setting up' placeholder messages.",
+          "Health metric (daily burn, days to payday) delivered at right moment, not overload."
+        ],
+        "fixes": []
+      }
+    },
+    {
+      "name": "02-onboarding-dump",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 9,
+          "clear": 9,
+          "efficient": 10,
+          "warm": 9,
+          "safe": 10
+        },
+        "overall": 9.4,
+        "verdict": "pass",
+        "critique": [
+          "Perfectly parsed messy input (balance + payday) in one turn",
+          "Zero redundancy — immediately useful, zero setup friction",
+          "Tone is friendly, confident, not robotic",
+          "Clear examples of what to say next (teaches the language)",
+          "Immediately shows actionable insight (daily burn rate, days to payday)",
+          "/today command works perfectly without re-asking for data",
+          "No form-filling, no 'setting up' theater, no loops"
+        ],
+        "fixes": []
+      }
+    },
+    {
+      "name": "03-onboarding-vague",
+      "pass": false,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 7,
+          "clear": 8,
+          "efficient": 6,
+          "warm": 8,
+          "safe": 7
+        },
+        "overall": 7.2,
+        "verdict": "fail",
+        "critique": [
+          "Bot repeats the balance question twice ('what's roughly in your main account' → 'even a rough number works') despite user clearly dodging with 'what does this do?' — feels slightly pushy, not patient enough.",
+          "Final state shows balance: 300000, but transcript shows user said 'around 3000'. Massive discrepancy. Either data was corrupted or bot silently changed it — MAJOR safety red flag.",
+          "Bot doesn't acknowledge user's hesitation warmly enough on first dodge ('what does this do?') — could have explained value prop before re-asking.",
+          "Three messages to get balance + payday is acceptable, but the repetition on balance feels like the bot didn't fully respect the dodge.",
+          "Safe score tanked because final state data doesn't match transcript — this is a critical integrity failure."
+        ],
+        "fixes": [
+          "On first dodge ('what does this do?'), respond with: 'Just helps me understand your money so I can give better advice. No judgment, super optional.' Then give user an out: 'Want to skip for now?' before re-asking.",
+          "Verify data integrity: user stated 3000, final state shows 300000. Fix the data pipeline — never silently mutate user input.",
+          "Remove the second balance question ('This is just so I know...') — user already said 'ok' to the first ask. One gentle re-ask max, then offer skip.",
+          "Add explicit confirmation loop: 'So that's $3,000 — want me to write that down, or should we revisit it later?' gives user control."
+        ]
+      }
+    },
+    {
+      "name": "04-spend-and-confirm",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 9,
+          "warm": 8,
+          "safe": 10
+        },
+        "overall": 8.8,
+        "verdict": "pass",
+        "critique": [
+          "Flow is conversational and minimal — user naturally says what they spent, bot confirms once with a single Yes/Cancel step, never re-asks.",
+          "Clarity is excellent: balance updates are immediate, daily burn rate is always shown, status is always green/calm/warning-clear.",
+          "Efficiency is tight: 2 messages to log a spend (input + confirm), then done. No bloat, no extra steps.",
+          "Tone is friendly but not saccharine — 'All set ✅' and the emoji status feel warm without being cloying.",
+          "Safety is perfect: no re-confirmation after Yes, no loop, no 'setting up' language on second spend, Undo is offered without nagging."
+        ],
+        "fixes": [
+          "None required. This is a solid baseline experience. The confirmation UX (single Yes/Cancel) is the right call — it's fast but safe."
+        ]
+      }
+    },
+    {
+      "name": "05-add-bill",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 8,
+          "warm": 9,
+          "safe": 9
+        },
+        "overall": 8.6,
+        "verdict": "pass",
+        "critique": [
+          "Flow is smooth and conversational—bot mirrors user language ('rent is 1400') naturally",
+          "Confirmation step is crisp: shows parsed data, math, and clear action buttons",
+          "One tiny friction: bot says 'Logging rent' then asks for confirmation—minor double-speak, but doesn't break trust",
+          "Math is transparent ($5k → $3.6k remaining after $1.4k rent) and builds confidence",
+          "No loops, no re-asking, no false 'setting up' messages—safe execution",
+          "Tone is encouraging ('You've got', '💪') without being saccharine; status emoji (🟢) is helpful",
+          "User can jump to /today and get instant status—good affordance discovery"
+        ],
+        "fixes": [
+          "After 'Logging rent' + confirmation, don't repeat the action line as '(edit) ✓ Add bill...'—feels redundant. Just confirm once: 'Got it. Rent added.' Then show new status.",
+          "Consider: after bill is added, proactively suggest next logical step ('Want to add more bills, or shall we check spending?') to reduce dead air",
+          "The 'remaining balance' callout ($3.6k) should persist in next status—user may not recall it. Show: 'Budget: $3.6k after rent' in the Calm line."
+        ]
+      }
+    },
+    {
+      "name": "06-cancel-confirm",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 9,
+          "warm": 8,
+          "safe": 10
+        },
+        "overall": 8.8,
+        "verdict": "pass",
+        "critique": [
+          "Cancel flow is crisp — bot doesn't re-ask, doesn't loop, doesn't re-confirm the cancellation",
+          "Clear state after cancel: user taps Cancel, bot confirms once with (edit) label, moves on",
+          "Warm tone maintained throughout; 'still calm!' lands well after a large grocery spend",
+          "Natural language prompts at setup ('spent 20 on coffee', 'rent 1400 due the 1st') set expectations perfectly",
+          "SAFE: After cancel, /today works correctly — no ghost transaction, no balance confusion",
+          "Only tiny quibble: '(edit) Cancelled' label is slightly jargony; could be 'Removed' or just 'Cancelled ✓'"
+        ],
+        "fixes": [
+          "Consider dropping the '(edit)' prefix on cancel confirmation—just 'Cancelled — Spend $200.00 · groceries' is cleaner and less CLI-ish",
+          "If user cancels multiple times in a row, ensure no rate-limit warning sneaks in; this transcript shows one cancel works perfectly"
+        ]
+      }
+    },
+    {
+      "name": "07-undo-flow",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 9,
+          "warm": 8,
+          "safe": 10
+        },
+        "overall": 8.8,
+        "verdict": "pass",
+        "critique": [
+          "Flow is clean and conversational — user speaks naturally ('spent 80 on groceries'), bot responds in kind",
+          "Undo button is clearly visible and works instantly without re-asking for confirmation",
+          "No redundant messages — each bot message adds clarity or confirms action",
+          "Tone is friendly but measured; emoji usage (🟢, ✅) feels supportive without being cutesy",
+          "Safety: bot never re-asks for transaction details, handles undo without loops, shows updated balance both times",
+          "One tiny friction: after undo, user must type '/today' to see status again rather than it being auto-shown (minor efficiency gap)"
+        ],
+        "fixes": [
+          "After undo, auto-display the refreshed status line ('🟢 *Calm* — $192.30/day...') without requiring /today command — user shouldn't have to ask for what changed",
+          "Consider adding a confirmation micro-copy on undo like 'Removed groceries entry' to make the reversion even more tangible"
+        ]
+      }
+    },
+    {
+      "name": "08-can-i-afford",
+      "pass": false,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 9,
+          "warm": 8,
+          "safe": 7
+        },
+        "overall": 8.2,
+        "verdict": "fail",
+        "critique": [
+          "SAFE violation: Bot says '(edit) Cancelled' after user tapped Skip, implying a spend was logged then removed. The final state shows txCount=1, eventCount=1, suggesting the $200 was never logged. But the message is ambiguous—did it log then undo, or just reject? This creates doubt.",
+          "Bot asks to log immediately after afford check ('Log it' button), which is premature UX pattern—user is still deciding, not committing.",
+          "Natural: slightly clinical phrasing ('Let me check if $200 on a jacket works for you') could be warmer.",
+          "The /today command returns identical state to setup moment—no differentiation or context. Feels like a reset, not a recall."
+        ],
+        "fixes": [
+          "Change Skip/Log flow: After 'Can I afford?', use softer language like 'Ready to save it?' instead of immediate logging. Only log if user explicitly says 'add', 'log', or 'done'.",
+          "Clarify the Skip message to: '⏭️ Skipped — jacket check didn't log anything.' Remove '(edit) Cancelled' entirely; it's confusing.",
+          "Warm up the check response: 'Yep, you're good for that $200 jacket — you'd have $4,800 left. Want me to log it or just curious?'",
+          "Make /today context-aware: Show what's changed since setup ('1 check run, $5k balance still solid') rather than repeating the identical calm state."
+        ]
+      }
+    },
+    {
+      "name": "09-already-setup-no-loop",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 8,
+          "warm": 8,
+          "safe": 10
+        },
+        "overall": 8.6,
+        "verdict": "pass",
+        "critique": [
+          "Bot correctly avoids looping on 'set up my account again' — detects setup state and redirects.",
+          "Gracefully handles rephrased input 'I have 5000' by acknowledging current balance, not re-prompting.",
+          "Update flow is clear: confirmation → result → status summary.",
+          "Tone is friendly and helpful throughout.",
+          "No redundant questions, no 'setting up' language when already set up.",
+          "One tiny friction: 'I have like 5000' → bot says 'yep $5000 is what I see', which could briefly confuse (user said 'like', bot confirmed exact). Not a bug, but slight reading moment."
+        ],
+        "fixes": [
+          "Optional: when user says 'I have [amount]' and it matches current balance, consider: 'I already have that on record — want to update it?' instead of 'yep [amount] is what I see'. Tiny language tweak for clarity.",
+          "Consider adding context to the confirmation dialog: 'Update balance to $7,000.00? (was $5,000)' to make the delta explicit."
+        ]
+      }
+    },
+    {
+      "name": "10-russian-onboarding",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 9,
+          "warm": 8,
+          "safe": 10
+        },
+        "overall": 8.8,
+        "verdict": "pass",
+        "critique": [
+          "Strong onboarding: minimal friction, clear purpose established immediately",
+          "Russian localization feels natural and conversational—not stiff translation",
+          "User given concrete examples of how to interact ('потратил 20 на кофе', etc.) which is excellent UX",
+          "No redundant asks; each message progresses the setup cleanly",
+          "Balance shown as $5,000 USD, but user input was '5000'—currency assumption implicit (minor: could be confusing in multi-currency contexts)",
+          "The /today command suggests the bot has a command palette, but this wasn't introduced; feels like a bonus feature the user discovered",
+          "Tone is warm and encouraging without being saccharine ('Спокойно' + emoji + budget context is reassuring)"
+        ],
+        "fixes": [
+          "Consider confirming currency preference explicitly on first setup ('Валюта: доллары?' or similar), especially for Russian users who may use RUB",
+          "Document or hint at available commands earlier (e.g., '/today, /week, /month' in the help text after setup completes)",
+          "The final status message could acknowledge that /today was just run, or avoid redundancy if the same state was just shown"
+        ]
+      }
+    },
+    {
+      "name": "11-typos",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 9,
+          "clear": 9,
+          "efficient": 9,
+          "warm": 9,
+          "safe": 10
+        },
+        "overall": 9.2,
+        "verdict": "pass",
+        "critique": [
+          "User typos ('spnet', 'cofee', 'chek') handled gracefully with zero friction — bot inferred intent perfectly",
+          "Setup to first transaction in 3 turns — extremely lean",
+          "Confirmation pattern (show → tap Yes/Cancel → confirm with emoji) is reassuring without being verbose",
+          "Status line consistently updates balance, never repeats questions, never loops",
+          "Tone: warm emojis, casual language ('just talk to me'), actionable next steps — feels like a competent friend, not a form",
+          "No safety violations: one balance/payday, no double-asks, no false 'setting up' after setup done"
+        ],
+        "fixes": [
+          "None critical. Minor: consider auto-correcting obvious typos in the log display (show 'coffee' not 'cofee') for confidence, but don't interrupt the flow with a correction message"
+        ]
+      }
+    }
+  ]
+}

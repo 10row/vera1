@@ -1,0 +1,87 @@
+# 02-onboarding-dump
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ Hey, I have about 5000 in my account and I get paid the 15th of each month
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-15.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $312.50/day, 16 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $312.50/day, 16 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 9,
+    "clear": 10,
+    "efficient": 10,
+    "warm": 9,
+    "safe": 10
+  },
+  "overall": 9.6,
+  "verdict": "pass",
+  "critique": [
+    "Extraction and setup happened instantly with zero follow-up questions — user felt heard immediately",
+    "Tone shifts from task-complete to helpful guide without ever feeling robotic",
+    "Examples given ('spent 20 on coffee', 'rent 1400 due the 1st') are concrete and actionable",
+    "Daily burn calculation ($312.50/day) grounds the data in real utility",
+    "No redundancy: /today repeats exactly what was already shown, which is fine for a status check but shows the bot isn't overthinking"
+  ],
+  "fixes": [
+    "Minor: /today could add something new (e.g., 'No transactions logged yet' or 'Ready to log your first expense?') to make the repeat feel less like a parrot",
+    "Consider remembering context — if user says /today again within 5 mins, a cached response with 'Nothing new since X min ago' would feel smarter"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "4d5176f5ec5e57f98373193f",
+      "ts": 1777455863068,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "32f330d142a03aff3f1f5142",
+      "ts": 1777455863068,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

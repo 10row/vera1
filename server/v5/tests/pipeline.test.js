@@ -150,15 +150,15 @@ test("[pipeline] AI throws → talk fallback with apology", async () => {
 });
 
 // ── THE LOOP TEST: virgin + 'ok' should never crash or loop ─
-test("[pipeline] virgin + 10 random inputs → never produces a setup_account intent without a balance", async () => {
+test("[pipeline] virgin + 10 random inputs → never produces a setup_account intent without a balance (excluding skip words)", async () => {
   let s = m.createFreshState();
-  const inputs = ["hi", "ok", "lol", "what", "huh", "yes", "no", "?", "🚀", "hmm"];
+  // Inputs MUST not contain numbers (else parseAmount picks them up) and
+  // MUST not be skip words (else early-skip exits onboarding intentionally).
+  const inputs = ["hi", "ok", "lol", "what", "huh", "yes", "?", "🚀", "hmm", "ehh"];
   for (const inp of inputs) {
     const r = await processMessage(s, inp, [], { _aiCall: async () => { throw new Error("AI shouldn't be called"); } });
     assertEq(r.kind, "onboarding");
-    // No intent was emitted (since none of these had a number)
     assertEq(r.intent, null);
   }
-  // State still virgin
   assertEq(s.setup, false);
 });

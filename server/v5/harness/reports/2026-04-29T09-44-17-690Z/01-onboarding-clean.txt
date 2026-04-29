@@ -1,0 +1,101 @@
+# 01-onboarding-clean
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ /start
+
+[bot] ► Hey 👋 I'm SpendYes — your money buddy.
+       
+       Let's start simple: what's roughly in your main account right now? A ballpark number is fine.
+
+                              [you] ◄ 5000
+
+[bot] ► Got it — $5,000.00. 👍
+       
+       When's your next paycheck? A date like *"the 15th"* or *"April 30"*, or *"skip"* if it's irregular.
+
+                              [you] ◄ the 15th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-15.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $312.50/day, 16 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $312.50/day, 16 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 9,
+    "clear": 10,
+    "efficient": 10,
+    "warm": 9,
+    "safe": 10
+  },
+  "overall": 9.6,
+  "verdict": "pass",
+  "critique": [
+    "Onboarding completes in exactly 3 turns as specified—textbook efficiency.",
+    "Language is conversational ('money buddy', 👋, 👍) without being saccharine.",
+    "Bot never repeats or asks for clarification—accepts '5000' and 'the 15th' directly and interprets correctly.",
+    "Immediate payoff: user sees actionable insight ('$312.50/day') before any instruction dumping.",
+    "State is clean: no spurious fields, setup flag true, all required data captured.",
+    "Follow-up /today command works seamlessly—no re-onboarding, bot remembers context.",
+    "Only micro-note: 'the 15th' could theoretically be ambiguous (monthly vs bi-weekly), but bot assumes monthly (correct default) without loop or clarification—slight trust gamble, but acceptable given UX priority."
+  ],
+  "fixes": [
+    "If payday detection fails in edge cases (e.g., 'the 32nd'), add one-line clarification: 'Just to check—that's the 15th of each month?' rather than silently defaulting.",
+    "Consider logging the 'ballpark' accuracy—if user later corrects balance, note it for future onboarding calibration (not a UX break, just data)."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "ebee0bcfa2885b9cdb1e99e3",
+      "ts": 1777455857754,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "e693eff52e549f10037c8ea4",
+      "ts": 1777455857754,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

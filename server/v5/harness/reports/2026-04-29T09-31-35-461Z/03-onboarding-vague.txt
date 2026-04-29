@@ -1,0 +1,111 @@
+# 03-onboarding-vague
+# pass=false mech=true llm=fail
+
+## TRANSCRIPT
+
+                              [you] ◄ hi
+
+[bot] ► Hey 👋 I'm SpendYes — your money buddy.
+       
+       Let's start simple: what's roughly in your main account right now? A ballpark number is fine.
+
+                              [you] ◄ what does this do?
+
+[bot] ► No worries — even a rough number works. *5000*, *3k*, ballpark. What's it look like?
+
+                              [you] ◄ ok
+
+[bot] ► This is just so I know your spending rhythm. If you're not sure, even *0* works — we can fix it later.
+
+                              [you] ◄ fine, around 3000
+
+[bot] ► Got it — $3,000.00. 👍
+       
+       When's your next paycheck? A date like *"the 15th"* or *"April 30"*, or *"skip"* if it's irregular.
+
+                              [you] ◄ skip
+
+[bot] ► All set ✅ — $3,000.00, irregular pay.
+       
+       From here just talk to me: "spent 20 on coffee", "got 3000", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $100.00/day, 30 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $100.00/day, 30 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 6,
+    "clear": 7,
+    "efficient": 5,
+    "warm": 7,
+    "safe": 6
+  },
+  "overall": 6.2,
+  "verdict": "fail",
+  "critique": [
+    "Bot repeats the same ask 3 times despite user resistance—patience becomes pestering, not genuine care.",
+    "User says 'ok' (non-answer), bot rephrases the question instead of asking differently or offering escape valve.",
+    "Final state shows balance=$300,000 but user said '$3,000'—data corruption or silent backend correction is unsafe.",
+    "User never provided payday; final state has payday='2026-05-29' with no clear source—contradicts 'skip' response.",
+    "Efficiency bloat: 4 messages to get one piece of info (balance) when user was clearly hesitant; should offer 'tell me later' path.",
+    "No visual hint that setup is optional—user feels trapped into answering, not invited to explore."
+  ],
+  "fixes": [
+    "On vague responses ('what does this do?', 'ok'), offer immediate escape: 'Skip for now, we can set it up later' instead of rephrasing.",
+    "Cap re-ask at 1 gentle rephrase, then move to 'Let's skip this—just tell me as you spend' and let user opt in.",
+    "Verify final state matches transcript: if user said '$3,000' and 'skip', balance should be $3,000 and payday should be null or unset, not hardcoded to May 2026.",
+    "After 'skip', do NOT show payday-derived stats ('30 days to payday')—acknowledge no payday data exists.",
+    "Tone shift after hesitation: drop the cheerleader cadence; be quieter, more 'I'm here if you need me'."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 300000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-29",
+  "payFrequency": "irregular",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "85c70824ee7893be83bbe3d8",
+      "ts": 1777455111120,
+      "kind": "setup",
+      "amountCents": 300000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "f2bdc48338c930e6d6587f5f",
+      "ts": 1777455111120,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 300000,
+          "payday": "2026-05-29",
+          "payFrequency": "irregular"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 300000
+    }
+  ],
+  "onboardingDraft": null
+}

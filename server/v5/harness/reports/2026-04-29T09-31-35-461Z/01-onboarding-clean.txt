@@ -1,0 +1,100 @@
+# 01-onboarding-clean
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ /start
+
+[bot] ► Hey 👋 I'm SpendYes — your money buddy.
+       
+       Let's start simple: what's roughly in your main account right now? A ballpark number is fine.
+
+                              [you] ◄ 5000
+
+[bot] ► Got it — $5,000.00. 👍
+       
+       When's your next paycheck? A date like *"the 15th"* or *"April 30"*, or *"skip"* if it's irregular.
+
+                              [you] ◄ the 15th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-15.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $312.50/day, 16 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $312.50/day, 16 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 9,
+    "clear": 10,
+    "efficient": 10,
+    "warm": 9,
+    "safe": 10
+  },
+  "overall": 9.6,
+  "verdict": "pass",
+  "critique": [
+    "Exceptional onboarding flow—3 turns exactly as specified, zero friction.",
+    "Balance clarification ('$5,000.00') builds trust immediately without condescension.",
+    "Payday prompt is genuinely conversational ('the 15th' or 'April 30')—meets users where they naturally speak.",
+    "Final summary ties back what was set up + delivers immediate value (daily budget, days-to-payday).",
+    "Tone is warm, peer-like, never robotic. Emoji use feels earned, not forced.",
+    "No redundancy: each message advances state; no 'setting up' language when already done.",
+    "The `/today` response confirms system is live and responsive—good confidence signal."
+  ],
+  "fixes": [
+    "None required. This is the baseline for onboarding quality."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "ee39de888711907392327445",
+      "ts": 1777455095500,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "c86bc3e9ea19b7f84e5da6e9",
+      "ts": 1777455095500,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

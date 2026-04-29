@@ -1,0 +1,74 @@
+# 08-can-i-afford
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-25.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ Can I afford a $200 jacket?
+
+[bot] ► Let me check if a $200 jacket fits your plan…
+       🟢 You'd still have $184.61/day.
+       [Log it] [No]
+                              [you tapped: No]
+
+[bot] ► (edit) That confirm has expired.
+       [Log it] [No]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+null
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "5d5ab9f256deeffc0123ea3b",
+      "ts": 1777454783521,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "6d9c49b1e0c5cdde9a981a53",
+      "ts": 1777454783521,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

@@ -1,0 +1,137 @@
+# 07-undo-flow
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ spent 80 on groceries
+
+[bot] ► Logged $80 on groceries. You're at $4,920 now.
+       
+       Spend $80.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $80.00 · groceries
+
+[bot] ► 🟢 *Calm* — $189.23/day, 26 days to payday.
+       [Undo]
+                              [you tapped: Undo]
+
+[bot] ► Undone.
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 9,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 9,
+    "safe": 10
+  },
+  "overall": 9.2,
+  "verdict": "pass",
+  "critique": [
+    "Undo button appears *after* confirmation, not before—user already committed before getting the escape hatch",
+    "Minor: 'Undone.' is sparse; could reinforce what was reversed ('Undone: $80 groceries')",
+    "State transitions are clean and never redundant—excellent"
+  ],
+  "fixes": [
+    "Move [Undo] button into the confirmation prompt: '[Yes] [Cancel] [Undo recent]' or show it immediately after confirmation before the status line",
+    "Change 'Undone.' response to 'Undone: $80.00 · groceries' to reinforce what was reversed and rebuild trust",
+    "Consider a 2–3 second undo window for natural speech inputs (e.g., user says 'wait, undo'—catch it auto)"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "a5fdbfa5d10363ddc0cf2439",
+      "ts": 1777455889194,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "88b4166bd3a463f692917001",
+      "ts": 1777455889194,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "67d56406278685962b752a0d",
+      "ts": 1777455890985,
+      "intent": {
+        "kind": "record_spend",
+        "params": {
+          "amountCents": 8000,
+          "note": "groceries"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 492000,
+      "undone": true
+    },
+    {
+      "id": "a047bb860c3770f128b55860",
+      "ts": 1777455890986,
+      "intent": {
+        "kind": "undo_last",
+        "params": {}
+      },
+      "prevBalance": 492000,
+      "newBalance": 500000,
+      "undid": {
+        "eventId": "67d56406278685962b752a0d",
+        "intent": {
+          "kind": "record_spend",
+          "params": {
+            "amountCents": 8000,
+            "note": "groceries"
+          }
+        }
+      }
+    }
+  ],
+  "onboardingDraft": null
+}

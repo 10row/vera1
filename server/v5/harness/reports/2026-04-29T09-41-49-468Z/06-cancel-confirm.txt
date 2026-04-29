@@ -1,0 +1,98 @@
+# 06-cancel-confirm
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 1st
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-01.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ spent 200 on groceries
+
+[bot] ► Logged $200 on groceries. You're at $4,800 now — still calm! 🛒
+       
+       Spend $200.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Cancel]
+
+[bot] ► (edit) Cancelled — Spend $200.00 · groceries
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Cancel flow is crisp — bot doesn't re-ask, doesn't loop, doesn't re-confirm the cancellation",
+    "Clear state after cancel: user taps Cancel, bot confirms once with (edit) label, moves on",
+    "Warm tone maintained throughout; 'still calm!' lands well after a large grocery spend",
+    "Natural language prompts at setup ('spent 20 on coffee', 'rent 1400 due the 1st') set expectations perfectly",
+    "SAFE: After cancel, /today works correctly — no ghost transaction, no balance confusion",
+    "Only tiny quibble: '(edit) Cancelled' label is slightly jargony; could be 'Removed' or just 'Cancelled ✓'"
+  ],
+  "fixes": [
+    "Consider dropping the '(edit)' prefix on cancel confirmation—just 'Cancelled — Spend $200.00 · groceries' is cleaner and less CLI-ish",
+    "If user cancels multiple times in a row, ensure no rate-limit warning sneaks in; this transcript shows one cancel works perfectly"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-01",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "4a53681b8f335313dfd5f2a7",
+      "ts": 1777455735129,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "5a64014cf296e4162fedb007",
+      "ts": 1777455735129,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-01",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

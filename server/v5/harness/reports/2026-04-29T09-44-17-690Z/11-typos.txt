@@ -1,0 +1,158 @@
+# 11-typos
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5k bal pay 1st
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-01.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ spnet 25 on cofee
+
+[bot] ► Logged $25 on coffee ☕ — $4,975 left.
+       
+       Spend $25.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $25.00 · coffee
+
+[bot] ► 🟢 *Calm* — $2,487.50/day, 2 days to payday.
+       [Undo]
+
+                              [you] ◄ got 3000 pay chek
+
+[bot] ► Recording $3,000 paycheck ✅
+       
+       Income $3,000.00 · paycheck
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Income $3,000.00 · paycheck
+
+[bot] ► 🟢 *Calm* — $3,987.50/day, 2 days to payday.
+       [Undo]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $3,987.50/day, 2 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 9,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 9,
+    "safe": 10
+  },
+  "overall": 9.2,
+  "verdict": "pass",
+  "critique": [
+    "Typo tolerance is excellent—bot understood 'spnet' as 'spent' and 'cofee' as 'coffee' without asking for clarification.",
+    "Perfect safety: never re-asked for balance or payday after initial setup, no loops, no redundant confirmations.",
+    "Confirmation pattern (Yes/Cancel buttons) is clean and gives user control without friction.",
+    "Status updates (Calm, daily rate, days to payday) are contextual and helpful without being verbose.",
+    "Natural language parsing handles colloquial input ('got 3000 pay chek') flawlessly.",
+    "Undo buttons preserve agency and reduce anxiety about mistakes.",
+    "Only micro-note: '/today' response could have included a brief summary (e.g., 'Today: 1 expense, 1 income') but not critical."
+  ],
+  "fixes": [
+    "None required for safety or core UX. This is production-ready.",
+    "Optional: enrich '/today' or status responses with transaction count summary for extra context awareness."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 797500,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-01",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "7bbf29cab4a5c3dca1d62529",
+      "ts": 1777455912324,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    },
+    {
+      "id": "e61e1f70b00ae79f35ef2a5f",
+      "ts": 1777455913968,
+      "kind": "spend",
+      "amountCents": -2500,
+      "note": "coffee",
+      "billKey": null,
+      "date": "2026-04-29"
+    },
+    {
+      "id": "657448eaab0cc19c0dba551f",
+      "ts": 1777455915334,
+      "kind": "income",
+      "amountCents": 300000,
+      "note": "paycheck",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "d291a6a18ad3e7a7384867a7",
+      "ts": 1777455912324,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-01",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "61368280f7ff713dc2575663",
+      "ts": 1777455913968,
+      "intent": {
+        "kind": "record_spend",
+        "params": {
+          "amountCents": 2500,
+          "note": "coffee"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 497500
+    },
+    {
+      "id": "dacd5292b6a5ea5b76855a75",
+      "ts": 1777455915334,
+      "intent": {
+        "kind": "record_income",
+        "params": {
+          "amountCents": 300000,
+          "note": "paycheck"
+        }
+      },
+      "prevBalance": 497500,
+      "newBalance": 797500
+    }
+  ],
+  "onboardingDraft": null
+}

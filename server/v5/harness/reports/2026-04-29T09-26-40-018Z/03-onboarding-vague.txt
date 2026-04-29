@@ -1,0 +1,110 @@
+# 03-onboarding-vague
+# pass=false mech=true llm=fail
+
+## TRANSCRIPT
+
+                              [you] ◄ hi
+
+[bot] ► Hey 👋 I'm SpendYes — your money buddy.
+       
+       What's the rough balance in your main account right now? Just say a number.
+
+                              [you] ◄ what does this do?
+
+[bot] ► Just a number — like *5000* or *$5k*. What's roughly in your main account?
+
+                              [you] ◄ ok
+
+[bot] ► Just a number — like *5000* or *$5k*. What's roughly in your main account?
+
+                              [you] ◄ fine, around 3000
+
+[bot] ► Got it — $3,000.00 saved.
+       
+       When's your next paycheck? Say a date like *"the 15th"* or *"April 30"* — or *"skip"* if it's irregular.
+
+                              [you] ◄ skip
+
+[bot] ► Done — $3,000.00 saved, irregular pay.
+       
+       🟢 *Calm* — $100.00/day, 30 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $100.00/day, 30 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 5,
+    "clear": 6,
+    "efficient": 4,
+    "warm": 5,
+    "safe": 6
+  },
+  "overall": 5.2,
+  "verdict": "fail",
+  "critique": [
+    "Bot repeats exact same prompt twice when user hesitates ('ok') — breaks patience promise. Should acknowledge uncertainty, offer help, or pivot.",
+    "Balance is 300k in final state but transcript shows user said '3000'. Data mismatch suggests either transcript is incomplete or state doesn't reflect actual flow.",
+    "Payday set to 2026-05-29 but user said 'skip' (irregular). Final state contradicts transcript.",
+    "Bot says 'Setup up successful' vibe but never explicitly confirms onboarding is done — user might not know they can start spending.",
+    "Tone is clipped and instruction-heavy ('Just a number'). Feels like a form, not a friend.",
+    "No acknowledgment of user's hesitation ('what does this do?'). Bot doubles down on the same ask instead of meeting them where they are."
+  ],
+  "fixes": [
+    "When user hesitates or gives non-answer like 'ok', respond: 'No pressure — this just helps me know your spending rhythm. What's your balance? (Or type *skip*)'",
+    "Track user state: if they haven't answered a core field, offer an out: 'Want to skip this and try later?' Don't loop the same prompt.",
+    "Verify transcript matches final state. If balance is 300k, show that in conversation. If payday is 2026-05-29, reconcile with 'skip'.",
+    "After onboarding, explicitly end: 'You're all set! 🎉 Say */today* for today's status, or just tell me a spend when you're ready.'",
+    "Warm up language: 'Help me understand your money — what's sitting in your main account right now?'",
+    "Cap repetition: if user gives non-answer twice, offer skip path instead of looping a third time."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 300000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-29",
+  "payFrequency": "irregular",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "4ea4583a4d4ed40ac4734870",
+      "ts": 1777454807212,
+      "kind": "setup",
+      "amountCents": 300000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "9e07352d3b693dd5626a3191",
+      "ts": 1777454807212,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 300000,
+          "payday": "2026-05-29",
+          "payFrequency": "irregular"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 300000
+    }
+  ],
+  "onboardingDraft": null
+}

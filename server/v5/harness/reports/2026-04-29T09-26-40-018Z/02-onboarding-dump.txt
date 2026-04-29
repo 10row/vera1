@@ -1,0 +1,86 @@
+# 02-onboarding-dump
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ Hey, I have about 5000 in my account and I get paid the 15th of each month
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-15.
+       
+       🟢 *Calm* — $312.50/day, 16 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $312.50/day, 16 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 9,
+    "clear": 9,
+    "efficient": 10,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 9.2,
+  "verdict": "pass",
+  "critique": [
+    "Perfect one-turn setup — extracts balance and payday from natural language without asking",
+    "Clear status immediately with visual affordance (🟢 Calm) and actionable metric ($/day to payday)",
+    "Zero waste — no confirmation loops, no 'setting up', no redundant questions",
+    "Safety flawless — never re-asks, handles repeat command (/today) without repetition fatigue",
+    "Tone is professional-friendly, not robotic or over-casual",
+    "Only minor: could be slightly warmer with a micro-personalization ('Got it!' vs 'Done')"
+  ],
+  "fixes": [
+    "Replace 'Done' with 'Got it!' or 'All set!' for +1 warmth without sacrificing brevity",
+    "Consider optional follow-up affordance like 'Want to add a budget? /budget' if that's a next-step need (but only if data shows users do this)"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "e2ecf4573da9b41ae53538e8",
+      "ts": 1777454803231,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "b101b475cab8ffd1f2cdf1b5",
+      "ts": 1777454803231,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

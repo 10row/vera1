@@ -1,0 +1,140 @@
+# 07-undo-flow
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ spent 80 on groceries
+
+[bot] ► Logged $80.00 on groceries. You're at $4,920.00 now.
+       
+       Spend $80.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $80.00 · groceries
+
+[bot] ► 🟢 *Calm* — $189.23/day, 26 days to payday.
+       [Undo]
+                              [you tapped: Undo]
+
+[bot] ► Undone.
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Undo flow is clean and reversible—no loops, no re-asking. State restored correctly.",
+    "Natural language setup ('5000 paid the 25th') parsed seamlessly into structured data.",
+    "One minor: 'All set ✅' after setup could feel slightly more personal ('Got it!' or similar), but it's warm enough.",
+    "Efficiency is excellent—user does 3 transactions in 4 turns, outcome clear.",
+    "Confirmation pattern (Yes/Cancel/Undo) is predictable and safe—no accidental locks.",
+    "Daily rate recalculated instantly after undo; state integrity maintained."
+  ],
+  "fixes": [
+    "Consider 'Got it, $5k every 2026-05-25.' instead of 'All set ✅' for +1 natural warmth.",
+    "After undo, consider 'Undone ✓' (shorter, equally clear) to save tokens on repeat confirmations.",
+    "No functional issues; this is a strong, safe flow. Minor tweaks are cosmetic."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "e5a2226ffe2d4f7b6d346061",
+      "ts": 1777455151969,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "5744ebd4086e7ff6446d8688",
+      "ts": 1777455151969,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "689b7b5f2d32fe10257b6d4b",
+      "ts": 1777455158039,
+      "intent": {
+        "kind": "record_spend",
+        "params": {
+          "amountCents": 8000,
+          "note": "groceries"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 492000,
+      "undone": true
+    },
+    {
+      "id": "83ed20fba5e5b7478d848274",
+      "ts": 1777455158040,
+      "intent": {
+        "kind": "undo_last",
+        "params": {}
+      },
+      "prevBalance": 492000,
+      "newBalance": 500000,
+      "undid": {
+        "eventId": "689b7b5f2d32fe10257b6d4b",
+        "intent": {
+          "kind": "record_spend",
+          "params": {
+            "amountCents": 8000,
+            "note": "groceries"
+          }
+        }
+      }
+    }
+  ],
+  "onboardingDraft": null
+}

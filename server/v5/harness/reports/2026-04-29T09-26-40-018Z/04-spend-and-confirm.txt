@@ -1,0 +1,122 @@
+# 04-spend-and-confirm
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ I have 5000 paid the 1st of each month
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-01.
+       
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ I spent 25 on coffee this morning
+
+[bot] ► logged ☕ coffee for $25.00
+       
+       Spend $25.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $25.00 · coffee
+       [Yes] [Cancel]
+
+[bot] ► 🟢 *Calm* — $2,487.50/day, 2 days to payday.
+       [Undo]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $2,487.50/day, 2 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Confirmation flow is slightly redundant: bot shows 'Spend $25 · coffee' twice (once as logged, once as edit confirmation). User sees the same thing twice.",
+    "No actual outcome statement after confirmation—just shows updated balance. A brief 'Got it!' or similar would reinforce the action.",
+    "Very minor: '(edit)' label on the second confirmation is unclear—user didn't request edit mode, they confirmed. Feels like a UX artifact.",
+    "Otherwise: Natural tone, zero safety issues (no re-asks, no loops), crystal clear state, lean interaction count."
+  ],
+  "fixes": [
+    "Remove duplicate confirmation UI. After user taps [Yes], skip the '(edit) ✓' recap and go straight to updated balance.",
+    "Add a one-line affirmation after spend confirmation: 'Got it — $25 logged.' Then show new balance.",
+    "Rename '(edit)' to something less confusing, or remove the label entirely if it's just a confirmation state.",
+    "Consider: should /today always re-show the balance, or is it redundant after a recent spend? Current behavior is fine, but worth thinking about for future."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 497500,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-01",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "cbac90e87ea6b5c0047994dc",
+      "ts": 1777454820577,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    },
+    {
+      "id": "2742051085ddfd955477b4dd",
+      "ts": 1777454821739,
+      "kind": "spend",
+      "amountCents": -2500,
+      "note": "coffee",
+      "billKey": null,
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "cfe9a22f589ab3ec6bdd1671",
+      "ts": 1777454820577,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-01",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "a6b3bbc05b97cd95f80062fa",
+      "ts": 1777454821740,
+      "intent": {
+        "kind": "record_spend",
+        "params": {
+          "amountCents": 2500,
+          "note": "coffee"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 497500
+    }
+  ],
+  "onboardingDraft": null
+}

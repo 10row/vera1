@@ -1,0 +1,100 @@
+# 06-cancel-confirm
+# pass=false mech=true llm=fail
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 1st
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-01.
+       
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ spent 200 on groceries
+
+[bot] ► Logged $200.00 on groceries.
+       
+       Spend $200.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Cancel]
+
+[bot] ► (edit) That confirm has expired.
+       [Yes] [Cancel]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 6,
+    "clear": 5,
+    "efficient": 4,
+    "warm": 7,
+    "safe": 2
+  },
+  "overall": 4.8,
+  "verdict": "fail",
+  "critique": [
+    "SAFETY CRITICAL: User cancels transaction, bot says confirm 'expired' and re-offers the same buttons. This is a loop/confusion trap — user already said no.",
+    "User taps Cancel but bot doesn't actually cancel — it just says the confirmation expired and re-prompts. Violates the 'never asks twice' rule.",
+    "After Cancel is tapped, the transaction state is ambiguous. Was $200 logged or not? The /today command doesn't show any transaction, so unclear if cancel worked.",
+    "The '(edit)' label is cryptic — what does that mean to a user? Looks like internal jargon.",
+    "EFFICIENCY: Two confirmation prompts for one action. If user wants to cancel, they should cancel cleanly without re-prompts.",
+    "CLARITY: No clear feedback that the cancellation succeeded. User taps Cancel and sees a new prompt instead of 'Got it — cancelled.'"
+  ],
+  "fixes": [
+    "When user taps [Cancel], respond: 'Cancelled — $200.00 on groceries not logged.' Don't re-show the confirmation.",
+    "Remove the 'That confirm has expired' message entirely. If user cancelled, honor it.",
+    "If confirmation truly expired (e.g., >5min), show: 'That confirmation expired. Do you still want to log $200.00 on groceries?' with fresh buttons.",
+    "Add transaction summary to /today output so user can verify the cancel worked (e.g., 'No transactions today' or list actuals).",
+    "Replace '(edit)' with clear intent: 'Confirm again?' or just re-show the buttons without meta-commentary."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-01",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "70eccffa6e0ecb3792c43ea1",
+      "ts": 1777454833173,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "02123b0b38def497af386178",
+      "ts": 1777454833173,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-01",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

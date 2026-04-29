@@ -94,24 +94,46 @@ function compute(state) {
   };
 }
 
-// One-line status for chat replies.
+// One-line status for chat replies. For irregular pay we DO NOT mention
+// "days to payday" — the user explicitly told us their pay is irregular,
+// so claiming 30 days is a lie. Show balance + daily pace based on a
+// conservative 30-day horizon instead, framed as "available now".
 function heroLine(state, lang) {
   const v = compute(state);
   if (!v.setup) return "";
   const L = (lang || state.language || "en") === "ru" ? "ru" : "en";
   const sym = state.currencySymbol || "$";
+  const irregular = state.payFrequency === "irregular";
+
   if (v.status === "over") {
+    if (irregular) {
+      return L === "ru"
+        ? "🔴 Перерасход — не хватает " + m.toMoney(v.deficitCents, sym) + " на счетах."
+        : "🔴 *Over* — short " + m.toMoney(v.deficitCents, sym) + " on bills.";
+    }
     return L === "ru"
       ? "🔴 Перерасход — не хватает " + m.toMoney(v.deficitCents, sym) + " до зарплаты."
       : "🔴 *Over* — short " + m.toMoney(v.deficitCents, sym) + " before payday.";
   }
+
+  // For irregular pay: lead with balance, suggest a daily horizon.
+  if (irregular) {
+    const word = v.status === "tight"
+      ? (L === "ru" ? "*Впритык*" : "*Tight*")
+      : (L === "ru" ? "*Спокойно*" : "*Calm*");
+    const emoji = v.status === "tight" ? "🟡" : "🟢";
+    return L === "ru"
+      ? emoji + " " + word + " — " + v.balanceFormatted + " на счёте, " + v.dailyPaceFormatted + "/день на месяц."
+      : emoji + " " + word + " — " + v.balanceFormatted + " on hand, " + v.dailyPaceFormatted + "/day for a month.";
+  }
+
   if (v.status === "tight") {
     return L === "ru"
-      ? "🟡 Впритык — " + v.dailyPaceFormatted + "/день, " + v.daysToPayday + " дн до зарплаты."
+      ? "🟡 *Впритык* — " + v.dailyPaceFormatted + "/день, " + v.daysToPayday + " дн до зарплаты."
       : "🟡 *Tight* — " + v.dailyPaceFormatted + "/day, " + v.daysToPayday + " days to payday.";
   }
   return L === "ru"
-    ? "🟢 Спокойно — " + v.dailyPaceFormatted + "/день, " + v.daysToPayday + " дн до зарплаты."
+    ? "🟢 *Спокойно* — " + v.dailyPaceFormatted + "/день, " + v.daysToPayday + " дн до зарплаты."
     : "🟢 *Calm* — " + v.dailyPaceFormatted + "/day, " + v.daysToPayday + " days to payday.";
 }
 

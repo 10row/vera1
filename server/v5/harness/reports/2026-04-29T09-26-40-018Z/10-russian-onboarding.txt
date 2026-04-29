@@ -1,0 +1,95 @@
+# 10-russian-onboarding
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ привет
+
+[bot] ► Привет 👋 Я SpendYes. Сколько примерно сейчас на основном счёте? Просто число.
+
+                              [you] ◄ 5000
+
+[bot] ► Записал — $5,000.00.
+       
+       Когда следующая зарплата? Скажи дату ("15-го" или "30 апреля") или *пропустить*, если зарплата нерегулярная.
+
+                              [you] ◄ 15-го
+
+[bot] ► Готово — $5,000.00, зарплата 2026-05-15.
+       
+       🟢 Спокойно — $312.50/день, 16 дн до зарплаты.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 Спокойно — $312.50/день, 16 дн до зарплаты.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Onboarding is lean and conversational in Russian—no bloat, user sees outcome immediately",
+    "Clear progression: balance → payday → instant feedback with daily burn rate",
+    "Never re-asks; respects user input; /today command works without confusion",
+    "Tone is friendly but professional—emoji use (🟢) feels natural, not forced",
+    "One minor: '15-го' interpretation as 2026-05-15 (May, not current month) might surprise user if it's January, but this is a reasonable default and user can correct"
+  ],
+  "fixes": [
+    "If payday parsing assumes future month, consider confirming: 'Зарплата 15 мая? ✓ или корректировать' to avoid silent mis-parsing",
+    "Consider a brief 'Вы настроены!' message before /today to signal onboarding complete, so user knows bot is ready for transactions"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "ru",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "1b0a1b0fb230855047c0a1cd",
+      "ts": 1777454864553,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "cad5e9b3bc5a894cc5cde657",
+      "ts": 1777454864553,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

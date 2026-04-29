@@ -1,0 +1,100 @@
+# 06-cancel-confirm
+# pass=false mech=true llm=fail
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 1st
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-01.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ spent 200 on groceries
+
+[bot] ► Logged $200.00 on groceries. You're at $4,800.00 now.
+       
+       Spend $200.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Cancel]
+
+[bot] ► (edit) That confirm has expired.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 7,
+    "clear": 6,
+    "efficient": 6,
+    "warm": 7,
+    "safe": 4
+  },
+  "overall": 6,
+  "verdict": "fail",
+  "critique": [
+    "User tapped Cancel but bot says 'confirm has expired' — confusing. Did it cancel or not? State is unclear.",
+    "Transaction was logged despite Cancel tap — SAFETY VIOLATION. User said 'no' and it stuck anyway.",
+    "No explicit confirmation that the cancellation worked or what the new balance is after the cancel attempt.",
+    "'/today' command works but user never knew it existed — discovery gap.",
+    "Bot doesn't clarify whether 'Cancel' means 'undo the log' or 'reject the confirmation step' — ambiguous interaction model."
+  ],
+  "fixes": [
+    "On Cancel tap, respond: 'Cancelled — groceries not logged. Still at $5,000.00.' Make the reversal explicit.",
+    "Ensure txCount stays at 1 after Cancel (currently it's 1, which is correct, but confirm the log never happened in real time).",
+    "Replace '(edit) That confirm has expired' with a clear action result: 'Got it, cancelled that one.' or 'Undo complete ✓'",
+    "Add hint after setup: 'You can also ask /today, /budget, /reset anytime' so commands aren't hidden.",
+    "Test: Cancel button should genuinely prevent the transaction write — verify the backend doesn't log on Cancel even if UI said it would."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-01",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "2703734064cb0558dd02eb50",
+      "ts": 1777455139127,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "b793b1797b4c949b76b151a7",
+      "ts": 1777455139127,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-01",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

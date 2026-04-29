@@ -1,0 +1,102 @@
+# 10-russian-onboarding
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ привет
+
+[bot] ► Привет 👋 Я SpendYes — помогу следить за деньгами без хлопот.
+       
+       Сколько сейчас на основном счёте — примерно? Просто число.
+
+                              [you] ◄ 5000
+
+[bot] ► Записал — $5,000.00. 👍
+       
+       А когда следующая зарплата? Дата ("15-го", "30 апреля") или *пропустить*, если зарплата нерегулярная.
+
+                              [you] ◄ 15-го
+
+[bot] ► Готово ✅ — $5,000.00, зарплата 2026-05-15.
+       
+       Дальше просто говори: "потратил 20 на кофе", "платёж аренда 1400 1-го", "могу позволить 200?". Я разберусь.
+       
+       🟢 Спокойно — $312.50/день, 16 дн до зарплаты.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 Спокойно — $312.50/день, 16 дн до зарплаты.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Russian localization is thorough and natural—colloquial tone ('Записал', 'Готово') feels friendly, not corporate",
+    "User says '5000' (no currency), bot interprets as dollars and echoes back with formatting—good assumption + clarity",
+    "Three-message onboarding (balance → payday → done) is lean and respects user time",
+    "Final state shows setup=true, balance=500000 (stored as cents?), payday parsed correctly, txCount=1 (the payday entry), eventCount=1",
+    "Emoji and visual cues (🟢, ✅, 👋) reinforce tone without overdoing it",
+    "No redundant questions—bot doesn't ask for currency, doesn't re-confirm after /today",
+    "Warm tone achieved through conversational language, but slightly formal in the final instruction paragraph ('Дальше просто говори')"
+  ],
+  "fixes": [
+    "Minor: balance stored as 500000 cents ($5,000.00)—confirm this is intentional in backend docs to avoid future confusion",
+    "Optional: after payday input, consider adding a lightweight affordance like 'Готово! Трать с умом 💪' instead of instruction dump, keep onboarding purely setup-focused",
+    "Optional: in /today response, add a micro-context ('16 дн до 15-го') to make countdown feel less robotic"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "ru",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "895d88f6fcdafd4bf6aa6ab8",
+      "ts": 1777455183634,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "5eddb4af944b54e21c61a5f6",
+      "ts": 1777455183634,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

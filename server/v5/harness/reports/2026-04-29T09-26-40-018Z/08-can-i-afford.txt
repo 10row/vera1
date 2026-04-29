@@ -1,0 +1,99 @@
+# 08-can-i-afford
+# pass=false mech=true llm=fail
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-25.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ Can I afford a $200 jacket?
+
+[bot] ► Let me check if a $200 jacket fits your plan…
+       🟢 You'd still have $184.61/day.
+       [Log it] [No]
+                              [you tapped: No]
+
+[bot] ► (edit) That confirm has expired.
+       [Log it] [No]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 7,
+    "clear": 6,
+    "efficient": 5,
+    "warm": 7,
+    "safe": 6
+  },
+  "overall": 6.2,
+  "verdict": "fail",
+  "critique": [
+    "UX breaks after user taps [No] — bot says confirm 'expired' then re-shows same buttons. User forced to /today to escape.",
+    "Unclear what [No] does: reject logging? Reject the jacket? Reject the calculation? Ambiguous intent.",
+    "Two separate issues compounded: (1) expired state shouldn't exist in a simple yes/no, (2) no graceful exit after choice.",
+    "After /today, bot repeats exact same line from earlier — feels like a reset, not continuity.",
+    "Missing context: did the $5,000 get logged? Assumed yes, but bot never confirms outcome of the 'paid' entry.",
+    "Safe score tanked because bot enters a loop-like state (expired confirm, same buttons re-shown) — violates 'never loops'."
+  ],
+  "fixes": [
+    "Remove confirm expiry for simple binary choices. After [No], immediately return to main menu or acknowledge: '✓ Skipped logging' + show updated budget.",
+    "Clarify button text: [Log it] [Skip] instead of [No] — makes intent unmistakable.",
+    "On /today after a transaction, vary the response slightly or acknowledge prior context: '📊 Still on track — $192.30/day' rather than identical repeat.",
+    "Add confirmation for incoming transaction: '[you] 5000 paid the 25th' → bot: '✓ Logged $5,000 for 2026-05-25.' before showing budget.",
+    "Statefulness: track whether buttons are stale and prevent re-render. If user doesn't respond in N seconds, remove buttons gracefully instead of showing expired state."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "f3f82612e9de91b46e98f4fc",
+      "ts": 1777454846516,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "70ccb676c0da9bee859ed130",
+      "ts": 1777454846516,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

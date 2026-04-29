@@ -1,0 +1,108 @@
+# 03-onboarding-vague
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ hi
+
+[bot] ► Hey 👋 I'm SpendYes — your money buddy.
+       
+       Let's start simple: what's roughly in your main account right now? A ballpark number is fine.
+
+                              [you] ◄ what does this do?
+
+[bot] ► This is just for me — so I can spot your rhythm and nudge in the moment. No bank link, nothing shared. What's roughly in your account?
+
+                              [you] ◄ ok
+
+[bot] ► No stress — just say *skip* and we'll move on. You can give me the balance later.
+
+                              [you] ◄ fine, around 3000
+
+[bot] ► Got it — $3,000.00. 👍
+       
+       When's your next paycheck? A date like *"the 15th"* or *"April 30"*, or *"skip"* if it's irregular.
+
+                              [you] ◄ skip
+
+[bot] ► All set ✅ — $3,000.00, irregular pay.
+       
+       From here just talk to me: "spent 20 on coffee", "got 3000", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $3,000.00 on hand, $100.00/day for a month.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $3,000.00 on hand, $100.00/day for a month.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 8,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.6,
+  "verdict": "pass",
+  "critique": [
+    "User hesitation handled gracefully — bot pivoted to 'skip' without defensive tone or loop",
+    "Clear permission structure ('No stress', 'can give later') reduced friction on vague answers",
+    "Final summary was concrete and actionable, not a repeat setup message",
+    "One small friction: bot asked twice *in the same turn* ('what's in your account' → 'what's roughly in your account') before user gave first answer, but recovered well",
+    "Tone stayed patient and light throughout; no frustration leakage"
+  ],
+  "fixes": [
+    "After user says 'what does this do?', skip the redundant question. Say: 'I learn your money patterns so I can help in real-time—no bank link, just your words. Whenever you're ready, what's roughly in your account? (or skip if you'd rather not say yet.)'",
+    "The first balance prompt could be lighter: 'Rough balance in your main account?' instead of two phrasings in succession",
+    "Consider adding a small easter egg on /today before the user asks—e.g., 'psst, try /today to see your status anytime' at end of setup—to clarify what commands exist"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 300000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-29",
+  "payFrequency": "irregular",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "a135ac9581cfcc277ce787e9",
+      "ts": 1777455867138,
+      "kind": "setup",
+      "amountCents": 300000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "441071af27c2b399bfb346ed",
+      "ts": 1777455867138,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 300000,
+          "payday": "2026-05-29",
+          "payFrequency": "irregular"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 300000
+    }
+  ],
+  "onboardingDraft": null
+}

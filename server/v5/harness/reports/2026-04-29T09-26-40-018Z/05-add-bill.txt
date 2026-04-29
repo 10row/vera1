@@ -1,0 +1,124 @@
+# 05-add-bill
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-25.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ rent is 1400 due the 1st
+
+[bot] ► Got it — logging rent at $1,400/month, due May 1st.
+       
+       Add bill *rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Add bill *rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+       [Undo]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 7,
+    "warm": 8,
+    "safe": 8
+  },
+  "overall": 8,
+  "verdict": "pass",
+  "critique": [
+    "Confirmation screen after Yes tap is redundant — user already confirmed, seeing the same state twice feels like stutter",
+    "Safe score docked because bot shows confirmation *after* user tapped Yes, creating a moment of ambiguity (did it save or not?)",
+    "Minor: '/today' returns same state as post-bill, no delta shown — good for consistency but could hint at what changed",
+    "Natural and warm are strong — 'Got it' and emoji status feel like a real assistant, not a form"
+  ],
+  "fixes": [
+    "Remove the second confirmation screen. After user taps [Yes], go straight to: '✓ rent added — $1,400/mo, May 1st' + updated status. One tap = one clear result.",
+    "Move the confirmation into the first message: 'Got it — rent $1,400/month, due May 1st. [Add] [Edit] [Cancel]' so Yes/No is the *only* confirmation flow.",
+    "On /today after a change, briefly highlight delta: '🟢 *Calm* — $138.46/day (↓ $53.84 after rent). 26 days to payday.' so user sees impact."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {
+    "rent": {
+      "name": "rent",
+      "amountCents": 140000,
+      "dueDate": "2026-05-01",
+      "recurrence": "monthly",
+      "paidThisCycle": false,
+      "createdAt": 1777454827860
+    }
+  },
+  "transactions": [
+    {
+      "id": "23a4b3e891e1dab6721770cb",
+      "ts": 1777454826450,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "1b9a7f7319a04a4a37abab40",
+      "ts": 1777454826450,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "2c3547072895b77382785ff3",
+      "ts": 1777454827860,
+      "intent": {
+        "kind": "add_bill",
+        "params": {
+          "name": "rent",
+          "amountCents": 140000,
+          "dueDate": "2026-05-01",
+          "recurrence": "monthly"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 500000,
+      "billKey": "rent"
+    }
+  ],
+  "onboardingDraft": null
+}

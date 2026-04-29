@@ -1,0 +1,102 @@
+# 10-russian-onboarding
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ привет
+
+[bot] ► Привет 👋 Я SpendYes — помогу следить за деньгами без хлопот.
+       
+       Сколько сейчас на основном счёте — примерно? Просто число.
+
+                              [you] ◄ 5000
+
+[bot] ► Записал — $5,000.00. 👍
+       
+       А когда следующая зарплата? Дата ("15-го", "30 апреля") или *пропустить*, если зарплата нерегулярная.
+
+                              [you] ◄ 15-го
+
+[bot] ► Готово ✅ — $5,000.00, зарплата 2026-05-15.
+       
+       Дальше просто говори: "потратил 20 на кофе", "платёж аренда 1400 1-го", "могу позволить 200?". Я разберусь.
+       
+       🟢 *Спокойно* — $312.50/день, 16 дн до зарплаты.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Спокойно* — $312.50/день, 16 дн до зарплаты.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Strong onboarding: minimal friction, clear purpose established immediately",
+    "Russian localization feels natural and conversational—not stiff translation",
+    "User given concrete examples of how to interact ('потратил 20 на кофе', etc.) which is excellent UX",
+    "No redundant asks; each message progresses the setup cleanly",
+    "Balance shown as $5,000 USD, but user input was '5000'—currency assumption implicit (minor: could be confusing in multi-currency contexts)",
+    "The /today command suggests the bot has a command palette, but this wasn't introduced; feels like a bonus feature the user discovered",
+    "Tone is warm and encouraging without being saccharine ('Спокойно' + emoji + budget context is reassuring)"
+  ],
+  "fixes": [
+    "Consider confirming currency preference explicitly on first setup ('Валюта: доллары?' or similar), especially for Russian users who may use RUB",
+    "Document or hint at available commands earlier (e.g., '/today, /week, /month' in the help text after setup completes)",
+    "The final status message could acknowledge that /today was just run, or avoid redundancy if the same state was just shown"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "ru",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "11965bde085588238b3238d7",
+      "ts": 1777455762584,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "24a7e89ef1aaffe08b24f475",
+      "ts": 1777455762584,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

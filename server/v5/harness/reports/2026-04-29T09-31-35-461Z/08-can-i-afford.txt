@@ -1,0 +1,99 @@
+# 08-can-i-afford
+# pass=false mech=true llm=fail
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ Can I afford a $200 jacket?
+
+[bot] ► Let me check if $200 fits your runway…
+       🟢 You'd still have $184.61/day.
+       [Log it] [Skip]
+                              [you tapped: Skip]
+
+[bot] ► (edit) That confirm has expired.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 7,
+    "clear": 6,
+    "efficient": 5,
+    "warm": 7,
+    "safe": 6
+  },
+  "overall": 6.2,
+  "verdict": "fail",
+  "critique": [
+    "Button expires without warning — user taps Skip, gets cryptic '(edit) That confirm has expired' instead of graceful handling",
+    "Affordability answer is incomplete: shows daily spend delta but doesn't clearly state 'yes, you can afford it' or show remaining balance after purchase",
+    "No transaction logged despite user query — 'can I afford' should auto-log on Skip or offer clearer alternatives",
+    "Missing balance context in affordability check — should show 'After $200: $4,800 left, $184.61/day'",
+    "Unclear state after Skip — user doesn't know if the jacket decision was recorded, ignored, or pending"
+  ],
+  "fixes": [
+    "Remove button expiry messages. On Skip, silently close the prompt and return status: 'Got it — skipped. Still $192.30/day.'",
+    "Affordability response format: 'Yes ✅ — After the $200 jacket, you'd have $4,800 left ($184.61/day). [Log it] [Skip]'",
+    "Persist Skip state: don't show 'expired' — treat Skip as 'user chose not to log' and move on cleanly",
+    "Add balance to every affordability check response so user sees before/after clearly",
+    "Test button lifecycle: buttons should auto-dismiss after 10s silently, or persist with explicit 'This offer closed' only on explicit timeout, not on user interaction"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "98beea5d826ce6a60d443b3a",
+      "ts": 1777455162276,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "3fd433b36d21f6dd7e5cd4a4",
+      "ts": 1777455162276,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

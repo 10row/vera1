@@ -1,0 +1,357 @@
+{
+  "runId": "2026-04-29T09-26-40-018Z",
+  "total": 11,
+  "passed": 7,
+  "failed": 4,
+  "results": [
+    {
+      "name": "01-onboarding-clean",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 9,
+          "clear": 9,
+          "efficient": 10,
+          "warm": 9,
+          "safe": 10
+        },
+        "overall": 9.4,
+        "verdict": "pass",
+        "critique": [
+          "Conversational tone throughout—feels like a friend, not a form.",
+          "Three-turn setup is textbook efficient for onboarding.",
+          "Clear confirmations at each step prevent confusion.",
+          "No redundant questions, no loops, no false 'setting up' messages.",
+          "Warm but professional—emoji use feels natural, not forced.",
+          "Immediate payoff: user sees their daily budget ('$312.50/day') right away.",
+          "Payday inference from 'the 15th' to 2026-05-15 is smart and transparent."
+        ],
+        "fixes": []
+      }
+    },
+    {
+      "name": "02-onboarding-dump",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 9,
+          "clear": 9,
+          "efficient": 10,
+          "warm": 8,
+          "safe": 10
+        },
+        "overall": 9.2,
+        "verdict": "pass",
+        "critique": [
+          "Perfect one-turn setup — extracts balance and payday from natural language without asking",
+          "Clear status immediately with visual affordance (🟢 Calm) and actionable metric ($/day to payday)",
+          "Zero waste — no confirmation loops, no 'setting up', no redundant questions",
+          "Safety flawless — never re-asks, handles repeat command (/today) without repetition fatigue",
+          "Tone is professional-friendly, not robotic or over-casual",
+          "Only minor: could be slightly warmer with a micro-personalization ('Got it!' vs 'Done')"
+        ],
+        "fixes": [
+          "Replace 'Done' with 'Got it!' or 'All set!' for +1 warmth without sacrificing brevity",
+          "Consider optional follow-up affordance like 'Want to add a budget? /budget' if that's a next-step need (but only if data shows users do this)"
+        ]
+      }
+    },
+    {
+      "name": "03-onboarding-vague",
+      "pass": false,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 5,
+          "clear": 6,
+          "efficient": 4,
+          "warm": 5,
+          "safe": 6
+        },
+        "overall": 5.2,
+        "verdict": "fail",
+        "critique": [
+          "Bot repeats exact same prompt twice when user hesitates ('ok') — breaks patience promise. Should acknowledge uncertainty, offer help, or pivot.",
+          "Balance is 300k in final state but transcript shows user said '3000'. Data mismatch suggests either transcript is incomplete or state doesn't reflect actual flow.",
+          "Payday set to 2026-05-29 but user said 'skip' (irregular). Final state contradicts transcript.",
+          "Bot says 'Setup up successful' vibe but never explicitly confirms onboarding is done — user might not know they can start spending.",
+          "Tone is clipped and instruction-heavy ('Just a number'). Feels like a form, not a friend.",
+          "No acknowledgment of user's hesitation ('what does this do?'). Bot doubles down on the same ask instead of meeting them where they are."
+        ],
+        "fixes": [
+          "When user hesitates or gives non-answer like 'ok', respond: 'No pressure — this just helps me know your spending rhythm. What's your balance? (Or type *skip*)'",
+          "Track user state: if they haven't answered a core field, offer an out: 'Want to skip this and try later?' Don't loop the same prompt.",
+          "Verify transcript matches final state. If balance is 300k, show that in conversation. If payday is 2026-05-29, reconcile with 'skip'.",
+          "After onboarding, explicitly end: 'You're all set! 🎉 Say */today* for today's status, or just tell me a spend when you're ready.'",
+          "Warm up language: 'Help me understand your money — what's sitting in your main account right now?'",
+          "Cap repetition: if user gives non-answer twice, offer skip path instead of looping a third time."
+        ]
+      }
+    },
+    {
+      "name": "04-spend-and-confirm",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 9,
+          "warm": 8,
+          "safe": 10
+        },
+        "overall": 8.8,
+        "verdict": "pass",
+        "critique": [
+          "Confirmation flow is slightly redundant: bot shows 'Spend $25 · coffee' twice (once as logged, once as edit confirmation). User sees the same thing twice.",
+          "No actual outcome statement after confirmation—just shows updated balance. A brief 'Got it!' or similar would reinforce the action.",
+          "Very minor: '(edit)' label on the second confirmation is unclear—user didn't request edit mode, they confirmed. Feels like a UX artifact.",
+          "Otherwise: Natural tone, zero safety issues (no re-asks, no loops), crystal clear state, lean interaction count."
+        ],
+        "fixes": [
+          "Remove duplicate confirmation UI. After user taps [Yes], skip the '(edit) ✓' recap and go straight to updated balance.",
+          "Add a one-line affirmation after spend confirmation: 'Got it — $25 logged.' Then show new balance.",
+          "Rename '(edit)' to something less confusing, or remove the label entirely if it's just a confirmation state.",
+          "Consider: should /today always re-show the balance, or is it redundant after a recent spend? Current behavior is fine, but worth thinking about for future."
+        ]
+      }
+    },
+    {
+      "name": "05-add-bill",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 7,
+          "warm": 8,
+          "safe": 8
+        },
+        "overall": 8,
+        "verdict": "pass",
+        "critique": [
+          "Confirmation screen after Yes tap is redundant — user already confirmed, seeing the same state twice feels like stutter",
+          "Safe score docked because bot shows confirmation *after* user tapped Yes, creating a moment of ambiguity (did it save or not?)",
+          "Minor: '/today' returns same state as post-bill, no delta shown — good for consistency but could hint at what changed",
+          "Natural and warm are strong — 'Got it' and emoji status feel like a real assistant, not a form"
+        ],
+        "fixes": [
+          "Remove the second confirmation screen. After user taps [Yes], go straight to: '✓ rent added — $1,400/mo, May 1st' + updated status. One tap = one clear result.",
+          "Move the confirmation into the first message: 'Got it — rent $1,400/month, due May 1st. [Add] [Edit] [Cancel]' so Yes/No is the *only* confirmation flow.",
+          "On /today after a change, briefly highlight delta: '🟢 *Calm* — $138.46/day (↓ $53.84 after rent). 26 days to payday.' so user sees impact."
+        ]
+      }
+    },
+    {
+      "name": "06-cancel-confirm",
+      "pass": false,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 6,
+          "clear": 5,
+          "efficient": 4,
+          "warm": 7,
+          "safe": 2
+        },
+        "overall": 4.8,
+        "verdict": "fail",
+        "critique": [
+          "SAFETY CRITICAL: User cancels transaction, bot says confirm 'expired' and re-offers the same buttons. This is a loop/confusion trap — user already said no.",
+          "User taps Cancel but bot doesn't actually cancel — it just says the confirmation expired and re-prompts. Violates the 'never asks twice' rule.",
+          "After Cancel is tapped, the transaction state is ambiguous. Was $200 logged or not? The /today command doesn't show any transaction, so unclear if cancel worked.",
+          "The '(edit)' label is cryptic — what does that mean to a user? Looks like internal jargon.",
+          "EFFICIENCY: Two confirmation prompts for one action. If user wants to cancel, they should cancel cleanly without re-prompts.",
+          "CLARITY: No clear feedback that the cancellation succeeded. User taps Cancel and sees a new prompt instead of 'Got it — cancelled.'"
+        ],
+        "fixes": [
+          "When user taps [Cancel], respond: 'Cancelled — $200.00 on groceries not logged.' Don't re-show the confirmation.",
+          "Remove the 'That confirm has expired' message entirely. If user cancelled, honor it.",
+          "If confirmation truly expired (e.g., >5min), show: 'That confirmation expired. Do you still want to log $200.00 on groceries?' with fresh buttons.",
+          "Add transaction summary to /today output so user can verify the cancel worked (e.g., 'No transactions today' or list actuals).",
+          "Replace '(edit)' with clear intent: 'Confirm again?' or just re-show the buttons without meta-commentary."
+        ]
+      }
+    },
+    {
+      "name": "07-undo-flow",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 9,
+          "warm": 8,
+          "safe": 10
+        },
+        "overall": 8.8,
+        "verdict": "pass",
+        "critique": [
+          "Flow is tight—user adds a bill, logs a spend, undoes it, checks status. All clear.",
+          "Undo button placement after confirmation is perfect—accessible and expected.",
+          "Bot never repeats itself, never re-asks for data, state is clean.",
+          "Tone is calm and reassuring without being saccharine.",
+          "Minor: confirmation screen '(edit)' label is slightly unclear—could be 'Confirm?' or just skip the label."
+        ],
+        "fixes": [
+          "Replace '(edit) ✓ Spend $80.00 · groceries' with 'Confirm: Spend $80.00 · groceries' for clarity—'edit' implies modification, not confirmation.",
+          "Consider keeping the [Undo] button visible after each transaction log (not just post-confirm) to reduce friction if user realizes mistake mid-entry."
+        ]
+      }
+    },
+    {
+      "name": "08-can-i-afford",
+      "pass": false,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 7,
+          "clear": 6,
+          "efficient": 5,
+          "warm": 7,
+          "safe": 6
+        },
+        "overall": 6.2,
+        "verdict": "fail",
+        "critique": [
+          "UX breaks after user taps [No] — bot says confirm 'expired' then re-shows same buttons. User forced to /today to escape.",
+          "Unclear what [No] does: reject logging? Reject the jacket? Reject the calculation? Ambiguous intent.",
+          "Two separate issues compounded: (1) expired state shouldn't exist in a simple yes/no, (2) no graceful exit after choice.",
+          "After /today, bot repeats exact same line from earlier — feels like a reset, not continuity.",
+          "Missing context: did the $5,000 get logged? Assumed yes, but bot never confirms outcome of the 'paid' entry.",
+          "Safe score tanked because bot enters a loop-like state (expired confirm, same buttons re-shown) — violates 'never loops'."
+        ],
+        "fixes": [
+          "Remove confirm expiry for simple binary choices. After [No], immediately return to main menu or acknowledge: '✓ Skipped logging' + show updated budget.",
+          "Clarify button text: [Log it] [Skip] instead of [No] — makes intent unmistakable.",
+          "On /today after a transaction, vary the response slightly or acknowledge prior context: '📊 Still on track — $192.30/day' rather than identical repeat.",
+          "Add confirmation for incoming transaction: '[you] 5000 paid the 25th' → bot: '✓ Logged $5,000 for 2026-05-25.' before showing budget.",
+          "Statefulness: track whether buttons are stale and prevent re-render. If user doesn't respond in N seconds, remove buttons gracefully instead of showing expired state."
+        ]
+      }
+    },
+    {
+      "name": "09-already-setup-no-loop",
+      "pass": false,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 7,
+          "clear": 8,
+          "efficient": 6,
+          "warm": 7,
+          "safe": 7
+        },
+        "overall": 7,
+        "verdict": "fail",
+        "critique": [
+          "User says 'I have 5000' twice (after setup) and bot treats both as balance updates instead of recognizing context—should infer user is clarifying/correcting, not re-entering",
+          "Confirmation UI appears twice for the same intent ('Set balance to $7,000.00' shown twice), feels redundant and slightly confusing",
+          "Bot asks for confirmation on balance change after already being set up—unnecessary friction for a simple correction flow",
+          "Safe score is 7/10, not ≥9: bot doesn't loop outright but does re-prompt for confirmation in a way that feels like it could trap a user (edits shown twice)",
+          "Efficient score lowered by double-confirmation and multiple back-and-forth turns that could collapse into one"
+        ],
+        "fixes": [
+          "When user provides a balance update after setup is complete, detect if it's a *correction* (e.g., 'actually I have 7000 now') vs. a new entry—skip confirmation UI for corrections, just confirm with single message",
+          "Remove redundant confirmation display; once user taps [Yes], show final state only once",
+          "For balance updates post-setup, use inline confirmation without modal: 'Got it—balance updated to $7,000.00' + status, no [Yes]/[Cancel]",
+          "Add guard: if user says 'set up' or 'setup' after setup=true, respond with account-already-set message (already done correctly) but then offer quick actions ('update balance', 'add bill', 'view status') instead of waiting for next input"
+        ]
+      }
+    },
+    {
+      "name": "10-russian-onboarding",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 9,
+          "efficient": 9,
+          "warm": 8,
+          "safe": 10
+        },
+        "overall": 8.8,
+        "verdict": "pass",
+        "critique": [
+          "Onboarding is lean and conversational in Russian—no bloat, user sees outcome immediately",
+          "Clear progression: balance → payday → instant feedback with daily burn rate",
+          "Never re-asks; respects user input; /today command works without confusion",
+          "Tone is friendly but professional—emoji use (🟢) feels natural, not forced",
+          "One minor: '15-го' interpretation as 2026-05-15 (May, not current month) might surprise user if it's January, but this is a reasonable default and user can correct"
+        ],
+        "fixes": [
+          "If payday parsing assumes future month, consider confirming: 'Зарплата 15 мая? ✓ или корректировать' to avoid silent mis-parsing",
+          "Consider a brief 'Вы настроены!' message before /today to signal onboarding complete, so user knows bot is ready for transactions"
+        ]
+      }
+    },
+    {
+      "name": "11-typos",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": {
+        "scores": {
+          "natural": 8,
+          "clear": 7,
+          "efficient": 6,
+          "warm": 8,
+          "safe": 8
+        },
+        "overall": 7.4,
+        "verdict": "pass",
+        "critique": [
+          "Confirmation UX is repetitive: shows 'Spend $25 · coffee [Yes] [Cancel]' then immediately shows '(edit) ✓ Spend $25 · coffee [Yes] [Cancel]' again. User already confirmed—why re-show the same dialog?",
+          "After Yes tap, bot still displays editable state '(edit)' with [Yes] [Cancel] buttons. This breaks the mental model: user already committed.",
+          "Efficient score lowered because each transaction takes 2+ bot messages when 1 would suffice: log + status could combine.",
+          "Math check: $5k + (-$25) + $3k = $7,975 ✓. Payday calc correct ✓. Safety OK—no repeated asks.",
+          "Tone is warm and emoji use is tasteful. 'Calm' status + daily burn rate = good human-friendly context.",
+          "User typed 'spnet' and 'cofee' and 'chek'—bot auto-corrected silently. That's natural, but no signal to user they were typos. Minor UX miss."
+        ],
+        "fixes": [
+          "After user taps [Yes], skip the '(edit) ✓' re-confirmation screen. Go straight to status update: '✓ Logged $25 coffee. Balance $4,975. 🟢 Calm—$2,487.50/day.'",
+          "Combine log acknowledgment + status in one message to cut message count by ~30%.",
+          "Consider subtle inline feedback for typo correction: 'Logged coffee (you wrote: cofee)' or just silently correct if confidence >90%.",
+          "The [Undo] button after each transaction is good—keep it. But remove the redundant (edit) dialog flow."
+        ]
+      }
+    }
+  ]
+}

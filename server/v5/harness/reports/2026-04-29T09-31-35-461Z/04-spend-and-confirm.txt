@@ -1,0 +1,123 @@
+# 04-spend-and-confirm
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ I have 5000 paid the 1st of each month
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-01.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ I spent 25 on coffee this morning
+
+[bot] ► Got it — logged $25 on coffee. You're at $4,975 now.
+       
+       Spend $25.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $25.00 · coffee
+
+[bot] ► 🟢 *Calm* — $2,487.50/day, 2 days to payday.
+       [Undo]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $2,487.50/day, 2 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Excellent safety — no re-asking, no loops, no false 'setting up' after setup complete.",
+    "Confirmation UX is clean: shows what's being logged, lets user validate before commit.",
+    "Natural language input ('spent 25 on coffee') → instant understanding. Feels conversational.",
+    "Status updates (🟢 *Calm*, daily burn rate) keep user grounded without noise.",
+    "One tiny friction: the '(edit) ✓' after confirmation is slightly confusing — looks like an edit mode opened, but it's just a done indicator. Minor.",
+    "Onboarding prompt is friendly and sets clear expectations for what the bot accepts."
+  ],
+  "fixes": [
+    "Change '(edit) ✓' to just '✓' or 'Logged ✓' to remove the edit-mode ambiguity.",
+    "Consider adding a one-line context to `/today` response (e.g., 'Today so far:') so it feels responsive to the command, not just a repeat of the last status."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 497500,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-01",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "64f9688ebf8d8b3176c4fb2d",
+      "ts": 1777455117593,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    },
+    {
+      "id": "3678f11bf2fcb208500174c7",
+      "ts": 1777455119249,
+      "kind": "spend",
+      "amountCents": -2500,
+      "note": "coffee",
+      "billKey": null,
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "22f3bf49dfa72f94ab808c6c",
+      "ts": 1777455117593,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-01",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "15e03973e5ac13258eb18722",
+      "ts": 1777455119249,
+      "intent": {
+        "kind": "record_spend",
+        "params": {
+          "amountCents": 2500,
+          "note": "coffee"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 497500
+    }
+  ],
+  "onboardingDraft": null
+}

@@ -1,0 +1,87 @@
+# 02-onboarding-dump
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ Hey, I have about 5000 in my account and I get paid the 15th of each month
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-15.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $312.50/day, 16 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $312.50/day, 16 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 9,
+    "clear": 10,
+    "efficient": 10,
+    "warm": 9,
+    "safe": 10
+  },
+  "overall": 9.6,
+  "verdict": "pass",
+  "critique": [
+    "Perfect dump-and-go experience. Bot parsed $5000 (stored as 500000 cents) and payday instantly.",
+    "Zero re-asks, zero setup ceremony. Just straight to value.",
+    "Tone is confident and friendly without being precious.",
+    "Examples given ('spent 20 on coffee', 'rent 1400') immediately show what the bot can do.",
+    "Daily burn rate ($312.50) is instantly useful context.",
+    "User immediately trusts it enough to try /today — engagement win."
+  ],
+  "fixes": [
+    "None critical. Minor: consider whether 'All set ✅' could be more specific like 'All set ✅ You're $312.50/day safe' to reinforce the insight earlier, but current version is already excellent."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "11c6a98bb8ef434b1389c982",
+      "ts": 1777455107665,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "65ac3b6cd4a3a799b04882ce",
+      "ts": 1777455107665,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

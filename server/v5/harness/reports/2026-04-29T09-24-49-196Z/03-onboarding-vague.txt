@@ -1,0 +1,84 @@
+# 03-onboarding-vague
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ hi
+
+[bot] ► Hey 👋 I'm SpendYes — your money buddy.
+       
+       What's the rough balance in your main account right now? Just say a number.
+
+                              [you] ◄ what does this do?
+
+[bot] ► Just a number — like *5000* or *$5k*. What's roughly in your main account?
+
+                              [you] ◄ ok
+
+[bot] ► Just a number — like *5000* or *$5k*. What's roughly in your main account?
+
+                              [you] ◄ fine, around 3000
+
+[bot] ► Got it — $3,000.00 saved.
+       
+       When's your next paycheck? Say a date like *"the 15th"* or *"April 30"* — or *"skip"* if it's irregular.
+
+                              [you] ◄ skip
+
+[bot] ► Done — $3,000.00 saved, irregular pay.
+       
+       🟢 *Calm* — $100.00/day, 30 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $100.00/day, 30 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+null
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 300000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-29",
+  "payFrequency": "irregular",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "b840378ba5cf6a616bd19958",
+      "ts": 1777454689264,
+      "kind": "setup",
+      "amountCents": 300000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "e4486882d0c0802b8555b210",
+      "ts": 1777454689264,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 300000,
+          "payday": "2026-05-29",
+          "payFrequency": "irregular"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 300000
+    }
+  ],
+  "onboardingDraft": null
+}

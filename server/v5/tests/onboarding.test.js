@@ -94,18 +94,19 @@ test("[onboarding] greeting on virgin state → ask balance", () => {
   const d = onboarding.handle(s, "hi", TODAY);
   assertEq(d.done, false);
   assertEq(d.intent, undefined);
-  assertTrue(/balance/i.test(d.reply));
+  // Copy varies but it MUST mention 'main account' or 'balance' in some way.
+  assertTrue(/account|balance|сч[её]т|баланс/i.test(d.reply), "ask balance copy: " + d.reply);
 });
 test("[onboarding] /start on virgin → ask balance", () => {
   const s = m.createFreshState();
   const d = onboarding.handle(s, "/start", TODAY);
   assertEq(d.done, false);
-  assertTrue(/balance/i.test(d.reply));
+  assertTrue(/account|balance|сч[её]т|баланс/i.test(d.reply));
 });
 test("[onboarding] empty input on virgin → ask balance", () => {
   const s = m.createFreshState();
   const d = onboarding.handle(s, "", TODAY);
-  assertTrue(/balance/i.test(d.reply));
+  assertTrue(/account|balance|сч[её]т|баланс/i.test(d.reply));
 });
 test("[onboarding] phase 1: balance only → save draft, ask payday", () => {
   const s = m.createFreshState();
@@ -123,11 +124,13 @@ test("[onboarding] phase 1: balance + payday in one msg → setup_account, done"
   assertEq(d.intent.params.payday, "2025-05-15");
   assertEq(d.intent.params.payFrequency, "monthly");
 });
-test("[onboarding] phase 1: gibberish → re-ask balance, no draft", () => {
+test("[onboarding] phase 1: gibberish → re-ask balance, draft tracks attempts only", () => {
   const s = m.createFreshState();
   const d = onboarding.handle(s, "lol whatever", TODAY);
   assertEq(d.done, false);
-  assertEq(d.draft, undefined);
+  // Draft now carries balanceAttempts (1 after one miss). No balanceCents yet.
+  assertTrue(d.draft && d.draft.balanceCents == null, "no balance saved");
+  assertEq(d.draft.balanceAttempts, 1);
 });
 test("[onboarding] phase 2: payday answer → setup_account, done", () => {
   const s = m.createFreshState();
@@ -175,17 +178,16 @@ test("[onboarding] full flow: 'hi' → '5000' → 'the 15th' → setup applied",
   assertEq(s.payday, "2025-05-15");
 });
 
-test("[onboarding] never enters infinite loop: 10 truly garbage inputs always re-ask", () => {
+test("[onboarding] never enters infinite loop: 10 truly garbage inputs always re-ask (no skip words)", () => {
   let s = m.createFreshState();
-  // Inputs MUST contain no digits — otherwise parseAmount might extract
-  // them as a balance (which is correct for natural input like "I have 5000").
-  const garbage = ["lol", "what", "huh", "really", "nope", "lmao", "uhhh", "?", "wtf", "🚀"];
+  // Inputs MUST contain no digits AND no skip-trigger words — otherwise
+  // we'd legitimately exit via the early-skip path.
+  const garbage = ["lol", "what", "huh", "really", "lmao", "uhhh", "?", "wtf", "🚀", "ehh"];
   for (const g of garbage) {
     const d = onboarding.handle(s, g, TODAY);
     assertEq(d.done, false);
     if (d.draft) s.onboardingDraft = d.draft;
   }
-  // After all that garbage, state should still be virgin.
   assertEq(s.setup, false);
 });
 

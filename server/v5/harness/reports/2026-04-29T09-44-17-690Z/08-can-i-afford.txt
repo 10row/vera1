@@ -1,0 +1,97 @@
+# 08-can-i-afford
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ Can I afford a $200 jacket?
+
+[bot] ► Let me check if $200 fits.
+       🟢 *Yep, you're fine* — after that you'd have $4,800.00, $184.61/day.
+       [Log it] [Skip]
+                              [you tapped: Skip]
+
+[bot] ► (edit) Got it — skipped.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Excellent setup flow—user input was minimal, bot understood context perfectly ('paid the 25th' parsed as monthly payday).",
+    "Clear affordability answer with forward-looking state change, giving user confidence.",
+    "Smart skip/log affordance—doesn't force logging, respects user intent.",
+    "Natural, friendly tone without being saccharine; emoji use feels organic not forced.",
+    "Zero repetition, zero loops, zero 'setting up' false states. Safety is pristine.",
+    "Minor: 'Let me check if $200 fits' is a tiny formality—could be more direct ('Yep, $200 works'), but doesn't hurt."
+  ],
+  "fixes": [
+    "Optional micro-optimization: replace 'Let me check if $200 fits' with direct response: '$200 works—you'd have $4,800.00, $184.61/day.'",
+    "Consider merging the two-line response into one for even leaner feel, though current state is already strong."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "9a4e1d6397b16e0bf1728332",
+      "ts": 1777455894382,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "a094c72ee45b5424ef8ac1aa",
+      "ts": 1777455894382,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

@@ -1,0 +1,100 @@
+# 10-russian-onboarding
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ привет
+
+[bot] ► Привет 👋 Я SpendYes — помогу следить за деньгами без хлопот.
+       
+       Сколько сейчас на основном счёте — примерно? Просто число.
+
+                              [you] ◄ 5000
+
+[bot] ► Записал — $5,000.00. 👍
+       
+       А когда следующая зарплата? Дата ("15-го", "30 апреля") или *пропустить*, если зарплата нерегулярная.
+
+                              [you] ◄ 15-го
+
+[bot] ► Готово ✅ — $5,000.00, зарплата 2026-05-15.
+       
+       Дальше просто говори: "потратил 20 на кофе", "платёж аренда 1400 1-го", "могу позволить 200?". Я разберусь.
+       
+       🟢 *Спокойно* — $312.50/день, 16 дн до зарплаты.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Спокойно* — $312.50/день, 16 дн до зарплаты.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Excellent onboarding flow — minimal friction, clear asks, natural conversational tone in Russian",
+    "User never confused about what to do next; bot explains usage naturally post-setup",
+    "Perfect safety: no repeated asks, no loops, no false 'setting up' language",
+    "Warm, friendly tone without being saccharine — emoji use feels authentic, not forced",
+    "One tiny moment: '15-го' input interpreted as May 15, 2026 — bot could have clarified year, but inference was reasonable and user didn't object",
+    "Efficiency is excellent: 3 messages to full onboarding + 1 status check = lean"
+  ],
+  "fixes": [
+    "When user says '15-го' without year context, confirm year explicitly: 'Зарплата 15-го числа — в этом месяце (май 2026)?' to eliminate any ambiguity",
+    "Minor: '16 дн до зарплаты' — confirm this is calculated from *today's date* in bot's local timezone, not hardcoded; if user is in different TZ, this could drift"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "ru",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "6797c688e7e3b3608e026bf3",
+      "ts": 1777455907689,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "5a166777e119636809dfa8dd",
+      "ts": 1777455907689,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

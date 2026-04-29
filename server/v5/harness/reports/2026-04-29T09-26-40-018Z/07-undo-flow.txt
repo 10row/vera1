@@ -1,0 +1,137 @@
+# 07-undo-flow
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-25.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ spent 80 on groceries
+
+[bot] ► Logged $80.00 on groceries.
+       
+       Spend $80.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $80.00 · groceries
+       [Yes] [Cancel]
+
+[bot] ► 🟢 *Calm* — $189.23/day, 26 days to payday.
+       [Undo]
+                              [you tapped: Undo]
+
+[bot] ► Undone.
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Flow is tight—user adds a bill, logs a spend, undoes it, checks status. All clear.",
+    "Undo button placement after confirmation is perfect—accessible and expected.",
+    "Bot never repeats itself, never re-asks for data, state is clean.",
+    "Tone is calm and reassuring without being saccharine.",
+    "Minor: confirmation screen '(edit)' label is slightly unclear—could be 'Confirm?' or just skip the label."
+  ],
+  "fixes": [
+    "Replace '(edit) ✓ Spend $80.00 · groceries' with 'Confirm: Spend $80.00 · groceries' for clarity—'edit' implies modification, not confirmation.",
+    "Consider keeping the [Undo] button visible after each transaction log (not just post-confirm) to reduce friction if user realizes mistake mid-entry."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "6d2b70836d128152391accd5",
+      "ts": 1777454840869,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "211ad2c6a1d1fc1c85c60875",
+      "ts": 1777454840869,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "8c0a1fad0042cfdd702cc09e",
+      "ts": 1777454842244,
+      "intent": {
+        "kind": "record_spend",
+        "params": {
+          "amountCents": 8000,
+          "note": "groceries"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 492000,
+      "undone": true
+    },
+    {
+      "id": "860f3fe0568329972d19c06e",
+      "ts": 1777454842245,
+      "intent": {
+        "kind": "undo_last",
+        "params": {}
+      },
+      "prevBalance": 492000,
+      "newBalance": 500000,
+      "undid": {
+        "eventId": "8c0a1fad0042cfdd702cc09e",
+        "intent": {
+          "kind": "record_spend",
+          "params": {
+            "amountCents": 8000,
+            "note": "groceries"
+          }
+        }
+      }
+    }
+  ],
+  "onboardingDraft": null
+}

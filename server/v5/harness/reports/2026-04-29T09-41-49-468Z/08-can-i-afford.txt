@@ -1,0 +1,97 @@
+# 08-can-i-afford
+# pass=false mech=true llm=fail
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ Can I afford a $200 jacket?
+
+[bot] ► Let me check if $200 on a jacket works for you.
+       🟢 *Yep, you're fine* — after that you'd have $4,800.00, $184.61/day.
+       [Log it] [Skip]
+                              [you tapped: Skip]
+
+[bot] ► (edit) Cancelled — Spend $200.00
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 7
+  },
+  "overall": 8.2,
+  "verdict": "fail",
+  "critique": [
+    "SAFE violation: Bot says '(edit) Cancelled' after user tapped Skip, implying a spend was logged then removed. The final state shows txCount=1, eventCount=1, suggesting the $200 was never logged. But the message is ambiguous—did it log then undo, or just reject? This creates doubt.",
+    "Bot asks to log immediately after afford check ('Log it' button), which is premature UX pattern—user is still deciding, not committing.",
+    "Natural: slightly clinical phrasing ('Let me check if $200 on a jacket works for you') could be warmer.",
+    "The /today command returns identical state to setup moment—no differentiation or context. Feels like a reset, not a recall."
+  ],
+  "fixes": [
+    "Change Skip/Log flow: After 'Can I afford?', use softer language like 'Ready to save it?' instead of immediate logging. Only log if user explicitly says 'add', 'log', or 'done'.",
+    "Clarify the Skip message to: '⏭️ Skipped — jacket check didn't log anything.' Remove '(edit) Cancelled' entirely; it's confusing.",
+    "Warm up the check response: 'Yep, you're good for that $200 jacket — you'd have $4,800 left. Want me to log it or just curious?'",
+    "Make /today context-aware: Show what's changed since setup ('1 check run, $5k balance still solid') rather than repeating the identical calm state."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "b895ca6c77ca2abbc5d68b87",
+      "ts": 1777455747729,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "0cd03567bb11b2ae80bdb5f6",
+      "ts": 1777455747729,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

@@ -1,0 +1,116 @@
+# 07-undo-flow
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-25.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ spent 80 on groceries
+
+[bot] ► Logged $80.00 on groceries.
+       
+       Spend $80.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $80.00 · groceries
+       [Yes] [Cancel]
+
+[bot] ► 🟢 *Calm* — $189.23/day, 26 days to payday.
+       [Undo]
+                              [you tapped: Undo]
+
+[bot] ► Undone.
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+null
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "b5be4cba5ef230f30f13b193",
+      "ts": 1777454781985,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "1f3f0d8186decd619ee5b183",
+      "ts": 1777454781985,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "d851c0a2b08f6823fc3792c1",
+      "ts": 1777454783518,
+      "intent": {
+        "kind": "record_spend",
+        "params": {
+          "amountCents": 8000,
+          "note": "groceries"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 492000,
+      "undone": true
+    },
+    {
+      "id": "b147b94d53207797f9b5c730",
+      "ts": 1777454783518,
+      "intent": {
+        "kind": "undo_last",
+        "params": {}
+      },
+      "prevBalance": 492000,
+      "newBalance": 500000,
+      "undid": {
+        "eventId": "d851c0a2b08f6823fc3792c1",
+        "intent": {
+          "kind": "record_spend",
+          "params": {
+            "amountCents": 8000,
+            "note": "groceries"
+          }
+        }
+      }
+    }
+  ],
+  "onboardingDraft": null
+}

@@ -1,0 +1,113 @@
+{
+  "runId": "2026-04-29T09-24-49-196Z",
+  "total": 11,
+  "passed": 9,
+  "failed": 2,
+  "results": [
+    {
+      "name": "01-onboarding-clean",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "02-onboarding-dump",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "03-onboarding-vague",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "04-spend-and-confirm",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "05-add-bill",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "06-cancel-confirm",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "07-undo-flow",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "08-can-i-afford",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "09-already-setup-no-loop",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "10-russian-onboarding",
+      "pass": false,
+      "mech": {
+        "passed": false,
+        "reasons": [
+          "FORBIDDEN phrase appeared: /Hey 👋/i",
+          "FORBIDDEN phrase appeared: /balance in your main account/i",
+          "FORBIDDEN phrase appeared: /payday/"
+        ]
+      },
+      "llm": null
+    },
+    {
+      "name": "11-typos",
+      "pass": false,
+      "mech": {
+        "passed": false,
+        "reasons": [
+          "balance expected 797500 got 799975"
+        ]
+      },
+      "llm": null
+    }
+  ]
+}

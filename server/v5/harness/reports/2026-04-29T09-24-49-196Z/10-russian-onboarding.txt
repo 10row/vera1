@@ -1,0 +1,80 @@
+# 10-russian-onboarding
+# pass=false mech=false llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ привет
+
+[bot] ► Hey 👋 I'm SpendYes — your money buddy.
+       
+       What's the rough balance in your main account right now? Just say a number.
+
+                              [you] ◄ 5000
+
+[bot] ► Got it — $5,000.00 saved.
+       
+       When's your next paycheck? Say a date like *"the 15th"* or *"April 30"* — or *"skip"* if it's irregular.
+
+                              [you] ◄ 15-го
+
+[bot] ► Done — $5,000.00 saved, payday 2026-05-15.
+       
+       🟢 *Calm* — $312.50/day, 16 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $312.50/day, 16 days to payday.
+
+## MECHANICAL
+{
+  "passed": false,
+  "reasons": [
+    "FORBIDDEN phrase appeared: /Hey 👋/i",
+    "FORBIDDEN phrase appeared: /balance in your main account/i",
+    "FORBIDDEN phrase appeared: /payday/"
+  ]
+}
+
+## LLM JUDGE
+null
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "e2488299ab6b2ebc20bbee58",
+      "ts": 1777454701700,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "ff3e0777816acd63d3ef3bc1",
+      "ts": 1777454701700,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}
