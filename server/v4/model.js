@@ -146,10 +146,21 @@ function createFreshState() {
   };
 }
 
+// Escape Telegram Markdown (the legacy "Markdown" parse mode) special chars
+// in user-supplied strings. Without this, an envelope name like
+// "Save *for* Vietnam" or a note like "_dinner_" produces unbalanced
+// markdown — and Telegram silently DROPS the message. Result: bot looks
+// like it ended mid-conversation. Always run user input through here
+// before interpolating into a parse_mode: "Markdown" message.
+function escapeMd(s) {
+  if (s == null) return "";
+  return String(s).replace(/([_*`\[\]])/g, "\\$1");
+}
+
 module.exports = {
   toCents, toMoney, toShort,
   today, daysBetween, daysUntil, normalizeDate, addDays, advancePayday,
   ENVELOPE_KINDS, RECURRENCES, PAY_FREQS, TX_KINDS,
-  ekey, uid,
+  ekey, uid, escapeMd,
   createFreshState,
 };

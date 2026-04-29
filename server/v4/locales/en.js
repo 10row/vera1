@@ -71,6 +71,7 @@ module.exports = {
   "confirm.notYours": "Hmm, that wasn't yours.",
   "confirm.couldntApply": "Couldn't apply that: {error}",
   "confirm.allSet": "*All set.*",
+  "confirm.done": "*Done.*",
 
   // ── Intent labels (for confirm cards) ────────────────
   "intent.setup": "Set up account · balance {balance}{paydayClause}{freqClause}",

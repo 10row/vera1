@@ -99,12 +99,14 @@ function validateIntent(state, intent, todayStr) {
       const key = m.ekey(p.name);
       const existing = state.envelopes[key];
       if (existing && existing.active) {
-        // Helpful rejection: tell the user what already exists, and hint
-        // at the two valid paths forward (rename, or update existing).
+        // Helpful rejection: PLAIN TEXT — no markdown chars. The bot
+        // wraps the whole reason in italics for display; if a user's
+        // envelope name contains * or _, embedded markdown would break
+        // the entire message and Telegram would silently drop it.
         const sym = state.currencySymbol || "$";
         const M = (c) => m.toMoney(c, sym);
         return reject(
-          "There's already a *" + existing.name + "* (" + M(existing.amountCents) + "). " +
+          "There's already a " + existing.name + " (" + M(existing.amountCents) + "). " +
           "Pick a different name, or say \"update " + existing.name + "\" to change it."
         );
       }

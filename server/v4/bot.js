@@ -135,14 +135,22 @@ function takePending(token) {
 
 // ── HELPERS ─────────────────────────────────────────────
 // fmtIntent renders a short user-facing description of an intent for the
-// confirm card. Localized via t(). Multi-currency: if intent has
-// originalAmountCents + originalCurrency, show "€50 (≈$54)".
+// confirm card. Localized via t(). User-supplied strings (envelope
+// names, notes) are escaped for Markdown to prevent silent message drops
+// from unbalanced * / _ / ` / [ ] characters.
 function fmtIntent(intent, opts) {
   const p = intent.params || {};
   const lang = (opts && opts.lang) || "en";
   const sym = (opts && opts.sym) || "$";
   const baseCode = (opts && opts.currencyCode) || "USD";
   const M = (c) => currency.fmtMoney(typeof c === "number" ? c : 0, baseCode);
+  // Shorthand for escaping user-supplied strings against Markdown breakage.
+  const E = m.escapeMd;
+  // User-controlled fields run through E. Numeric/symbol fields (which
+  // we generate) pass through directly.
+  const eName = E(p.name);
+  const eNote = E(p.note);
+  const eEnvKey = E(p.envelopeKey || p.key);
   const fmtAmtPair = (cents) => {
     if (typeof p.originalAmountCents === "number" && p.originalCurrency
         && p.originalCurrency !== baseCode) {
@@ -172,25 +180,25 @@ function fmtIntent(intent, opts) {
       const dueClause = p.dueDate ? " · " + p.dueDate : "";
       if (p.kind === "bill") {
         return t("intent.addBill", lang, {
-          name: p.name, amount: M(p.amountCents), recurrenceClause, dueClause,
+          name: eName, amount: M(p.amountCents), recurrenceClause, dueClause,
         });
       }
       if (p.kind === "budget") {
-        return t("intent.addBudget", lang, { name: p.name, amount: M(p.amountCents) });
+        return t("intent.addBudget", lang, { name: eName, amount: M(p.amountCents) });
       }
       if (p.kind === "goal") {
         const targetClause = p.targetCents ? " · target " + M(p.targetCents) : "";
-        return t("intent.addGoal", lang, { name: p.name, amount: M(p.amountCents), targetClause });
+        return t("intent.addGoal", lang, { name: eName, amount: M(p.amountCents), targetClause });
       }
       return t("intent.unknown", lang, { kind: intent.kind });
     }
     case "update_envelope":
-      return t("intent.update", lang, { name: p.name || p.key });
+      return t("intent.update", lang, { name: eName || eEnvKey });
     case "remove_envelope":
-      return t("intent.remove", lang, { name: p.name || p.key });
+      return t("intent.remove", lang, { name: eName || eEnvKey });
     case "record_spend": {
-      const noteClause = p.note ? " · " + p.note : "";
-      const envelopeClause = ""; // envelope name shown in card meta separately if needed
+      const noteClause = p.note ? " · " + eNote : "";
+      const envelopeClause = "";
       const isForeign = typeof p.originalAmountCents === "number" && p.originalCurrency
         && p.originalCurrency !== baseCode;
       if (isForeign) {
@@ -203,13 +211,13 @@ function fmtIntent(intent, opts) {
       return t("intent.spend", lang, { amount: M(p.amountCents), noteClause, envelopeClause });
     }
     case "record_income":
-      return t("intent.income", lang, { amount: M(p.amountCents), noteClause: p.note ? " · " + p.note : "" });
+      return t("intent.income", lang, { amount: M(p.amountCents), noteClause: p.note ? " · " + eNote : "" });
     case "fund_envelope":
-      return t("intent.fundEnvelope", lang, { amount: M(p.amountCents), name: p.name || p.envelopeKey });
+      return t("intent.fundEnvelope", lang, { amount: M(p.amountCents), name: eName || eEnvKey });
     case "pay_bill":
-      return t("intent.payBill", lang, { name: p.name || p.envelopeKey });
+      return t("intent.payBill", lang, { name: eName || eEnvKey });
     case "skip_bill":
-      return t("intent.skipBill", lang, { name: p.name || p.envelopeKey });
+      return t("intent.skipBill", lang, { name: eName || eEnvKey });
     case "edit_transaction":
       return t("intent.editTx", lang, { amount: p.newAmountCents !== undefined ? M(p.newAmountCents) : "" });
     case "delete_transaction":
@@ -279,10 +287,61 @@ function confirmCard(token, opts) {
   };
 }
 
+// safeReply / safeEdit — Telegram silently DROPS messages with malformed
+// Markdown (unbalanced * or _ from user input that escaped the escaping
+// layer). These wrappers retry once without parse_mode if the first
+// attempt errors with "can't parse entities". Failures beyond that are
+// logged loudly so we can fix the markdown source.
+async function safeReply(ctx, text, options) {
+  try {
+    return await ctx.reply(text, options || {});
+  } catch (e) {
+    const msg = (e && e.message) || "";
+    if (/can't parse|parse_mode/i.test(msg) && options && options.parse_mode) {
+      // Retry without parse_mode — preserve everything else.
+      const fallbackOpts = Object.assign({}, options);
+      delete fallbackOpts.parse_mode;
+      try {
+        const sent = await ctx.reply(text, fallbackOpts);
+        console.warn("[v4 safeReply] markdown failed, sent as plain:", msg, "// text:", text.slice(0, 200));
+        return sent;
+      } catch (e2) {
+        console.error("[v4 safeReply] retry failed:", e2.message);
+      }
+    } else {
+      console.error("[v4 safeReply]", msg);
+    }
+    return null;
+  }
+}
+
+async function safeEdit(ctx, text, options) {
+  try {
+    return await ctx.editMessageText(text, options || {});
+  } catch (e) {
+    const msg = (e && e.message) || "";
+    // Common "message is not modified" — Telegram rejects identical edits.
+    // Treat as success; the visual state is already correct.
+    if (/not modified/i.test(msg)) return null;
+    if (/can't parse|parse_mode/i.test(msg) && options && options.parse_mode) {
+      const fallbackOpts = Object.assign({}, options);
+      delete fallbackOpts.parse_mode;
+      try {
+        return await ctx.editMessageText(text, fallbackOpts);
+      } catch (e2) {
+        console.error("[v4 safeEdit] retry failed:", e2.message);
+      }
+    } else {
+      console.warn("[v4 safeEdit]", msg);
+    }
+    return null;
+  }
+}
+
 // Send a text reply, and if the incoming was voice + user opted in,
 // also send a voice synth. TTS failure is invisible (no error to user).
 async function sayMaybeVoice(ctx, text, options, voiceMode) {
-  const sent = await ctx.reply(text, options || {});
+  const sent = await safeReply(ctx, text, options || {});
   if (voiceMode && text) {
     const audio = await tts.synthesize(text);
     if (audio) {
@@ -401,8 +460,8 @@ async function processText(prisma, ctx, telegramId, text, opts) {
 
     if (rejections.length > 0) {
       const txt = (result.message ? result.message + "\n\n" : "")
-        + rejections.map(r => "_" + r + "_").join("\n");
-      await ctx.reply(txt, { parse_mode: "Markdown", reply_markup: mainKeyboard() });
+        + rejections.map(r => "_" + m.escapeMd(r) + "_").join("\n");
+      await safeReply(ctx, txt, { parse_mode: "Markdown", reply_markup: mainKeyboard() });
     }
 
     if (autoApplied.length > 0) {
@@ -411,12 +470,12 @@ async function processText(prisma, ctx, telegramId, text, opts) {
       const lastEventId = curState.events && curState.events.length
         ? curState.events[curState.events.length - 1].id
         : null;
-      const opts = { parse_mode: "Markdown", reply_markup: mainKeyboard() };
+      const replyOpts = { parse_mode: "Markdown", reply_markup: mainKeyboard() };
       if (lastEventId) {
         const undoTok = setUndoToken(lastEventId, u.id);
-        opts.reply_markup = undoButton(undoTok, lang).reply_markup;
+        replyOpts.reply_markup = undoButton(undoTok, lang).reply_markup;
       }
-      await sayMaybeVoice(ctx, lines.join("\n"), opts, voiceMode);
+      await sayMaybeVoice(ctx, lines.join("\n"), replyOpts, voiceMode);
     }
 
     if (toConfirm.length === 1) {
@@ -433,11 +492,12 @@ async function processText(prisma, ctx, telegramId, text, opts) {
 
       const cardText = intro + stepLabel
         + fmtIntent(intent, fmtOpts)
-        + (verdict.reason && verdict.reason !== "Set up your account?" ? "\n_" + verdict.reason + "_" : "");
+        + (verdict.reason && verdict.reason !== "Set up your account?"
+            ? "\n_" + m.escapeMd(verdict.reason) + "_" : "");
 
       const yesLabel = queueTotal > 1 ? t("confirm.next", lang) : t("confirm.yes", lang);
       const noLabel = queueTotal > 1 ? t("confirm.skip", lang) : t("confirm.cancel", lang);
-      await ctx.reply(cardText, { parse_mode: "Markdown", ...confirmCard(token, { yesLabel, noLabel }) });
+      await safeReply(ctx, cardText, { parse_mode: "Markdown", ...confirmCard(token, { yesLabel, noLabel }) });
     } else if (toConfirm.length > 1) {
       const intents = toConfirm.map(c => c.intent);
       const token = setPending(intents, u.id);
@@ -447,7 +507,7 @@ async function processText(prisma, ctx, telegramId, text, opts) {
       intents.forEach((i, idx) => lines.push((idx + 1) + ". " + fmtIntent(i, fmtOpts)));
       lines.push("");
       lines.push(confirmAll);
-      await ctx.reply(lines.join("\n"), {
+      await safeReply(ctx, lines.join("\n"), {
         parse_mode: "Markdown",
         ...confirmCard(token, { yesLabel: t("confirm.yes", lang), noLabel: t("confirm.cancel", lang) }),
       });
@@ -853,8 +913,11 @@ function attach(prisma) {
             await db.saveState(prisma, u.id, state);
           }
 
-          const summary = lines.concat(queueRejections.map(r => "_" + r + "_")).join("\n");
-          await ctx.editMessageText(summary, { parse_mode: "Markdown" }).catch(() => {});
+          // Sanitize rejection text for markdown italics (validator now
+          // emits plain text but defense in depth — escape user fragments
+          // that may have leaked through as part of an error message).
+          const summary = lines.concat(queueRejections.map(r => "_" + m.escapeMd(r) + "_")).join("\n");
+          await safeEdit(ctx, summary, { parse_mode: "Markdown" });
 
           if (nextConfirmIntent) {
             const newToken = setPending([nextConfirmIntent], u.id, {
@@ -865,24 +928,34 @@ function attach(prisma) {
             const stepLabel = "*" + t("confirm.stepOf", stateLang, { n: nextIndex, m: total }) + "*\n";
             const cardText = stepLabel + fmtIntent(nextConfirmIntent, fmtOpts) +
               (nextConfirmVerdict.reason && nextConfirmVerdict.reason !== "Set up your account?"
-                ? "\n_" + nextConfirmVerdict.reason + "_" : "");
+                ? "\n_" + m.escapeMd(nextConfirmVerdict.reason) + "_" : "");
             const yesLabel = (nextIndex < total) ? t("confirm.next", stateLang) : t("confirm.yes", stateLang);
             const noLabel = t("confirm.skip", stateLang);
-            await ctx.reply(cardText, { parse_mode: "Markdown", ...confirmCard(newToken, { yesLabel, noLabel }) });
+            await safeReply(ctx, cardText, { parse_mode: "Markdown", ...confirmCard(newToken, { yesLabel, noLabel }) });
             return;
           }
 
           const lastEventId = state.events && state.events.length
             ? state.events[state.events.length - 1].id
             : null;
+          // Self-contained acknowledgment: intent recap + warm preamble +
+          // hero. The user gets a clear bot-reply even if the card edit
+          // above silently failed. This is the "post-confirm" message.
+          const ackPreamble = total > 1
+            ? t("confirm.allSet", stateLang)
+            : t("confirm.done", stateLang);
+          // Re-render the most recently applied intent as the recap line.
+          const lastApplied = applied.length > 0 ? applied[applied.length - 1] : null;
+          const recapLine = lastApplied ? "✓ " + fmtIntent(lastApplied, fmtOpts) : "";
           const finalLines = [];
-          if (total > 1) finalLines.push(t("confirm.allSet", stateLang));
+          if (recapLine) finalLines.push(recapLine);
+          finalLines.push(ackPreamble);
           finalLines.push(heroLine(state));
           const finalOpts = { parse_mode: "Markdown" };
           if (lastEventId) {
             finalOpts.reply_markup = undoButton(setUndoToken(lastEventId, u.id), stateLang).reply_markup;
           }
-          await ctx.reply(finalLines.join("\n"), finalOpts);
+          await safeReply(ctx, finalLines.filter(Boolean).join("\n"), finalOpts);
         } catch (e) {
           console.error("[v4 confirm apply]", e);
           await ctx.editMessageText(t("confirm.couldntApply", stateLang, { error: e.message })).catch(() => {});

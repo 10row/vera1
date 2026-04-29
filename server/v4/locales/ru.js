@@ -70,6 +70,7 @@ module.exports = {
   "confirm.notYours": "Хм, это не твоё.",
   "confirm.couldntApply": "Не получилось применить: {error}",
   "confirm.allSet": "*Готово.*",
+  "confirm.done": "*Готово.*",
 
   // ── Intent labels ────────────────────────────────────
   "intent.setup": "Настройка · баланс {balance}{paydayClause}{freqClause}",
