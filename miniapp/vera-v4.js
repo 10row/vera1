@@ -68,6 +68,32 @@ function softColorForState(s) {
   return C.greenSoft;
 }
 
+// Build a map of envelope key → friendly name. Used everywhere we
+// might otherwise leak the internal ekey ("vietnam_trip") to the user.
+function buildNameMap(envelopes) {
+  var map = {};
+  (envelopes || []).forEach(function(e) { if (e && e.key) map[e.key] = e.name || e.key; });
+  return map;
+}
+
+// Pretty label for a transaction. Returns { primary, secondary }.
+//   primary   — the main line of text in the transaction row
+//   secondary — small muted label below (or null)
+// Rules:
+//   - If a note exists → note is primary; envelope name (if any) is
+//     secondary. Never show ekey.
+//   - If no note but envelope exists → envelope name is primary,
+//     no secondary.
+//   - Otherwise → "—".
+function txLabel(tx, nameMap) {
+  var note = (tx.note || "").trim();
+  var envName = tx.envelopeKey && nameMap ? (nameMap[tx.envelopeKey] || null) : null;
+  if (note && envName) return { primary: note, secondary: envName };
+  if (note) return { primary: note, secondary: null };
+  if (envName) return { primary: envName, secondary: null };
+  return { primary: "—", secondary: null };
+}
+
 function relativeDay(dateStr, today) {
   if (!dateStr) return "";
   if (dateStr === today) return "Today";
@@ -81,47 +107,27 @@ function relativeDay(dateStr, today) {
 }
 
 // ── HERO ─────────────────────────────────────────────────────
-// The product compressed: status pill + huge number + sub-context.
-// Plus inline "Can I afford?" input. This is the entire app, really.
+// Sacred. Just the status pill, the big number, and one line of context.
+// No inputs, no buttons, no decisions. The morning glance.
+// Decision support ("can I afford X?") lives in chat — the right place
+// for conversation. The hero stays calm.
 function Hero(props) {
   var v = props.view;
-  var sym = v.currencySymbol || "$";
   var col = colorForState(v.state);
 
-  var simState = useState({ amount: "", result: null, loading: false });
-  var sim = simState[0], setSim = simState[1];
-
-  function runSimulate() {
-    var raw = sim.amount.replace(/[^0-9.]/g, "");
-    var n = parseFloat(raw);
-    if (!isFinite(n) || n <= 0) return;
-    var cents = Math.round(n * 100);
-    setSim(Object.assign({}, sim, { loading: true, result: null }));
-    fetch(API_BASE + "/api/v4/simulate/" + props.sid + "?amountCents=" + cents, { headers: authHeaders() })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        setSim(Object.assign({}, sim, { loading: false, result: d.result || null }));
-      })
-      .catch(function() { setSim(Object.assign({}, sim, { loading: false, result: null })); });
-  }
-
-  function clearSim() { setSim({ amount: "", result: null, loading: false }); }
-
-  // Status pill
   var pill = h("div", {
     style: {
       display: "inline-flex", alignItems: "center", gap: 6,
       background: softColorForState(v.state),
       color: col, fontSize: 12, fontWeight: 600,
       padding: "5px 12px", borderRadius: 999,
-      letterSpacing: "0.02em", marginBottom: 14,
+      letterSpacing: "0.02em", marginBottom: 16,
     },
   },
     h("span", { style: { width: 6, height: 6, borderRadius: "50%", background: col } }),
     v.statusWord || (v.state === "over" ? "Over" : v.state === "tight" ? "Tight" : "Calm")
   );
 
-  // Hero number — the morning glance
   var heroNumber, heroLabel, subContext;
   if (v.state === "over") {
     heroNumber = v.deficitFormatted;
@@ -133,74 +139,17 @@ function Hero(props) {
     subContext = v.dailyPaceFormatted + "/day · " + v.daysToPayday + " days to payday";
   }
 
-  return h("div", { style: { padding: "28px 20px 18px", textAlign: "center" } },
+  return h("div", { style: { padding: "32px 20px 22px", textAlign: "center" } },
     pill,
     h("div", {
       style: {
-        fontFamily: "'Lora',serif", fontSize: 56, fontWeight: 500,
+        fontFamily: "'Lora',serif", fontSize: 60, fontWeight: 500,
         color: col, lineHeight: 1.0, letterSpacing: "-0.02em",
         transition: "color 0.4s ease",
       },
     }, heroNumber),
-    h("div", { style: { fontSize: 13, color: C.sub, marginTop: 8, letterSpacing: "0.02em" } }, heroLabel),
-    h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, subContext),
-
-    // Inline simulate
-    h("div", { style: { marginTop: 24, padding: "12px 14px", background: C.card, border: "1px solid " + C.border, borderRadius: 14 } },
-      h("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
-        h("div", { style: { fontSize: 11, color: C.sub, fontWeight: 500, flexShrink: 0 } }, "Can I afford"),
-        h("div", { style: { display: "flex", alignItems: "center", flex: 1, background: C.bg, borderRadius: 8, padding: "6px 10px", border: "1px solid " + C.border } },
-          h("div", { style: { color: C.sub, fontSize: 14, marginRight: 4 } }, sym),
-          h("input", {
-            type: "text",
-            inputMode: "decimal",
-            placeholder: "200",
-            value: sim.amount,
-            onChange: function(e) { setSim(Object.assign({}, sim, { amount: e.target.value, result: null })); },
-            onKeyDown: function(e) { if (e.key === "Enter") runSimulate(); },
-            style: {
-              flex: 1, background: "transparent", border: "none", outline: "none",
-              color: C.text, fontSize: 14, fontFamily: "'Inter',sans-serif",
-              padding: 0, width: "100%",
-            },
-          })
-        ),
-        h("button", {
-          onClick: runSimulate,
-          disabled: !sim.amount || sim.loading,
-          style: {
-            background: col, color: "#0F0F0F", border: "none", borderRadius: 8,
-            padding: "7px 14px", fontSize: 12, fontWeight: 600,
-            cursor: "pointer", fontFamily: "'Inter',sans-serif",
-            opacity: !sim.amount ? 0.4 : 1,
-          },
-        }, sim.loading ? "…" : "Show")
-      ),
-      sim.result ? SimulateResult({ result: sim.result, sym: sym, onClear: clearSim }) : null
-    )
-  );
-}
-
-function SimulateResult(props) {
-  var r = props.result;
-  var col = colorForState(r.projected.state);
-  var verdict;
-  if (r.projected.state === "over") verdict = "Over — that'd put you " + fmtMoneyFull(r.projected.deficitCents, props.sym) + " short.";
-  else if (r.projected.state === "tight") verdict = "Tight — drops you to " + r.projected.dailyPaceFormatted + "/day.";
-  else if (r.current.state !== "green") verdict = "Easier — back to " + r.projected.dailyPaceFormatted + "/day.";
-  else verdict = "Easy — " + r.projected.dailyPaceFormatted + "/day for " + r.projected.daysToPayday + " days.";
-
-  return h("div", {
-    style: {
-      marginTop: 10, padding: "10px 12px", background: softColorForState(r.projected.state),
-      borderRadius: 10, textAlign: "left",
-    },
-  },
-    h("div", { style: { fontSize: 13, color: col, fontWeight: 500 } }, verdict),
-    h("div", {
-      onClick: props.onClear,
-      style: { fontSize: 11, color: C.muted, marginTop: 6, cursor: "pointer", display: "inline-block" },
-    }, "Clear")
+    h("div", { style: { fontSize: 13, color: C.sub, marginTop: 10, letterSpacing: "0.02em" } }, heroLabel),
+    h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, subContext)
   );
 }
 
@@ -212,8 +161,17 @@ function Heatmap(props) {
   var dailyPace = props.dailyPaceCents || 0;
   var sym = props.sym || "$";
   var txs = props.txs || [];
+  var nameMap = props.nameMap || {};
   var openState = useState(null);
   var open = openState[0], setOpen = openState[1];
+
+  // Subtle haptic feedback on Telegram clients that support it.
+  function tapHaptic() {
+    try {
+      var hf = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback;
+      if (hf && hf.impactOccurred) hf.impactOccurred("light");
+    } catch (e) { /* ignore */ }
+  }
 
   // Color thresholds: 0 spend = dim grey, <50% pace = green,
   // 50-100% pace = green-medium, 100-150% = amber, >150% = red
@@ -251,7 +209,7 @@ function Heatmap(props) {
         var isOpen = open === d.date;
         return h("div", {
           key: d.date,
-          onClick: function() { setOpen(isOpen ? null : d.date); },
+          onClick: function() { tapHaptic(); setOpen(isOpen ? null : d.date); },
           style: {
             aspectRatio: "1 / 1",
             background: isOpen ? C.text : col.bg,
@@ -266,7 +224,7 @@ function Heatmap(props) {
         }, dayLabel(d.date));
       })
     ),
-    open ? DayDetail({ date: open, txs: txs, sym: sym, onClose: function() { setOpen(null); } }) : null
+    open ? DayDetail({ date: open, txs: txs, sym: sym, nameMap: nameMap, today: heatmap[heatmap.length - 1] && heatmap[heatmap.length - 1].date }) : null
   );
 }
 
@@ -277,22 +235,25 @@ function DayDetail(props) {
     if (tx.kind === "refund") return a - Math.abs(tx.amountCents);
     return a;
   }, 0);
+  var dateLabel = props.today ? relativeDay(props.date, props.today) : props.date;
   return h("div", {
     style: { marginTop: 10, padding: "12px 14px", background: C.card, borderRadius: 10, border: "1px solid " + C.border },
   },
     h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
-      h("div", { style: { fontSize: 12, fontWeight: 600 } }, props.date),
+      h("div", { style: { fontSize: 12, fontWeight: 600 } }, dateLabel),
       h("div", { style: { fontSize: 11, color: C.sub } }, fmtMoney(total, props.sym) + " spent")
     ),
     dayTxs.length === 0
       ? h("div", { style: { fontSize: 11, color: C.muted, padding: "6px 0" } }, "Nothing logged.")
       : dayTxs.map(function(tx) {
+          var lbl = txLabel(tx, props.nameMap);
           return h("div", {
             key: tx.id,
-            style: { display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: 12, borderTop: "1px solid " + C.border },
+            style: { display: "flex", justifyContent: "space-between", padding: "7px 0", fontSize: 12, borderTop: "1px solid " + C.border, alignItems: "center" },
           },
-            h("div", { style: { color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 } },
-              tx.note || (tx.envelopeKey ? tx.envelopeKey : "—")
+            h("div", { style: { flex: 1, overflow: "hidden", marginRight: 8 } },
+              h("div", { style: { color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
+              lbl.secondary ? h("div", { style: { color: C.muted, fontSize: 10, marginTop: 1 } }, lbl.secondary) : null
             ),
             h("div", { style: { color: tx.kind === "refund" ? C.green : C.text, fontFamily: "'Lora',serif" } },
               (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), props.sym)
@@ -306,6 +267,7 @@ function DayDetail(props) {
 function TodayStrip(props) {
   var v = props.view;
   var sym = v.currencySymbol || "$";
+  var nameMap = props.nameMap || {};
   var todayTxs = (props.txs || []).filter(function(tx) {
     if (tx.date !== props.today) return false;
     return tx.kind === "spend" || tx.kind === "refund" || tx.kind === "bill_payment";
@@ -326,19 +288,17 @@ function TodayStrip(props) {
         }, "Nothing yet today. Send your bot a voice note 👇")
       : h("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 12, overflow: "hidden" } },
           todayTxs.map(function(tx, i) {
+            var lbl = txLabel(tx, nameMap);
             return h("div", {
               key: tx.id,
               style: {
                 display: "flex", justifyContent: "space-between", alignItems: "center",
-                padding: "10px 14px", borderTop: i === 0 ? "none" : "1px solid " + C.border,
+                padding: "11px 14px", borderTop: i === 0 ? "none" : "1px solid " + C.border,
               },
             },
               h("div", { style: { flex: 1, overflow: "hidden" } },
-                h("div", { style: { fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-                  tx.note || (tx.envelopeKey ? tx.envelopeKey : "—")),
-                tx.envelopeKey && tx.note
-                  ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 1 } }, tx.envelopeKey)
-                  : null
+                h("div", { style: { fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
+                lbl.secondary ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 2 } }, lbl.secondary) : null
               ),
               h("div", {
                 style: {
@@ -475,6 +435,7 @@ function History(props) {
   var open = openState[0], setOpen = openState[1];
   var filterState = useState("all");
   var filter = filterState[0], setFilter = filterState[1];
+  var nameMap = props.nameMap || {};
 
   var allTxs = (props.txs || []).filter(function(tx) {
     return tx.kind === "spend" || tx.kind === "refund" || tx.kind === "bill_payment";
@@ -547,15 +508,17 @@ function History(props) {
                     relativeDay(date, today) + (date === today ? "" : " · " + date)),
                   h("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 10, overflow: "hidden" } },
                     byDate[date].map(function(tx, i) {
+                      var lbl = txLabel(tx, nameMap);
                       return h("div", {
                         key: tx.id,
                         style: {
-                          display: "flex", justifyContent: "space-between", padding: "9px 12px",
-                          fontSize: 12, borderTop: i === 0 ? "none" : "1px solid " + C.border,
+                          display: "flex", justifyContent: "space-between", padding: "10px 12px",
+                          fontSize: 12, borderTop: i === 0 ? "none" : "1px solid " + C.border, alignItems: "center",
                         },
                       },
-                        h("div", { style: { flex: 1, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 } },
-                          tx.note || (tx.envelopeKey ? tx.envelopeKey : "—")
+                        h("div", { style: { flex: 1, overflow: "hidden", marginRight: 8 } },
+                          h("div", { style: { color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
+                          lbl.secondary ? h("div", { style: { color: C.muted, fontSize: 10, marginTop: 1 } }, lbl.secondary) : null
                         ),
                         h("div", { style: { fontFamily: "'Lora',serif", color: tx.kind === "refund" ? C.green : C.text } },
                           (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), props.sym))
@@ -678,6 +641,7 @@ function Dashboard(props) {
   var bills = envs.filter(function(e) { return e.kind === "bill"; });
   var budgets = envs.filter(function(e) { return e.kind === "budget"; });
   var goals = envs.filter(function(e) { return e.kind === "goal"; });
+  var nameMap = buildNameMap(envs);
 
   // dueNow appears as part of bills card sort (most urgent first), not a separate section.
   bills.sort(function(a, b) {
@@ -694,8 +658,8 @@ function Dashboard(props) {
 
   return h("div", null,
     h(Hero, { view: v, sid: props.sid }),
-    h(Heatmap, { heatmap: heatmap, dailyPaceCents: v.dailyPaceCents, sym: sym, txs: txs }),
-    h(TodayStrip, { view: v, txs: txs, today: today }),
+    h(Heatmap, { heatmap: heatmap, dailyPaceCents: v.dailyPaceCents, sym: sym, txs: txs, nameMap: nameMap }),
+    h(TodayStrip, { view: v, txs: txs, today: today, nameMap: nameMap }),
     bills.length > 0 ? h("div", null,
       h(SectionHeader, { icon: "📌", title: "Bills", count: bills.length }),
       h("div", { style: { padding: "0 16px" } },
@@ -711,7 +675,7 @@ function Dashboard(props) {
       h("div", { style: { padding: "0 16px" } },
         goals.map(function(e) { return h(GoalCard, { key: e.key, env: e, sym: sym }); }))
     ) : null,
-    h(History, { txs: txs, sym: sym, today: today, dateMinusN: dateMinusN }),
+    h(History, { txs: txs, sym: sym, today: today, dateMinusN: dateMinusN, nameMap: nameMap }),
     h("div", {
       style: { textAlign: "center", padding: "28px 16px 32px", color: C.muted, fontSize: 11 },
     }, "Read-only · changes happen in chat")
