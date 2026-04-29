@@ -92,9 +92,17 @@ function fmtIntent(intent, sym) {
         (p.payFrequency ? ", " + p.payFrequency : "");
     case "adjust_balance":
       return "Update balance to " + M(p.newBalanceCents);
-    case "add_envelope":
-      return "Add " + (p.kind || "item") + ": " + p.name + " · " + M(p.amountCents) +
-        (p.dueDate ? " · due " + p.dueDate : "");
+    case "add_envelope": {
+      // Make kind UNMISTAKABLE so a misclassification is visible at a glance.
+      const kindIcon = p.kind === "bill" ? "📌" : p.kind === "budget" ? "📊" : p.kind === "goal" ? "🎯" : "•";
+      const kindLabel = p.kind === "bill" ? "Bill (recurring)"
+        : p.kind === "budget" ? "Budget (ongoing spend allowance)"
+        : p.kind === "goal" ? "Goal (saving toward target)"
+        : "Envelope";
+      const recurrence = p.recurrence && p.recurrence !== "once" ? " · " + p.recurrence : "";
+      const due = p.dueDate ? " · due " + p.dueDate : "";
+      return kindIcon + " *" + kindLabel + "*\n     " + p.name + " · " + M(p.amountCents) + recurrence + due;
+    }
     case "update_envelope":
       return "Update " + (p.key || p.name);
     case "remove_envelope":
