@@ -137,16 +137,25 @@ function heroLine(state) {
   return viewHeroLine(v, m.today(state.timezone || "UTC"));
 }
 
+// Reply keyboard is dead weight: it eats screen space on every message,
+// looks dated, and is redundant with the always-visible ≡ menu button.
+// Modern Telegram money bots don't use them. We send remove_keyboard with
+// every reply so existing users see their old keyboard disappear, and new
+// users never see one. Inline keyboards are still used for confirm cards.
 function mainKeyboard() {
-  const url = process.env.MINIAPP_URL;
-  const kb = {
-    keyboard: [[{ text: "How am I doing?" }]],
-    resize_keyboard: true,
-  };
-  if (url && /^https:\/\//.test(url)) {
-    kb.keyboard[0].push({ text: "📊 Dashboard", web_app: { url } });
-  }
-  return kb;
+  return { remove_keyboard: true };
+}
+
+// Greeting patterns: deterministic intercept for fresh users who say
+// hi/hello/hey/etc. Bypasses the AI entirely so the response is reliable.
+const GREETING_PATTERNS = /^\s*(hi+|hello+|hey+|yo+|sup|hola|namaste|howdy|hii+|heya|good\s*(morning|afternoon|evening|day|night)|what['s ]*up|h r u|hru)\s*[!.?]*\s*$/i;
+
+function welcomeMessage() {
+  return (
+    "Hey 👋 I'm SpendYes — your money friend.\n\n" +
+    PROMISE + "\n\n" +
+    "What's the rough balance in your main account right now? Just say a number — like *$5,000* or *5k*."
+  );
 }
 
 function confirmCard(token, opts) {
@@ -527,6 +536,22 @@ function attach(prisma) {
       const text = ctx.message.text;
       if (!text || text.startsWith("/")) return; // commands handled above
       if (text.length > 2000) return ctx.reply("That message is too long — keep it under 2000 chars.");
+
+      // Deterministic onboarding intercept: fresh users sending a greeting
+      // get a hardcoded warm welcome that asks for balance. Reliable —
+      // doesn't depend on the AI following a prompt rule.
+      if (GREETING_PATTERNS.test(text)) {
+        const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+        const state = await db.loadState(prisma, u.id);
+        if (!state.setup) {
+          await ctx.reply(welcomeMessage(), {
+            parse_mode: "Markdown",
+            reply_markup: mainKeyboard(),
+          });
+          return;
+        }
+      }
+
       await processText(prisma, ctx, ctx.from.id, text);
     } catch (e) {
       console.error("[v4 text]", e);
@@ -632,6 +657,22 @@ function attach(prisma) {
           }
           await db.saveState(prisma, u.id, state);
           const sym = state.currencySymbol || "$";
+          const wasReset = applied.some(i => i && i.kind === "reset");
+
+          if (wasReset) {
+            // Special case: after a reset, don't show "✓ Done" then leave
+            // the user staring at a void. Acknowledge the reset and
+            // immediately kick off onboarding with the warm welcome.
+            await ctx.editMessageText("✓ Wiped clean.", { parse_mode: "Markdown" }).catch(() => {});
+            await ctx.reply(welcomeMessage(), {
+              parse_mode: "Markdown",
+              reply_markup: mainKeyboard(),
+            });
+            // Clear conversation history so AI doesn't carry over old turns.
+            await db.appendHistory(prisma, u.id, "system", "[user reset — fresh start]").catch(() => {});
+            return;
+          }
+
           const lines = applied.map(i => "✓ " + fmtIntent(i, sym));
           lines.push(heroLine(state, sym));
           // Attach Undo button tied to the LAST event applied.
