@@ -24,6 +24,50 @@ const m = require("./model");
 
 const MAX_QUEUE = 5; // hard ceiling; AI sanitizer trims to 5 already.
 
+// Deterministic rewrite: when state.setup is true and the AI emits a
+// setup_account intent (which it shouldn't, but gpt-4o-mini occasionally
+// does), translate it into the right adjust_balance and/or
+// update_settings intents based on what's actually different from the
+// current state. The user never sees an "already set up" rejection.
+//
+// This is the structural fix for the most-reported bug: paycheck info
+// landing as setup_account on an already-setup account.
+function rewriteSetupOnAlreadySetup(state, intents) {
+  if (!state || !state.setup) return intents;
+  const out = [];
+  for (const intent of intents) {
+    if (!intent || intent.kind !== "setup_account") {
+      out.push(intent);
+      continue;
+    }
+    const p = intent.params || {};
+    // Balance → adjust_balance (only if it's a real change)
+    if (typeof p.balanceCents === "number"
+        && Number.isFinite(p.balanceCents)
+        && p.balanceCents !== state.balanceCents) {
+      out.push({
+        kind: "adjust_balance",
+        params: { newBalanceCents: p.balanceCents, note: "balance update" },
+      });
+    }
+    // Schedule / locale fields → update_settings (only if changed)
+    const settings = {};
+    if (p.payday && p.payday !== state.payday) settings.payday = p.payday;
+    if (p.payFrequency && p.payFrequency !== state.payFrequency) settings.payFrequency = p.payFrequency;
+    if (p.timezone && p.timezone !== state.timezone) settings.timezone = p.timezone;
+    if (p.currency && p.currency !== state.currency) settings.currency = p.currency;
+    if (p.currencySymbol && p.currencySymbol !== state.currencySymbol) settings.currencySymbol = p.currencySymbol;
+    if (p.language && p.language !== state.language) settings.language = p.language;
+    if (Object.keys(settings).length > 0) {
+      out.push({ kind: "update_settings", params: settings });
+    }
+    // If nothing to update (AI re-emitted setup with identical state),
+    // silently drop. The user's message will be handled in TALK mode by
+    // the AI's reply text — no rejection card.
+  }
+  return out;
+}
+
 async function processMessage(state, userMessage, history, options) {
   const proposal = await parseProposal(state, userMessage, history, options);
   if (proposal.mode === "talk" || proposal.intents.length === 0) {
@@ -62,6 +106,22 @@ async function processMessage(state, userMessage, history, options) {
 
   // Cap queue size as a defensive measure
   let intents = proposal.intents.slice(0, MAX_QUEUE);
+
+  // INTENT REWRITER: if AI emitted setup_account on an already-setup
+  // user (despite the prompt rule), rewrite it deterministically into
+  // adjust_balance + update_settings as appropriate. The user never sees
+  // an "already set up" rejection.
+  intents = rewriteSetupOnAlreadySetup(state, intents);
+
+  // After rewrite the batch may be empty (e.g. AI emitted only a no-op
+  // setup_account). Fall back to talk-mode reply.
+  if (intents.length === 0) {
+    return {
+      kind: "talk",
+      message: proposal.message,
+      warnings: proposal.warnings || [],
+    };
+  }
 
   // ORCHESTRATION: setup_account always runs first. It MUST be solo at the
   // engine level (so we never have partial state from a setup + envelope

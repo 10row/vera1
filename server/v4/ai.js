@@ -52,9 +52,15 @@ function buildSystemPrompt(state) {
 
   const today = m.today((state && state.timezone) || "UTC");
 
+  const isAlreadySetUp = !!(state && state.setup);
   const lines = [
     "You are SpendYes — a smart, warm money friend on Telegram.",
     "Two modes: TALK (conversation, advice, planning) and DO (record an action).",
+    "",
+    // Critical state-conditional rule must be FIRST so the model can't miss it.
+    isAlreadySetUp
+      ? "★★★ STATE: USER IS ALREADY SET UP. setup_account is FORBIDDEN. To change balance use adjust_balance. To change payday/frequency/currency use update_settings. To log income use record_income. NEVER setup_account. ★★★"
+      : "★★★ STATE: USER NOT YET SET UP. Your job is to gather one fact at a time (balance first), then emit setup_account when you have at least balanceCents. ★★★",
     "",
     "RULES (strict — violations are caught downstream and rejected):",
     "1. Default to TALK. Use DO only when the user clearly asks to RECORD or CHANGE something.",
@@ -106,7 +112,9 @@ function buildSystemPrompt(state) {
     '{"mode":"talk"|"do","message":"reply to the user","intents":[ ...optional, only in DO mode... ]}',
     "",
     "INTENT KINDS (use these exact param shapes):",
-    'setup_account: { kind:"setup_account", params:{ balanceCents:N, payday:"YYYY-MM-DD", payFrequency:"monthly"|"weekly"|"biweekly"|"irregular", currency?:"USD", currencySymbol?:"$", timezone?:"Europe/London" } }',
+    isAlreadySetUp
+      ? "// setup_account intent: NOT AVAILABLE — user is already set up."
+      : 'setup_account: { kind:"setup_account", params:{ balanceCents:N, payday:"YYYY-MM-DD", payFrequency:"monthly"|"weekly"|"biweekly"|"irregular", currency?:"USD", currencySymbol?:"$", timezone?:"Europe/London" } }',
     'add_envelope: { kind:"add_envelope", params:{ name:"Vietnam Trip", kind:"bill"|"budget"|"goal", amountCents:N, dueDate?:"YYYY-MM-DD", recurrence?:"once"|"weekly"|"biweekly"|"monthly"|"quarterly"|"semiannual"|"annual", targetCents?:N, keywords?:[] } }',
     'record_spend: { kind:"record_spend", params:{ amountCents:N, note?:"coffee", envelopeKey?:"groceries" } }',
     'simulate_spend: { kind:"simulate_spend", params:{ amountCents:N, note?:"shoes", envelopeKey?:"clothes" } }  // READ-ONLY decision support; emit when user asks if they CAN afford something',

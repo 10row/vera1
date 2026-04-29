@@ -22,7 +22,11 @@ function freshSetup(balance) {
 }
 
 // ── 1. THE VIETNAM SCENARIO — pipeline orchestration replaces batch-reject
-test("[SCENARIO 1] Vietnam: AI tries re-setup + envelope on already-setup account → setup is rejected on its own merits (Step 1 hardening), envelope is queued", async () => {
+test("[SCENARIO 1] Vietnam: AI tries re-setup + envelope on already-setup account → setup is silently rewritten away, envelope flows through", async () => {
+  // The pipeline now REWRITES setup_account on already-setup state.
+  // With identical balance and no schedule changes, the rewriter drops
+  // it entirely. The envelope intent flows through normally — user
+  // never sees an "already set up" message.
   const s = freshSetup();
   const r = await processMessage(s, "I want a Vietnam budget", [], {
     _aiCall: stub({
@@ -30,16 +34,14 @@ test("[SCENARIO 1] Vietnam: AI tries re-setup + envelope on already-setup accoun
       message: "Setting that up.",
       intents: [
         { kind: "setup_account", params: { balanceCents: 5_000_00 } },
-        { kind: "add_envelope", params: { name: "Vietnam Trip", kind: "bill", amountCents: 1500_00, dueDate: m.addDays(m.today("UTC"), 30), recurrence: "once" } },
+        { kind: "add_envelope", params: { name: "Vietnam Trip", kind: "bill", amountCents: 1500_00, dueDate: m.addDays(m.today("UTC"), 30), recurrence: "monthly" } },
       ],
     }),
   });
   assertEq(r.kind, "do");
-  // setup_account is rejected because the account is already setup
-  assertEq(r.decisions[0].verdict.ok, false);
-  assertTrue(/already set up/i.test(r.decisions[0].verdict.reason));
-  // envelope is queued as step 2 — user can still add it after acknowledging the setup rejection
-  assertTrue(Array.isArray(r.queueAfter) && r.queueAfter.length === 1);
+  // The envelope is the only surviving intent
+  assertEq(r.decisions[0].intent.kind, "add_envelope");
+  assertEq(r.decisions[0].verdict.ok, true);
 });
 
 test("[SCENARIO 1] Vietnam: AI tries to log balance as a spend → rejected (before setup)", async () => {

@@ -15,6 +15,56 @@ const db = require("./db");
 const { t, normalizeLang, defaultCurrencyForLang } = require("./locales");
 const currency = require("./currency");
 
+// updatePinnedStatus — keeps a single message pinned at the top of the
+// chat showing the user's current hero state. Updated on every state
+// change. Closes the "empty when I land" gap: regardless of how the
+// user arrives at the chat, the baseline is at the top of the screen.
+//
+// Idempotent. Failsafe: if pinning is denied (rare in private chats),
+// logs and continues — no user-visible error. The pinned message id
+// lives in state.pinnedMessageId.
+async function updatePinnedStatus(prisma, ctx, userId) {
+  try {
+    const state = await db.loadState(prisma, userId);
+    if (!state.setup) return; // nothing to pin yet
+    const lang = state.language || "en";
+    const heroText = heroLine(state);
+    if (!heroText) return;
+    const text = "📌 " + heroText;
+    const chatId = ctx.chat ? ctx.chat.id : (ctx.from && ctx.from.id);
+    if (!chatId) return;
+
+    if (state.pinnedMessageId) {
+      // Edit the existing pinned message
+      try {
+        await ctx.api.editMessageText(chatId, state.pinnedMessageId, text, { parse_mode: "Markdown" });
+        return;
+      } catch (e) {
+        // If edit fails (deleted, unpinned), fall through to re-create.
+        const msg = (e && e.message) || "";
+        if (!/not modified/i.test(msg)) {
+          console.warn("[v4 pinned edit]", msg);
+        } else {
+          return;
+        }
+      }
+    }
+    // Create + pin a fresh status message
+    try {
+      const sent = await ctx.api.sendMessage(chatId, text, { parse_mode: "Markdown" });
+      try { await ctx.api.pinChatMessage(chatId, sent.message_id, { disable_notification: true }); }
+      catch (e) { console.warn("[v4 pin]", e && e.message); }
+      state.pinnedMessageId = sent.message_id;
+      await db.saveState(prisma, userId, state);
+    } catch (e) {
+      console.warn("[v4 pin send]", e && e.message);
+    }
+  } catch (e) {
+    // Pinning is best-effort. Never break a flow over it.
+    console.warn("[v4 updatePinnedStatus]", e && e.message);
+  }
+}
+
 // renderVerdict — the seam between engineering rules and user voice.
 // The validator emits a machine-readable { code, context }; this wraps
 // it in t() to produce a conversational, locale-aware sentence. Schema
@@ -488,6 +538,8 @@ async function processText(prisma, ctx, telegramId, text, opts) {
 
       const token = setPending([intent], u.id, { queueAfter, queueTotal, queueIndex });
 
+      // Only show "Step N of M" when there's actually a sequence. For
+      // solo confirms the card is conversational, not procedural.
       const stepLabel = queueTotal > 1 ? "*" + t("confirm.stepOf", lang, { n: queueIndex, m: queueTotal }) + "*\n" : "";
       const intro = (result.message && rejections.length === 0 && autoApplied.length === 0)
         ? result.message + "\n\n" : "";
@@ -523,6 +575,9 @@ async function processText(prisma, ctx, telegramId, text, opts) {
       await ctx.reply(result.message, { parse_mode: "Markdown", reply_markup: mainKeyboard() });
     }
   });
+
+  // Refresh pinned status (best-effort, never blocks the user-facing flow).
+  updatePinnedStatus(prisma, ctx, u.id).catch(() => {});
 }
 
 // ── HANDLERS ───────────────────────────────────────────
@@ -668,6 +723,7 @@ function attach(prisma) {
             parse_mode: "Markdown",
             reply_markup: mainKeyboard(),
           });
+          updatePinnedStatus(prisma, ctx, u.id).catch(() => {});
         } catch (e) {
           await ctx.reply(t("undo.couldnt", lang, { error: e.message })).catch(() => {});
         }
@@ -800,6 +856,7 @@ function attach(prisma) {
             await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
             await ctx.reply(t("undo.undone", stateLang, { what: desc }) + "\n" + heroLine(r.state),
               { parse_mode: "Markdown", reply_markup: mainKeyboard() }).catch(() => {});
+            updatePinnedStatus(prisma, ctx, u.id).catch(() => {});
           } catch (e) {
             await ctx.reply(t("undo.couldnt", stateLang, { error: e.message })).catch(() => {});
           }
@@ -938,6 +995,7 @@ function attach(prisma) {
             finalOpts.reply_markup = undoButton(setUndoToken(lastEventId, u.id), stateLang).reply_markup;
           }
           await safeReply(ctx, finalLines.filter(Boolean).join("\n"), finalOpts);
+          updatePinnedStatus(prisma, ctx, u.id).catch(() => {});
         } catch (e) {
           console.error("[v4 confirm apply]", e);
           await ctx.editMessageText(t("confirm.couldntApply", stateLang, { error: e.message })).catch(() => {});

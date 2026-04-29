@@ -73,11 +73,11 @@ module.exports = {
   "confirm.done": "*Готово.*",
 
   // ── Intent labels ────────────────────────────────────
-  "intent.setup": "Настройка · баланс {balance}{paydayClause}{freqClause}",
+  "intent.setup": "Настройка · {balance}{paydayClause}{freqClause}",
   "intent.adjust": "Обновить баланс на {balance}",
-  "intent.addBill": "📌 Добавить счёт · {name} · {amount}{recurrenceClause}{dueClause}",
-  "intent.addBudget": "📊 Добавить бюджет · {name} · {amount}",
-  "intent.addGoal": "🎯 Добавить цель · {name} · {amount}{targetClause}",
+  "intent.addBill": "📌 {name} — {amount}{recurrenceClause}{dueClause}",
+  "intent.addBudget": "📊 {name} — {amount}",
+  "intent.addGoal": "🎯 {name} — {amount}{targetClause}",
   "intent.update": "Обновить {name}",
   "intent.remove": "Удалить {name}",
   "intent.spend": "Трата {amount}{noteClause}{envelopeClause}",

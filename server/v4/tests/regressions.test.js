@@ -35,17 +35,50 @@ test("[BUG-1] setup_account on already-setup state is rejected, never confirm-ov
   assertTrue(/already set up/i.test(v.reason));
 });
 
-test("[BUG-1] pipeline: AI emits setup on set-up user → rejected, no confirm card", async () => {
+test("[BUG-1] pipeline: AI emits setup on already-setup user with same balance → silent rewrite to talk (no rejection)", async () => {
+  // Pipeline now REWRITES setup_account on an already-set-up user.
+  // If params are no-ops (same balance, no schedule changes), the
+  // rewriter drops the intent and the user sees a TALK reply rather
+  // than a rejection card. The "already set up" message is gone.
   const s = freshSetup();
   const r = await processMessage(s, "rent is 1400 due 1st", [], {
     _aiCall: stub({
       mode: "do",
-      message: "I'll set you up.",
+      message: "Let's add that.",
       intents: [{ kind: "setup_account", params: { balanceCents: 5_000_00 } }],
     }),
   });
+  // Rewriter dropped the intent → falls back to talk
+  assertEq(r.kind, "talk");
+});
+
+test("[BUG-1] pipeline: AI emits setup with NEW balance on set-up user → rewritten to adjust_balance", async () => {
+  const s = freshSetup();
+  const r = await processMessage(s, "actually I have 7000 now", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Updating.",
+      intents: [{ kind: "setup_account", params: { balanceCents: 7_000_00 } }],
+    }),
+  });
   assertEq(r.kind, "do");
-  assertEq(r.decisions[0].verdict.ok, false);
+  assertEq(r.decisions[0].intent.kind, "adjust_balance");
+  assertEq(r.decisions[0].intent.params.newBalanceCents, 7_000_00);
+});
+
+test("[BUG-1] pipeline: AI emits setup with NEW payday on set-up user → rewritten to update_settings", async () => {
+  const s = freshSetup();
+  const futurePayday = m.addDays(m.today("UTC"), 12);
+  const r = await processMessage(s, "I get paid on the 12th now", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Got it.",
+      intents: [{ kind: "setup_account", params: { balanceCents: 5_000_00, payday: futurePayday } }],
+    }),
+  });
+  assertEq(r.kind, "do");
+  assertEq(r.decisions[0].intent.kind, "update_settings");
+  assertEq(r.decisions[0].intent.params.payday, futurePayday);
 });
 
 // ── BUG 2: rent envelope without recurrence: monthly ──────────────

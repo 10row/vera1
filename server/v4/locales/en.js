@@ -74,11 +74,11 @@ module.exports = {
   "confirm.done": "*Done.*",
 
   // ── Intent labels (for confirm cards) ────────────────
-  "intent.setup": "Set up account · balance {balance}{paydayClause}{freqClause}",
+  "intent.setup": "Set up · {balance}{paydayClause}{freqClause}",
   "intent.adjust": "Update balance to {balance}",
-  "intent.addBill": "📌 Add bill · {name} · {amount}{recurrenceClause}{dueClause}",
-  "intent.addBudget": "📊 Add budget · {name} · {amount}",
-  "intent.addGoal": "🎯 Add goal · {name} · {amount}{targetClause}",
+  "intent.addBill": "📌 {name} — {amount}{recurrenceClause}{dueClause}",
+  "intent.addBudget": "📊 {name} — {amount}",
+  "intent.addGoal": "🎯 {name} — {amount}{targetClause}",
   "intent.update": "Update {name}",
   "intent.remove": "Remove {name}",
   "intent.spend": "Spend {amount}{noteClause}{envelopeClause}",
