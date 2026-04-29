@@ -77,7 +77,19 @@ function validateIntent(state, intent, todayStr) {
       if (!isPositiveCents(p.amountCents)) return reject("Need a positive amount");
       if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("Amount looks unreasonable");
       const key = m.ekey(p.name);
-      if (state.envelopes[key]) return reject("That name is already in use");
+      const existing = state.envelopes[key];
+      if (existing && existing.active) {
+        // Helpful rejection: tell the user what already exists, and hint
+        // at the two valid paths forward (rename, or update existing).
+        const sym = state.currencySymbol || "$";
+        const M = (c) => m.toMoney(c, sym);
+        return reject(
+          "There's already a *" + existing.name + "* (" + M(existing.amountCents) + "). " +
+          "Pick a different name, or say \"update " + existing.name + "\" to change it."
+        );
+      }
+      // existing && !existing.active → fall through; the engine reuses the
+      // key by overwriting (which is what add_envelope does anyway).
       if (state.balanceCents > 0 && p.amountCents > state.balanceCents * TEN_X_FACTOR) {
         return confirm("That's much more than your balance — confirm?");
       }
@@ -182,6 +194,19 @@ function validateIntent(state, intent, todayStr) {
         if (!d) return reject("Invalid next payday");
       }
       return confirm("Record income?");
+    }
+
+    case "fund_envelope": {
+      const key = m.ekey(p.envelopeKey || p.name);
+      const env = state.envelopes[key];
+      if (!env) return reject("I don't see that one");
+      if (!env.active) return reject("That envelope is inactive");
+      if (!isPositiveCents(p.amountCents)) return reject("Amount must be positive");
+      if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("Amount looks unreasonable");
+      if (state.balanceCents > 0 && p.amountCents > state.balanceCents) {
+        return confirm("That's more than your balance — confirm?");
+      }
+      return confirm("Move " + m.toMoney(p.amountCents, state.currencySymbol || "$") + " into " + env.name + "?");
     }
 
     case "pay_bill": {

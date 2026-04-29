@@ -104,6 +104,8 @@ function fmtIntent(intent, sym) {
         (p.envelopeKey ? " · " + p.envelopeKey : "");
     case "record_income":
       return "Income " + M(p.amountCents) + (p.note ? " · " + p.note : "");
+    case "fund_envelope":
+      return "Move " + M(p.amountCents) + " into " + (p.name || p.envelopeKey);
     case "pay_bill":
       return "Mark " + (p.name || p.envelopeKey) + " paid";
     case "skip_bill":

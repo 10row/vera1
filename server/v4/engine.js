@@ -80,7 +80,13 @@ function applyIntent(state, intent) {
         throw new Error("add_envelope: name + valid kind required");
       }
       const key = m.ekey(p.name);
-      if (s.envelopes[key]) throw new Error("add_envelope: envelope exists: " + key);
+      // Allow overwriting an INACTIVE envelope (effectively reactivating
+      // with new fields). Active envelopes are protected by the validator,
+      // but the engine double-checks: throw only if the existing one is
+      // still active to make programming bugs loud.
+      if (s.envelopes[key] && s.envelopes[key].active) {
+        throw new Error("add_envelope: envelope exists and is active: " + key);
+      }
       s.envelopes[key] = {
         key,
         name: p.name,
@@ -112,6 +118,34 @@ function applyIntent(state, intent) {
       if (Array.isArray(p.keywords)) env.keywords = p.keywords.slice(0, 20);
       if (typeof p.active === "boolean") env.active = p.active;
       event = makeEvent(intent, prevBalance, s.balanceCents, { envelopeKey: key });
+      break;
+    }
+
+    case "fund_envelope": {
+      // Move money from balance into an envelope's funded pot. Used for
+      // goals (e.g. "put $700 toward Vietnam hotel"). Doesn't create a
+      // transaction kind of its own — it logs as a regular spend with the
+      // envelope key set, but with a 'fund' note. Balance still goes down,
+      // envelope.fundedCents goes up.
+      const p = intent.params || {};
+      const key = m.ekey(p.envelopeKey || p.name);
+      const env = s.envelopes[key];
+      if (!env || !env.active) throw new Error("fund_envelope: not found or inactive: " + key);
+      if (typeof p.amountCents !== "number" || p.amountCents <= 0) {
+        throw new Error("fund_envelope: amountCents (positive) required");
+      }
+      s.balanceCents -= p.amountCents;
+      env.fundedCents = (env.fundedCents || 0) + p.amountCents;
+      const tx = {
+        id: m.uid(), ts: Date.now(),
+        kind: "spend",
+        amountCents: p.amountCents,
+        note: p.note || "Funded " + env.name,
+        envelopeKey: key,
+        date: todayStr,
+      };
+      s.transactions.push(tx);
+      event = makeEvent(intent, prevBalance, s.balanceCents, { envelopeKey: key, txId: tx.id });
       break;
     }
 

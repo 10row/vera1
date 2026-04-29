@@ -116,7 +116,7 @@ test("envelope with valid future date and reasonable amount: confirm", () => {
   assertEq(v.severity, "confirm");
 });
 
-test("duplicate envelope name is rejected", () => {
+test("duplicate envelope name (active) is rejected with helpful message", () => {
   let s = freshSetup();
   s = applyIntent(s, { kind: "add_envelope", params: { name: "Rent", kind: "bill", amountCents: 1000_00 } }).state;
   const v = validateIntent(s, {
@@ -124,7 +124,9 @@ test("duplicate envelope name is rejected", () => {
     params: { name: "Rent", kind: "bill", amountCents: 2000_00 },
   }, TODAY);
   assertEq(v.ok, false);
-  assertTrue(/already in use/i.test(v.reason));
+  // New helpful message mentions existing name + amount + suggests next step.
+  assertTrue(/Rent/i.test(v.reason), "should mention existing name");
+  assertTrue(/different name|update/i.test(v.reason), "should hint at next step");
 });
 
 test("batch with >3 intents rejected", () => {
