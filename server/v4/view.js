@@ -61,6 +61,26 @@ function compute(state, todayStr) {
       savedToward += env.fundedCents;
     }
 
+    // Goal-specific projection: if the user has been funding this goal,
+    // estimate when they'll hit the target at the current pace.
+    let monthlyFundingCents = 0;
+    let arrivalDate = null;
+    if (env.kind === "goal" && env.targetCents && env.targetCents > 0) {
+      const sixtyAgo = m.addDays(today, -60);
+      let recent = 0;
+      for (const tx of state.transactions || []) {
+        if (tx.envelopeKey !== env.key) continue;
+        if (!tx.date || tx.date < sixtyAgo) continue;
+        if (tx.kind === "spend" && tx.amountCents > 0) recent += tx.amountCents;
+      }
+      monthlyFundingCents = Math.round(recent / 2); // 60 days ≈ 2 months
+      const remaining = Math.max(0, env.targetCents - (env.fundedCents || 0));
+      if (monthlyFundingCents > 0 && remaining > 0) {
+        const monthsToGoal = remaining / monthlyFundingCents;
+        arrivalDate = m.addDays(today, Math.ceil(monthsToGoal * 30));
+      }
+    }
+
     envList.push({
       key: env.key, name: env.name, kind: env.kind,
       amountCents: env.amountCents, amountFormatted: Sh(env.amountCents),
@@ -73,6 +93,12 @@ function compute(state, todayStr) {
       isDue: env.dueDate ? env.dueDate <= today : false,
       unpaidCents: unpaid,
       keywords: env.keywords || [],
+      recurrence: env.recurrence,
+      createdAt: env.createdAt || 0,
+      // Goal projection (only populated for goal kind)
+      monthlyFundingCents,
+      monthlyFundingFormatted: monthlyFundingCents > 0 ? Sh(monthlyFundingCents) : null,
+      arrivalDate,
     });
   }
 

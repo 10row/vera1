@@ -94,6 +94,59 @@ function txLabel(tx, nameMap) {
   return { primary: "—", secondary: null };
 }
 
+// "5m ago" / "2h ago" / "today" / "yesterday" / "Apr 28"
+function relativeTime(ts, now) {
+  if (!ts) return "";
+  const n = (typeof now === "number" ? now : Date.now());
+  const diff = n - ts;
+  if (diff < 30_000) return "just now";
+  if (diff < 60_000 * 60) return Math.round(diff / 60_000) + "m ago";
+  if (diff < 60_000 * 60 * 24) {
+    const h = Math.round(diff / (60_000 * 60));
+    return h + "h ago";
+  }
+  if (diff < 60_000 * 60 * 24 * 2) return "yesterday";
+  if (diff < 60_000 * 60 * 24 * 7) return Math.round(diff / (60_000 * 60 * 24)) + "d ago";
+  try {
+    const d = new Date(ts);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch { return ""; }
+}
+
+// Highlight envelopes/transactions added recently (last hour).
+function isRecent(ts, now) {
+  if (!ts) return false;
+  const n = (typeof now === "number" ? now : Date.now());
+  return (n - ts) < 60 * 60 * 1000; // 1 hour
+}
+
+// Pretty due-date label: "today", "tomorrow", "in 3 days", "overdue"
+function dueDateLabel(daysUntilDue) {
+  if (daysUntilDue == null) return "no date";
+  if (daysUntilDue < 0) return "overdue";
+  if (daysUntilDue === 0) return "today";
+  if (daysUntilDue === 1) return "tomorrow";
+  if (daysUntilDue <= 7) return "in " + daysUntilDue + " days";
+  return "in " + daysUntilDue + " days";
+}
+
+// Format an arrival-date ISO string into "by Jul 15" style.
+function arrivalLabel(dateStr) {
+  if (!dateStr) return null;
+  try {
+    const d = new Date(dateStr + "T12:00:00Z");
+    return "by " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch { return null; }
+}
+
+// Safe localStorage wrapper — privacy modes / embedded webviews can throw.
+function lsGet(k) {
+  try { return localStorage.getItem(k); } catch { return null; }
+}
+function lsSet(k, v) {
+  try { localStorage.setItem(k, v); return true; } catch { return false; }
+}
+
 function relativeDay(dateStr, today) {
   if (!dateStr) return "";
   if (dateStr === today) return "Today";
@@ -298,7 +351,11 @@ function TodayStrip(props) {
             },
               h("div", { style: { flex: 1, overflow: "hidden" } },
                 h("div", { style: { fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
-                lbl.secondary ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 2 } }, lbl.secondary) : null
+                h("div", { style: { fontSize: 10, color: C.muted, marginTop: 2, display: "flex", gap: 6 } },
+                  lbl.secondary ? h("span", null, lbl.secondary) : null,
+                  lbl.secondary && tx.ts ? h("span", { style: { color: C.muted } }, "·") : null,
+                  tx.ts ? h("span", null, relativeTime(tx.ts)) : null
+                )
               ),
               h("div", {
                 style: {
@@ -309,6 +366,122 @@ function TodayStrip(props) {
             );
           })
         )
+  );
+}
+
+// ── FIRST-TIME CELEBRATION CARD ──────────────────────────────
+// Shows once per device after first successful dashboard load.
+// Persisted via localStorage (gracefully no-op if blocked).
+function FirstTimeCard(props) {
+  var seenState = useState(true);
+  var seen = seenState[0], setSeen = seenState[1];
+
+  useEffect(function() {
+    var key = "spendyes_first_seen_v1";
+    var alreadySeen = lsGet(key);
+    if (!alreadySeen) {
+      setSeen(false);
+      lsSet(key, "1"); // mark immediately so refresh doesn't re-show
+    }
+  }, []);
+
+  if (seen) return null;
+  return h("div", {
+    style: {
+      margin: "10px 16px 0", padding: "14px 16px",
+      background: C.greenSoft, border: "1px solid rgba(79,184,136,0.3)",
+      borderRadius: 12, position: "relative",
+    },
+  },
+    h("div", { style: { fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 4 } },
+      "✨ You're set up"),
+    h("div", { style: { fontSize: 12, color: C.text, lineHeight: 1.5 } },
+      "Tap around — this is your money, your way. Everything happens in chat."),
+    h("div", {
+      onClick: function() { setSeen(true); },
+      style: {
+        position: "absolute", top: 10, right: 12,
+        fontSize: 14, color: C.muted, cursor: "pointer", padding: 4,
+      },
+    }, "×")
+  );
+}
+
+// ── ANTICIPATION STRIP ─────────────────────────────────────
+// Above Today, shows the next 1-2 imminent obligations: "Coming up · X tomorrow · $1,000"
+function AnticipationStrip(props) {
+  var bills = (props.envelopes || []).filter(function(e) {
+    return e.kind === "bill" && e.daysUntilDue != null
+      && e.daysUntilDue >= 0 && e.daysUntilDue <= 7
+      && e.amountCents > 0;
+  });
+  if (bills.length === 0) return null;
+  bills.sort(function(a, b) { return a.daysUntilDue - b.daysUntilDue; });
+  var top = bills.slice(0, 2);
+  var sym = props.sym || "$";
+
+  return h("div", { style: { padding: "20px 16px 0" } },
+    h("div", {
+      style: {
+        background: C.card, border: "1px solid " + C.border, borderRadius: 12,
+        padding: "10px 14px",
+        display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+      },
+    },
+      h("div", {
+        style: { fontSize: 10, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 },
+      }, "Coming up"),
+      top.map(function(e) {
+        return h("div", {
+          key: e.key,
+          style: { fontSize: 12, color: C.text, display: "inline-flex", gap: 6 },
+        },
+          h("span", { style: { color: C.text } }, e.name),
+          h("span", { style: { color: C.muted } }, "·"),
+          h("span", { style: { color: e.daysUntilDue <= 1 ? C.amber : C.text } }, dueDateLabel(e.daysUntilDue)),
+          h("span", { style: { color: C.muted } }, "·"),
+          h("span", { style: { fontFamily: "'Lora',serif" } }, fmtMoney(e.amountCents, sym))
+        );
+      })
+    )
+  );
+}
+
+// ── DUE-NOW BANNER ─────────────────────────────────────────
+// Above Bills, only when something is overdue / today / tomorrow. Loud.
+function DueBanner(props) {
+  var bills = (props.envelopes || []).filter(function(e) {
+    return e.kind === "bill" && e.daysUntilDue != null && e.daysUntilDue <= 1;
+  });
+  if (bills.length === 0) return null;
+  bills.sort(function(a, b) { return a.daysUntilDue - b.daysUntilDue; });
+  var first = bills[0];
+  var col = first.daysUntilDue < 0 ? C.red : C.amber;
+  var soft = first.daysUntilDue < 0 ? C.redSoft : C.amberSoft;
+  var icon = first.daysUntilDue < 0 ? "⚠️" : "⏰";
+  var label = dueDateLabel(first.daysUntilDue);
+  var sym = props.sym || "$";
+
+  return h("div", { style: { padding: "8px 16px 0" } },
+    h("div", {
+      style: {
+        background: soft, border: "1px solid " + col, borderRadius: 12,
+        padding: "10px 14px",
+        display: "flex", alignItems: "center", gap: 10,
+      },
+    },
+      h("div", { style: { fontSize: 16 } }, icon),
+      h("div", { style: { flex: 1, overflow: "hidden" } },
+        h("div", { style: { fontSize: 13, fontWeight: 600, color: col, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          first.name + " " + label),
+        bills.length > 1
+          ? h("div", { style: { fontSize: 10, color: C.sub, marginTop: 2 } },
+              "+ " + (bills.length - 1) + " more")
+          : null
+      ),
+      h("div", { style: { fontFamily: "'Lora',serif", fontSize: 16, color: col } },
+        fmtMoney(first.amountCents, sym))
+    )
   );
 }
 
@@ -326,27 +499,116 @@ function SectionHeader(props) {
 function BillCard(props) {
   var e = props.env;
   var sym = props.sym;
-  var label;
+  var sid = props.sid;
+  var onPaid = props.onPaid;
   var col = C.text;
-  if (e.daysUntilDue == null) label = "no date";
-  else if (e.daysUntilDue < 0) { label = "overdue"; col = C.red; }
-  else if (e.daysUntilDue === 0) { label = "today"; col = C.amber; }
-  else if (e.daysUntilDue === 1) { label = "tomorrow"; col = C.amber; }
-  else if (e.daysUntilDue <= 7) { label = "in " + e.daysUntilDue + " days"; col = C.amber; }
-  else label = "in " + e.daysUntilDue + " days";
+  if (e.daysUntilDue != null) {
+    if (e.daysUntilDue < 0) col = C.red;
+    else if (e.daysUntilDue <= 1) col = C.amber;
+    else if (e.daysUntilDue <= 7) col = C.amber;
+  }
+  var label = dueDateLabel(e.daysUntilDue);
+
+  // Two-tap confirm: tap shows confirm chip, second tap fires the action.
+  var confirmState = useState(false);
+  var showConfirm = confirmState[0], setShowConfirm = confirmState[1];
+  var busyState = useState(false);
+  var busy = busyState[0], setBusy = busyState[1];
+  var errState = useState(null);
+  var err = errState[0], setErr = errState[1];
+
+  function tapHaptic() {
+    try {
+      var hf = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback;
+      if (hf && hf.impactOccurred) hf.impactOccurred("light");
+    } catch (_) {}
+  }
+
+  function markPaid() {
+    if (!sid || busy) return;
+    setBusy(true); setErr(null);
+    fetch(API_BASE + "/api/v4/action/" + sid, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ intent: { kind: "pay_bill", params: { name: e.name } } }),
+    })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, body: d }; }); })
+      .then(function(res) {
+        if (res.ok && res.body && res.body.ok) {
+          tapHaptic();
+          setShowConfirm(false);
+          if (onPaid) onPaid(res.body.view);
+        } else {
+          setErr((res.body && (res.body.error || res.body.reason)) || "Couldn't mark paid");
+        }
+      })
+      .catch(function(e2) { setErr(e2.message); })
+      .then(function() { setBusy(false); });
+  }
+
+  var newGlow = isRecent(e.createdAt) ? "0 0 0 1px " + C.green : "none";
 
   return h("div", {
     style: {
-      background: C.card, border: "1px solid " + C.border, borderRadius: 12,
+      background: C.card,
+      border: "1px solid " + C.border,
+      borderRadius: 12,
       padding: "12px 14px", marginBottom: 8,
-      display: "flex", justifyContent: "space-between", alignItems: "center",
+      boxShadow: newGlow,
+      transition: "box-shadow 0.4s",
     },
   },
-    h("div", null,
-      h("div", { style: { fontSize: 14, fontWeight: 500 } }, e.name),
-      h("div", { style: { fontSize: 11, color: col, marginTop: 3 } }, label)
+    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+      h("div", null,
+        h("div", { style: { fontSize: 14, fontWeight: 500 } },
+          e.name,
+          isRecent(e.createdAt) ? h("span", {
+            style: { fontSize: 9, color: C.green, marginLeft: 6, padding: "1px 6px", borderRadius: 999, background: C.greenSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" },
+          }, "new") : null
+        ),
+        h("div", { style: { fontSize: 11, color: col, marginTop: 3 } },
+          label,
+          e.recurrence && e.recurrence !== "once" ? h("span", { style: { color: C.muted } }, " · " + e.recurrence) : null
+        )
+      ),
+      h("div", { style: { fontFamily: "'Lora',serif", fontSize: 16 } }, e.amountFormatted)
     ),
-    h("div", { style: { fontFamily: "'Lora',serif", fontSize: 16 } }, e.amountFormatted)
+    // Action area — Mark Paid two-tap confirm, only for active bills with future-or-today dates.
+    e.daysUntilDue != null && e.daysUntilDue <= 30 && sid ? h("div", { style: { marginTop: 10, paddingTop: 10, borderTop: "1px solid " + C.border } },
+      !showConfirm
+        ? h("div", {
+            onClick: function() { setShowConfirm(true); setErr(null); },
+            style: {
+              fontSize: 12, color: C.sub, cursor: "pointer",
+              display: "inline-flex", alignItems: "center", gap: 6,
+            },
+          },
+            h("span", null, "✓"),
+            h("span", null, "Mark paid")
+          )
+        : h("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
+            h("div", { style: { fontSize: 12, color: C.sub } }, "Pay " + e.amountFormatted + "?"),
+            h("button", {
+              onClick: markPaid,
+              disabled: busy,
+              style: {
+                background: C.green, color: "#0F0F0F", border: "none", borderRadius: 8,
+                padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                fontFamily: "'Inter',sans-serif",
+                opacity: busy ? 0.6 : 1,
+              },
+            }, busy ? "…" : "Yes, paid"),
+            h("button", {
+              onClick: function() { setShowConfirm(false); setErr(null); },
+              disabled: busy,
+              style: {
+                background: "transparent", color: C.sub, border: "1px solid " + C.border, borderRadius: 8,
+                padding: "6px 12px", fontSize: 12, cursor: "pointer", fontFamily: "'Inter',sans-serif",
+              },
+            }, "Cancel")
+          ),
+      err ? h("div", { style: { fontSize: 11, color: C.red, marginTop: 6 } }, err) : null
+    ) : null
   );
 }
 
@@ -393,15 +655,24 @@ function GoalCard(props) {
   var pct = target > 0 ? Math.min(100, Math.round((funded / target) * 100)) : 0;
   var col = pct >= 100 ? C.green : C.green;
   var remaining = Math.max(0, target - funded);
+  var arrival = arrivalLabel(e.arrivalDate);
+  var newGlow = isRecent(e.createdAt) ? "0 0 0 1px " + C.green : "none";
+
   return h("div", {
     style: {
       background: C.card, border: "1px solid " + C.border, borderRadius: 12,
       padding: "14px 14px", marginBottom: 8,
+      boxShadow: newGlow, transition: "box-shadow 0.4s",
     },
   },
     h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 } },
       h("div", null,
-        h("div", { style: { fontSize: 14, fontWeight: 500 } }, e.name),
+        h("div", { style: { fontSize: 14, fontWeight: 500 } },
+          e.name,
+          isRecent(e.createdAt) ? h("span", {
+            style: { fontSize: 9, color: C.green, marginLeft: 6, padding: "1px 6px", borderRadius: 999, background: C.greenSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" },
+          }, "new") : null
+        ),
         h("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } },
           fmtMoney(funded, sym) + " of " + fmtMoney(target, sym))
       ),
@@ -425,7 +696,15 @@ function GoalCard(props) {
           boxShadow: pct >= 100 ? "0 0 8px " + C.green : "none",
         },
       })
-    )
+    ),
+    // Arrival estimate — only when there's funding history AND target not yet hit.
+    arrival && remaining > 0
+      ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 8, textAlign: "right" } },
+          "✨ ~" + arrival + " at " + (e.monthlyFundingFormatted || "current") + "/mo")
+      : (remaining > 0 && !arrival
+          ? h("div", { style: { fontSize: 10, color: C.muted, marginTop: 8, textAlign: "right" } },
+              "fund this and I'll project arrival")
+          : null)
   );
 }
 
@@ -658,12 +937,15 @@ function Dashboard(props) {
 
   return h("div", null,
     h(Hero, { view: v, sid: props.sid }),
+    h(FirstTimeCard, null),
     h(Heatmap, { heatmap: heatmap, dailyPaceCents: v.dailyPaceCents, sym: sym, txs: txs, nameMap: nameMap }),
+    h(AnticipationStrip, { envelopes: bills, sym: sym }),
     h(TodayStrip, { view: v, txs: txs, today: today, nameMap: nameMap }),
     bills.length > 0 ? h("div", null,
+      h(DueBanner, { envelopes: bills, sym: sym }),
       h(SectionHeader, { icon: "📌", title: "Bills", count: bills.length }),
       h("div", { style: { padding: "0 16px" } },
-        bills.map(function(e) { return h(BillCard, { key: e.key, env: e, sym: sym }); }))
+        bills.map(function(e) { return h(BillCard, { key: e.key, env: e, sym: sym, sid: props.sid, onPaid: props.onViewUpdate }); }))
     ) : null,
     budgets.length > 0 ? h("div", null,
       h(SectionHeader, { icon: "📊", title: "Budgets", count: budgets.length }),
@@ -678,7 +960,7 @@ function Dashboard(props) {
     h(History, { txs: txs, sym: sym, today: today, dateMinusN: dateMinusN, nameMap: nameMap }),
     h("div", {
       style: { textAlign: "center", padding: "28px 16px 32px", color: C.muted, fontSize: 11 },
-    }, "Read-only · changes happen in chat")
+    }, "Most changes happen in chat. Tap *Mark paid* on a bill for quick update.")
   );
 }
 
@@ -754,6 +1036,12 @@ function App() {
   else if (!data || !data.view || !data.view.setup) content = h(NotSetUpState, null);
   else content = h(Dashboard, {
     view: data.view, txs: data.txs, heatmap: data.heatmap, sid: sid.current,
+    // After a successful Mark-Paid action, swap in the fresh view immediately
+    // and re-fetch in the background to pick up new transaction list / heatmap.
+    onViewUpdate: function(newView) {
+      setData({ view: newView, txs: data.txs, heatmap: data.heatmap });
+      loadView();
+    },
   });
 
   return h("div", {

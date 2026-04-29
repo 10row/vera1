@@ -166,6 +166,51 @@ app.get("/api/v4/view/:sid", requireTelegramAuth, async (req, res) => {
   }
 });
 
+// ── ACTION ENDPOINT (limited mutations from Mini App) ───────
+// Carefully narrow surface. Only specific intent kinds are allowed —
+// expressly NOT setup_account, adjust_balance, reset, record_spend, etc.
+// Things that mutate financial state in non-trivial ways stay in chat
+// where the user has full conversational context.
+//
+// What's allowed here:
+//   - pay_bill: tap "Mark paid" on a bill card. Concrete, structured,
+//     unambiguous. Validator runs server-side; same rules as chat.
+//
+// Anything else returns 403. Body: { kind, params }.
+const ALLOWED_ACTION_KINDS = new Set(["pay_bill"]);
+
+app.post("/api/v4/action/:sid", requireTelegramAuth, express.json(), async (req, res) => {
+  try {
+    const intent = req.body && req.body.intent;
+    if (!intent || typeof intent.kind !== "string") {
+      return res.status(400).json({ error: "intent.kind required" });
+    }
+    if (!ALLOWED_ACTION_KINDS.has(intent.kind)) {
+      return res.status(403).json({ error: "intent kind not allowed via Mini App: " + intent.kind });
+    }
+    const u = await db.resolveUser(prisma, req.params.sid);
+    const result = await db.withUserLock(u.id, async () => {
+      const state = await db.loadState(prisma, u.id);
+      const todayStr = require("./model").today(state.timezone || "UTC");
+      const { validateIntent } = require("./validator");
+      const verdict = validateIntent(state, intent, todayStr);
+      if (!verdict.ok) {
+        return { ok: false, reason: verdict.reason };
+      }
+      const { applyIntent } = require("./engine");
+      const r = applyIntent(state, intent);
+      await db.saveState(prisma, u.id, r.state);
+      const view = compute(r.state);
+      return { ok: true, view };
+    });
+    if (!result.ok) return res.status(400).json({ error: result.reason });
+    res.json(result);
+  } catch (e) {
+    console.error("[v4 action]", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── SIMULATE ENDPOINT ───────────────────────────
 // Read-only "Can I afford X?" — no mutation. Used by the Mini App
 // inline simulate input.
