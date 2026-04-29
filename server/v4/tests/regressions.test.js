@@ -58,7 +58,10 @@ test("[BUG-2] add_envelope 'Rent' without recurrence is rejected — must be mon
     params: { name: "Rent", kind: "bill", amountCents: 1400_00, dueDate: "2025-05-01" },
   }, TODAY);
   assertEq(v.ok, false);
-  assertTrue(/recurring|monthly/i.test(v.reason));
+  // Verdict now uses code-based rendering. Original text was about
+  // recurrence — the new wording asks "does Rent repeat every month?"
+  assertEq(v.code, "envBillNeedsRecurrence");
+  assertTrue(/repeat|month/i.test(v.reason));
 });
 
 test("[BUG-2] add_envelope 'Rent' with recurrence:once is rejected", () => {

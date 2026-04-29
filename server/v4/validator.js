@@ -1,20 +1,36 @@
 "use strict";
 // v4/validator.js — deterministic verdicts on parsed intents.
 // This is the trust boundary between AI (untrusted) and engine (trusted).
-// Returns { ok, severity, reason, hint? }.
+//
+// Returns { ok, severity, code, context, reason }.
 //   severity: "auto"    → engine may apply without explicit user confirm
 //             "confirm" → engine MUST get explicit user yes before applying
 //             "reject"  → engine MUST refuse; show reason to user
 //
-// Rules are intentionally strict and small. Add a rule, don't bend one.
+// CRITICAL: rejection messages are NEVER hardcoded here. We emit a
+// machine-readable `code` (e.g. "alreadySetup", "envBillNeedsRecurrence")
+// plus a `context` object. The bot's render layer translates the code
+// to a conversational, locale-aware sentence via t("v." + code, lang, ctx).
+// This is the structural seam between engineering rules and user voice.
 
 const m = require("./model");
 const currency = require("./currency");
+const { t } = require("./locales");
+
+function _verdict(severity, ok, code, context) {
+  const ctx = context || {};
+  const v = { ok, severity, code, context: ctx };
+  // Cheap English fallback for tests / logs / AI conversation history.
+  v.reason = t("v." + code, "en", ctx);
+  return v;
+}
+const reject = (code, ctx) => _verdict("reject", false, code, ctx);
+const confirm = (code, ctx) => _verdict("confirm", true, code, ctx);
+const auto = (code, ctx) => _verdict("auto", true, code, ctx);
 
 // If the intent specifies originalAmountCents + originalCurrency in a
 // non-base currency, convert to base BEFORE the validator does sanity
 // checks. Mutates intent.params in place to add amountCents (base-currency).
-// Idempotent: calling twice with already-converted intent is a no-op.
 function ensureBaseAmount(state, intent) {
   if (!intent || !intent.params) return;
   const p = intent.params;
@@ -22,291 +38,228 @@ function ensureBaseAmount(state, intent) {
   if (!p.originalCurrency) return;
   const baseCode = (state && state.currency) || "USD";
   const fromCode = String(p.originalCurrency).toUpperCase();
-  // If amountCents is missing OR matches the original currency code, derive.
   if (typeof p.amountCents !== "number" || !Number.isFinite(p.amountCents)) {
     p.amountCents = currency.convertSync(p.originalAmountCents, fromCode, baseCode);
   }
 }
 
-const reject = (reason, hint) => ({ ok: false, severity: "reject", reason, hint });
-const confirm = (reason, hint) => ({ ok: true, severity: "confirm", reason, hint });
-const auto = (reason) => ({ ok: true, severity: "auto", reason });
+const MAX_SANE_BALANCE_CENTS = 100_000_000_00;
+const HALF_BALANCE_FACTOR = 0.5;
+const TEN_X_FACTOR = 10;
+const MAX_INTENTS_PER_TURN = 5;
 
-const MAX_SANE_BALANCE_CENTS = 100_000_000_00; // $100M sanity cap
-const AUTO_SPEND_LIMIT_CENTS = 50_00;          // <$50 auto-applies (with Undo)
-const HALF_BALANCE_FACTOR = 0.5;                // spend > 50% of balance = confirm
-const TEN_X_FACTOR = 10;                        // envelope amount > 10x balance = confirm
-const MAX_INTENTS_PER_TURN = 5;                 // pipeline orchestration sequences these one at a time
-
-// Names that should default to monthly recurrence. Deterministic check
-// catches the "AI forgets recurrence" bug for the obvious cases.
 const MONTHLY_BILL_NAMES = /\b(rent|mortgage|insurance|phone|mobile|cell|internet|wifi|broadband|cable|electric|electricity|water|gas|utilit|subscription|netflix|spotify|hulu|disney|prime|youtube|gym|membership|tuition|loan|car payment|childcare|daycare|hoa)\b/i;
 
 function isFiniteNumber(v) { return typeof v === "number" && Number.isFinite(v); }
 function isPositiveCents(v) { return isFiniteNumber(v) && v > 0; }
 
 function validateIntent(state, intent, todayStr) {
-  if (!intent || typeof intent.kind !== "string") {
-    return reject("Invalid intent shape");
-  }
-  // Multi-currency: derive base-currency amountCents before per-kind rules.
+  if (!intent || typeof intent.kind !== "string") return reject("invalidIntentShape");
   ensureBaseAmount(state, intent);
   const today = todayStr || m.today(state.timezone || "UTC");
   const p = intent.params || {};
+  const sym = (state && state.currencySymbol) || "$";
+  const M = (c) => m.toMoney(c, sym);
 
   switch (intent.kind) {
     case "setup_account": {
-      // HARD GUARD: never re-setup an account. The AI used to re-emit setup
-      // every time a user mentioned new info. That can clobber state silently.
-      // To change balance, use adjust_balance. To change schedule, update_settings.
-      // To wipe everything, reset.
-      if (state.setup) {
-        return reject("You're already set up. To fix the balance say \"my balance is X\". To wipe and start over say \"reset\".");
-      }
-      if (!isFiniteNumber(p.balanceCents)) return reject("Need a starting balance");
-      if (p.balanceCents <= 0) return reject("Starting balance must be greater than zero");
-      if (p.balanceCents > MAX_SANE_BALANCE_CENTS) return reject("That balance seems off — sanity check?");
+      if (state.setup) return reject("alreadySetup");
+      if (!isFiniteNumber(p.balanceCents)) return reject("balanceRequired");
+      if (p.balanceCents <= 0) return reject("balanceNonPositive");
+      if (p.balanceCents > MAX_SANE_BALANCE_CENTS) return reject("balanceUnreasonable");
       if (p.payday) {
         const d = m.normalizeDate(p.payday);
-        if (!d) return reject("Couldn't parse the payday");
+        if (!d) return reject("paydayInvalid");
         const diff = m.daysBetween(today, d);
-        if (diff < 0) return confirm("Payday is in the past — confirm?");
-        if (diff > 60) return confirm("Payday is more than 60 days out — confirm?");
+        if (diff < 0) return confirm("confirmSetupPaydayPast");
+        if (diff > 60) return confirm("confirmSetupPaydayFar");
       }
       if (p.payFrequency && !m.PAY_FREQS.includes(p.payFrequency)) {
-        return reject("Pay frequency must be weekly, biweekly, monthly, or irregular");
+        return reject("payFreqInvalid");
       }
-      return confirm("Set up your account?");
+      return confirm("confirmSetup");
     }
 
     case "adjust_balance": {
-      if (!isFiniteNumber(p.newBalanceCents)) return reject("Need a balance amount");
-      if (p.newBalanceCents > MAX_SANE_BALANCE_CENTS) return reject("That balance seems off");
+      if (!isFiniteNumber(p.newBalanceCents)) return reject("adjustBalanceRequired");
+      if (p.newBalanceCents > MAX_SANE_BALANCE_CENTS) return reject("balanceUnreasonable");
       const delta = p.newBalanceCents - state.balanceCents;
       const absDelta = Math.abs(delta);
       const big = absDelta > Math.max(state.balanceCents, 0) * HALF_BALANCE_FACTOR + 5_000_00;
-      return confirm(big ? "Big change to balance — confirm?" : "Update balance?");
+      return confirm(big ? "confirmAdjustBalanceBig" : "confirmAdjustBalance");
     }
 
     case "add_envelope": {
-      // Onboarding guard: can't add envelopes before the account is set up.
-      // Prevents an over-eager AI from creating bills on a fresh state.
-      if (!state.setup) return reject("Let's get your balance set first — what's in your account?");
-      if (!p.name || typeof p.name !== "string") return reject("Need a name");
-      if (!m.ENVELOPE_KINDS.includes(p.kind)) return reject("Pick a kind: bill, budget, or goal");
-      if (!isPositiveCents(p.amountCents)) return reject("Need a positive amount");
-      if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("Amount looks unreasonable");
+      if (!state.setup) return reject("envNeedSetup");
+      if (!p.name || typeof p.name !== "string") return reject("envNeedName");
+      if (!m.ENVELOPE_KINDS.includes(p.kind)) return reject("envInvalidKind");
+      if (!isPositiveCents(p.amountCents)) return reject("envAmountRequired");
+      if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("envAmountUnreasonable");
       const key = m.ekey(p.name);
       const existing = state.envelopes[key];
       if (existing && existing.active) {
-        // Helpful rejection: PLAIN TEXT — no markdown chars. The bot
-        // wraps the whole reason in italics for display; if a user's
-        // envelope name contains * or _, embedded markdown would break
-        // the entire message and Telegram would silently drop it.
-        const sym = state.currencySymbol || "$";
-        const M = (c) => m.toMoney(c, sym);
-        return reject(
-          "There's already a " + existing.name + " (" + M(existing.amountCents) + "). " +
-          "Pick a different name, or say \"update " + existing.name + "\" to change it."
-        );
+        return reject("envDuplicate", {
+          name: existing.name,
+          amount: M(existing.amountCents),
+        });
       }
-      // existing && !existing.active → fall through; the engine reuses the
-      // key by overwriting (which is what add_envelope does anyway).
       if (state.balanceCents > 0 && p.amountCents > state.balanceCents * TEN_X_FACTOR) {
-        return confirm("That's much more than your balance — confirm?");
+        return confirm("confirmAddOverBalance");
       }
       if (p.dueDate) {
         const d = m.normalizeDate(p.dueDate);
-        if (!d) return reject("Invalid due date");
+        if (!d) return reject("envDateInvalid");
         const diff = m.daysBetween(today, d);
-        // Tighter for NEW bills: must be today or future. Past dates almost
-        // always indicate an LLM date hallucination. Existing bills can be
-        // back-dated through update_envelope.
-        if (p.kind === "bill" && diff < 0) return reject("That due date is in the past — say it like \"due the 1st of next month\"");
-        if (diff > 730) return reject("That due date is more than 2 years out");
+        if (p.kind === "bill" && diff < 0) return reject("envDatePastForBill");
+        if (diff > 730) return reject("envDateTooFar");
       }
       if (p.recurrence && !m.RECURRENCES.includes(p.recurrence)) {
-        return reject("Recurrence must be once, weekly, biweekly, or monthly");
+        return reject("envInvalidRecurrence");
       }
-      // BILL RECURRENCE GUARD: rent/utilities/etc. must be monthly. Reject
-      // "once" for these because it would mean the bill silently disappears
-      // after one payment. AI omitting recurrence will be auto-defaulted.
       if (p.kind === "bill" && MONTHLY_BILL_NAMES.test(p.name)) {
         const rec = p.recurrence || "once";
-        if (rec === "once") {
-          return reject("\"" + p.name + "\" is a recurring bill — should it repeat monthly? (the AI omitted recurrence)");
-        }
+        if (rec === "once") return reject("envBillNeedsRecurrence", { name: p.name });
       }
-      return confirm("Add this " + p.kind + "?");
+      if (p.kind === "bill") return confirm("confirmAddBill");
+      if (p.kind === "budget") return confirm("confirmAddBudget");
+      if (p.kind === "goal") return confirm("confirmAddGoal");
+      return confirm("confirmAddBill");
     }
 
     case "update_envelope": {
       const key = m.ekey(p.key || p.name);
-      if (!state.envelopes[key]) return reject("I don't see that one");
-      if (p.amountCents !== undefined && !isFiniteNumber(p.amountCents)) return reject("Invalid amount");
-      if (p.amountCents !== undefined && p.amountCents < 0) return reject("Amount can't be negative");
+      if (!state.envelopes[key]) return reject("envNotFound");
+      if (p.amountCents !== undefined && !isFiniteNumber(p.amountCents)) return reject("updateAmountInvalid");
+      if (p.amountCents !== undefined && p.amountCents < 0) return reject("updateAmountNegative");
       if (p.dueDate) {
         const d = m.normalizeDate(p.dueDate);
-        if (!d) return reject("Invalid due date");
+        if (!d) return reject("envDateInvalid");
         const diff = m.daysBetween(today, d);
-        if (diff < -14) return reject("That due date is more than 2 weeks in the past");
-        if (diff > 730) return reject("That due date is more than 2 years out");
+        if (diff < -14) return reject("envDatePastForBill");
+        if (diff > 730) return reject("envDateTooFar");
       }
-      return confirm("Update?");
+      return confirm("confirmUpdateEnv");
     }
 
     case "remove_envelope": {
       const key = m.ekey(p.key || p.name);
-      if (!state.envelopes[key]) return reject("I don't see that one");
-      return confirm("Remove?");
+      if (!state.envelopes[key]) return reject("envNotFound");
+      return confirm("confirmRemove");
     }
 
     case "record_spend": {
-      if (!isFiniteNumber(p.amountCents)) return reject("Need an amount");
-      if (p.amountCents === 0) return reject("Amount can't be zero");
+      if (!isFiniteNumber(p.amountCents)) return reject("spendAmountRequired");
+      if (p.amountCents === 0) return reject("spendAmountZero");
       const abs = Math.abs(p.amountCents);
-      if (abs > MAX_SANE_BALANCE_CENTS) return reject("That amount looks unreasonable");
+      if (abs > MAX_SANE_BALANCE_CENTS) return reject("spendAmountUnreasonable");
       if (p.envelopeKey) {
         const k = m.ekey(p.envelopeKey);
-        if (!state.envelopes[k]) return reject("Envelope not found: " + p.envelopeKey);
+        if (!state.envelopes[k]) return reject("spendEnvelopeNotFound", { key: p.envelopeKey });
       }
-      if (!state.setup) return reject("Set up your account first");
-      // Promise: nothing logs without your tap. Every spend gets a confirm
-      // card. Anomalies upgrade the message; the severity stays "confirm".
-      if (abs > state.balanceCents && state.balanceCents >= 0) {
-        return confirm("That's more than your current balance — confirm?");
-      }
-      if (state.balanceCents > 0 && abs > state.balanceCents * HALF_BALANCE_FACTOR) {
-        return confirm("That's over half your balance — confirm?");
-      }
-      return confirm("Confirm spend?");
+      if (!state.setup) return reject("spendNotSetUp");
+      if (abs > state.balanceCents && state.balanceCents >= 0) return confirm("spendOverBalance");
+      if (state.balanceCents > 0 && abs > state.balanceCents * HALF_BALANCE_FACTOR) return confirm("spendOverHalfBalance");
+      return confirm("confirmSpend");
     }
 
     case "simulate_spend": {
-      // READ-ONLY decision support. Auto severity because it doesn't mutate.
-      // The pipeline routes this away from the engine to view.simulate().
-      if (!state.setup) return reject("Set up your account first");
-      if (!isPositiveCents(p.amountCents)) return reject("Amount must be positive");
-      if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("Amount looks unreasonable");
-      if (p.envelopeKey && !state.envelopes[m.ekey(p.envelopeKey)]) {
-        return reject("Envelope not found");
-      }
-      return auto("Simulated");
+      if (!state.setup) return reject("simulateNotSetUp");
+      if (!isPositiveCents(p.amountCents)) return reject("simulateAmountRequired");
+      if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("envAmountUnreasonable");
+      if (p.envelopeKey && !state.envelopes[m.ekey(p.envelopeKey)]) return reject("envNotFound");
+      return auto("autoSimulated");
     }
 
     case "undo_last": {
-      // Undo is the user's explicit action — auto-severity. The bot routes
-      // /undo and the inline ↶ Undo button straight through.
-      if (!state.setup) return reject("Nothing to undo yet");
-      if (!Array.isArray(state.events) || state.events.length <= 1) {
-        return reject("Nothing to undo");
-      }
+      if (!state.setup) return reject("undoNeedsSetup");
+      if (!Array.isArray(state.events) || state.events.length <= 1) return reject("nothingToUndo");
       const last = state.events[state.events.length - 1];
-      if (last && last.intent && last.intent.kind === "setup_account") {
-        return reject("Can't undo setup — say \"reset\" to wipe everything");
-      }
-      return auto("Undone");
+      if (last && last.intent && last.intent.kind === "setup_account") return reject("cantUndoSetup");
+      return auto("autoUndo");
     }
 
     case "record_income": {
-      if (!isPositiveCents(p.amountCents)) return reject("Income must be positive");
-      if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("That amount looks unreasonable");
+      if (!isPositiveCents(p.amountCents)) return reject("incomeAmountRequiredPositive");
+      if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("incomeAmountUnreasonable");
       if (p.nextPayday) {
         const d = m.normalizeDate(p.nextPayday);
-        if (!d) return reject("Invalid next payday");
+        if (!d) return reject("incomeInvalidNextPayday");
       }
-      return confirm("Record income?");
+      return confirm("confirmIncome");
     }
 
     case "fund_envelope": {
       const key = m.ekey(p.envelopeKey || p.name);
       const env = state.envelopes[key];
-      if (!env) return reject("I don't see that one");
-      if (!env.active) return reject("That envelope is inactive");
-      if (!isPositiveCents(p.amountCents)) return reject("Amount must be positive");
-      if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("Amount looks unreasonable");
-      if (state.balanceCents > 0 && p.amountCents > state.balanceCents) {
-        return confirm("That's more than your balance — confirm?");
-      }
-      return confirm("Move " + m.toMoney(p.amountCents, state.currencySymbol || "$") + " into " + env.name + "?");
+      if (!env) return reject("fundEnvNotFound");
+      if (!env.active) return reject("fundEnvInactive");
+      if (!isPositiveCents(p.amountCents)) return reject("fundAmountRequired");
+      if (p.amountCents > MAX_SANE_BALANCE_CENTS) return reject("fundAmountUnreasonable");
+      if (state.balanceCents > 0 && p.amountCents > state.balanceCents) return confirm("fundOverBalance");
+      return confirm("confirmFund", { amount: M(p.amountCents), name: env.name });
     }
 
     case "pay_bill": {
       const key = m.ekey(p.envelopeKey || p.name);
       const env = state.envelopes[key];
-      if (!env) return reject("I don't see that bill");
-      if (env.kind !== "bill") return reject("That's not a bill");
-      if (!env.active) return reject("That bill is inactive");
-      if (p.amountCents !== undefined && !isPositiveCents(p.amountCents)) {
-        return reject("Amount must be positive");
-      }
-      return confirm("Mark " + env.name + " paid?");
+      if (!env) return reject("billNotFound");
+      if (env.kind !== "bill") return reject("notABill");
+      if (!env.active) return reject("billInactive");
+      if (p.amountCents !== undefined && !isPositiveCents(p.amountCents)) return reject("billAmountInvalid");
+      return confirm("confirmPayBill", { name: env.name });
     }
 
     case "skip_bill": {
       const key = m.ekey(p.envelopeKey || p.name);
       const env = state.envelopes[key];
-      if (!env) return reject("I don't see that bill");
-      if (!env.dueDate) return reject("That bill has no due date to skip");
-      return confirm("Skip " + env.name + " this cycle?");
+      if (!env) return reject("billNotFound");
+      if (!env.dueDate) return reject("skipBillNoDate");
+      return confirm("confirmSkipBill", { name: env.name });
     }
 
     case "delete_transaction": {
-      if (!p.txId) return reject("Missing transaction id");
-      const tx = state.transactions.find(t => t.id === p.txId);
-      if (!tx) return reject("Transaction not found");
-      if (tx.kind === "setup") return reject("Can't delete the setup transaction — use reset instead");
-      return confirm("Delete this transaction?");
+      if (!p.txId) return reject("txIdMissing");
+      const tx = state.transactions.find((t) => t.id === p.txId);
+      if (!tx) return reject("txNotFound");
+      if (tx.kind === "setup") return reject("cantDeleteSetup");
+      return confirm("confirmDeleteTx");
     }
 
     case "edit_transaction": {
-      if (!p.txId) return reject("Missing transaction id");
-      const tx = state.transactions.find(t => t.id === p.txId);
-      if (!tx) return reject("Transaction not found");
-      if (!["spend", "refund", "bill_payment"].includes(tx.kind)) {
-        return reject("Only spends and bill payments can be edited");
-      }
-      if (p.newAmountCents !== undefined && !isFiniteNumber(p.newAmountCents)) {
-        return reject("Invalid amount");
-      }
-      return confirm("Update this transaction?");
+      if (!p.txId) return reject("txIdMissing");
+      const tx = state.transactions.find((t) => t.id === p.txId);
+      if (!tx) return reject("txNotFound");
+      if (!["spend", "refund", "bill_payment"].includes(tx.kind)) return reject("onlyEditableSpend");
+      if (p.newAmountCents !== undefined && !isFiniteNumber(p.newAmountCents)) return reject("txAmountInvalid");
+      return confirm("confirmEditTx");
     }
 
     case "update_settings": {
-      const ok = ["timezone", "currency", "currencySymbol", "language", "payFrequency", "payday"]
-        .some(k => p[k] !== undefined);
-      if (!ok) return reject("Nothing to update");
-      if (p.payFrequency && !m.PAY_FREQS.includes(p.payFrequency)) {
-        return reject("Invalid pay frequency");
-      }
+      const ok = ["timezone", "currency", "currencySymbol", "language", "payFrequency", "payday", "voiceReplies"]
+        .some((k) => p[k] !== undefined);
+      if (!ok) return reject("settingsNothingToUpdate");
+      if (p.payFrequency && !m.PAY_FREQS.includes(p.payFrequency)) return reject("payFreqInvalid");
       if (p.payday) {
         const d = m.normalizeDate(p.payday);
-        if (!d) return reject("Invalid payday");
+        if (!d) return reject("paydayInvalid");
       }
-      return confirm("Update settings?");
+      return confirm("confirmUpdateSettings");
     }
 
     case "reset": {
-      return confirm("This will erase everything — confirm?", "All your data will be deleted.");
+      return confirm("confirmReset");
     }
 
     default:
-      return reject("Unknown intent: " + intent.kind);
+      return reject("unknownKind", { kind: intent.kind });
   }
 }
 
-// Validate a batch from one user turn. Caps cascades. The pipeline
-// orchestrates multi-intent batches into sequential confirms — so a
-// "setup + envelope + envelope" batch is no longer rejected. The pipeline
-// applies setup first (ensuring atomicity) then sequences the rest. This
-// function is still used for solo and dual intent validation.
 function validateBatch(state, intents, todayStr) {
-  if (!Array.isArray(intents)) return [reject("Intents must be an array")];
+  if (!Array.isArray(intents)) return [reject("batchNotArray")];
   if (intents.length === 0) return [];
-  if (intents.length > MAX_INTENTS_PER_TURN) {
-    return [reject("That's a lot — let's slow it down. Tell me one or two things and I'll guide you through.")];
-  }
-  return intents.map(i => validateIntent(state, i, todayStr));
+  if (intents.length > MAX_INTENTS_PER_TURN) return [reject("batchTooMany")];
+  return intents.map((i) => validateIntent(state, i, todayStr));
 }
 
 module.exports = { validateIntent, validateBatch };

@@ -10,11 +10,20 @@ const m = require("./model");
 const { applyIntent } = require("./engine");
 const { compute, heroLine: viewHeroLine } = require("./view");
 const { processMessage } = require("./pipeline");
-const tts = require("./tts");
 const proactive = require("./proactive");
 const db = require("./db");
 const { t, normalizeLang, defaultCurrencyForLang } = require("./locales");
 const currency = require("./currency");
+
+// renderVerdict — the seam between engineering rules and user voice.
+// The validator emits a machine-readable { code, context }; this wraps
+// it in t() to produce a conversational, locale-aware sentence. Schema
+// vocabulary never reaches the user.
+function renderVerdict(verdict, lang) {
+  if (!verdict) return "";
+  if (verdict.code) return t("v." + verdict.code, lang || "en", verdict.context || {});
+  return verdict.reason || ""; // legacy fallback for anything still using strings
+}
 
 // Detect & commit the user's locale on first contact. Called at the top
 // of every text/voice handler. Idempotent — only writes state on the
@@ -338,18 +347,11 @@ async function safeEdit(ctx, text, options) {
   }
 }
 
-// Send a text reply, and if the incoming was voice + user opted in,
-// also send a voice synth. TTS failure is invisible (no error to user).
-async function sayMaybeVoice(ctx, text, options, voiceMode) {
-  const sent = await safeReply(ctx, text, options || {});
-  if (voiceMode && text) {
-    const audio = await tts.synthesize(text);
-    if (audio) {
-      try { await ctx.replyWithVoice(new (require("grammy").InputFile)(audio, "reply.opus")); }
-      catch (e) { console.warn("[v4 voice send]", e.message); }
-    }
-  }
-  return sent;
+// Voice playback (TTS) was removed per user feedback — voice input
+// (Whisper) stays, but the bot does not speak back. This helper is now
+// a thin wrapper around safeReply for back-compat with existing call sites.
+async function sayMaybeVoice(ctx, text, options /*, voiceMode unused */) {
+  return safeReply(ctx, text, options || {});
 }
 
 // ── PROCESS A USER TEXT MESSAGE ────────────────────────
@@ -440,7 +442,7 @@ async function processText(prisma, ctx, telegramId, text, opts) {
 
     for (const d of result.decisions) {
       if (!d.verdict.ok) {
-        rejections.push(d.verdict.reason);
+        rejections.push(renderVerdict(d.verdict, lang));
         continue;
       }
       if (d.verdict.severity === "auto") {
@@ -490,10 +492,13 @@ async function processText(prisma, ctx, telegramId, text, opts) {
       const intro = (result.message && rejections.length === 0 && autoApplied.length === 0)
         ? result.message + "\n\n" : "";
 
+      const renderedReason = renderVerdict(verdict, lang);
+      // Skip the rendered hint if it's empty or duplicates the generic
+      // "set this up?" — the fmtIntent line already says it.
+      const showReason = renderedReason && !/set this up\?|настроить\?/i.test(renderedReason);
       const cardText = intro + stepLabel
         + fmtIntent(intent, fmtOpts)
-        + (verdict.reason && verdict.reason !== "Set up your account?"
-            ? "\n_" + m.escapeMd(verdict.reason) + "_" : "");
+        + (showReason ? "\n_" + m.escapeMd(renderedReason) + "_" : "");
 
       const yesLabel = queueTotal > 1 ? t("confirm.next", lang) : t("confirm.yes", lang);
       const noLabel = queueTotal > 1 ? t("confirm.skip", lang) : t("confirm.cancel", lang);
@@ -601,32 +606,8 @@ function attach(prisma) {
     }
   });
 
-  bot.command("voice", async (ctx) => {
-    try {
-      const lang = await userLang(prisma, ctx.from.id);
-      const arg = (ctx.match || "").toString().trim().toLowerCase();
-      const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
-      await db.withUserLock(u.id, async () => {
-        const state = await db.loadState(prisma, u.id);
-        if (arg === "on") {
-          state.voiceReplies = true;
-          await db.saveState(prisma, u.id, state);
-          await ctx.reply(t("voice.on", lang), { reply_markup: mainKeyboard() });
-        } else if (arg === "off") {
-          state.voiceReplies = false;
-          await db.saveState(prisma, u.id, state);
-          await ctx.reply(t("voice.off", lang), { reply_markup: mainKeyboard() });
-        } else {
-          await ctx.reply(state.voiceReplies ? t("voice.statusOn", lang) : t("voice.statusOff", lang), {
-            parse_mode: "Markdown", reply_markup: mainKeyboard(),
-          });
-        }
-      });
-    } catch (e) {
-      console.error("[v4 /voice]", e);
-      await ctx.reply(t("voice.couldnt", await userLang(prisma, ctx.from.id))).catch(() => {});
-    }
-  });
+  // /voice command removed: voice playback is gone. Voice INPUT
+  // (sending the bot a voice note) is still supported.
 
   bot.command("today", async (ctx) => {
     try {
@@ -655,7 +636,6 @@ function attach(prisma) {
       t("help.commands.today", lang),
       t("help.commands.app", lang),
       t("help.commands.undo", lang),
-      t("help.commands.voice", lang),
       t("help.commands.mute", lang),
       t("help.commands.reset", lang),
     ];
@@ -888,7 +868,7 @@ function attach(prisma) {
             const candidate = nextQueue.shift();
             const verdict = validateIntent(state, candidate, m.today(state.timezone || "UTC"));
             if (!verdict.ok) {
-              queueRejections.push((stateLang === "ru" ? "Пропущено: " : "Skipped: ") + verdict.reason);
+              queueRejections.push((stateLang === "ru" ? "Пропущено: " : "Skipped: ") + renderVerdict(verdict, stateLang));
               nextIndex++;
               continue;
             }
@@ -927,8 +907,10 @@ function attach(prisma) {
             });
             const stepLabel = "*" + t("confirm.stepOf", stateLang, { n: nextIndex, m: total }) + "*\n";
             const cardText = stepLabel + fmtIntent(nextConfirmIntent, fmtOpts) +
-              (nextConfirmVerdict.reason && nextConfirmVerdict.reason !== "Set up your account?"
-                ? "\n_" + m.escapeMd(nextConfirmVerdict.reason) + "_" : "");
+              ((function() {
+                const rr = renderVerdict(nextConfirmVerdict, stateLang);
+                return rr && !/set this up\?|настроить\?/i.test(rr) ? "\n_" + m.escapeMd(rr) + "_" : "";
+              })());
             const yesLabel = (nextIndex < total) ? t("confirm.next", stateLang) : t("confirm.yes", stateLang);
             const noLabel = t("confirm.skip", stateLang);
             await safeReply(ctx, cardText, { parse_mode: "Markdown", ...confirmCard(newToken, { yesLabel, noLabel }) });
