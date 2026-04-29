@@ -22,7 +22,11 @@ function makeEvent(intent, prevBalance, newBalance, extra) {
 function recurrenceDays(rec) {
   if (rec === "weekly") return 7;
   if (rec === "biweekly") return 14;
-  return 30; // monthly approximation; pay_bill bumps by 30 days for now
+  if (rec === "monthly") return 30; // approximation
+  if (rec === "quarterly") return 91; // ~3 months
+  if (rec === "semiannual") return 182; // ~6 months
+  if (rec === "annual") return 365;
+  return 30;
 }
 
 function applyIntent(state, intent) {

@@ -129,7 +129,7 @@ test("duplicate envelope name (active) is rejected with helpful message", () => 
   assertTrue(/different name|update/i.test(v.reason), "should hint at next step");
 });
 
-test("batch with >3 intents rejected", () => {
+test("batch of 4 intents now passes (cap raised to 5; orchestration sequences)", () => {
   const s = freshSetup();
   const v = validateBatch(s, [
     { kind: "record_spend", params: { amountCents: 10_00 } },
@@ -137,9 +137,15 @@ test("batch with >3 intents rejected", () => {
     { kind: "record_spend", params: { amountCents: 10_00 } },
     { kind: "record_spend", params: { amountCents: 10_00 } },
   ], TODAY);
+  assertEq(v.length, 4);
+  v.forEach(x => assertEq(x.ok, true));
+});
+
+test("batch with >5 intents rejected (the new defensive cap)", () => {
+  const s = freshSetup();
+  const v = validateBatch(s, Array(6).fill({ kind: "record_spend", params: { amountCents: 10_00 } }), TODAY);
   assertEq(v.length, 1);
   assertEq(v[0].ok, false);
-  assertTrue(/one at a time/i.test(v[0].reason));
 });
 
 test("unknown intent kind rejected", () => {

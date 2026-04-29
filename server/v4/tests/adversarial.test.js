@@ -131,9 +131,9 @@ test("AI sends Feb 30 (real-looking but invalid) → rejected", () => {
   assertEq(v.ok, false);
 });
 
-test("AI emits 5 intents in a single turn (cascade attack) → rejected wholesale", () => {
+test("AI emits 6+ intents in a single turn (cascade attack) → rejected (cap is 5)", () => {
   const s = freshSetup(1_000_00);
-  const v = validateBatch(s, Array(5).fill({ kind: "record_spend", params: { amountCents: 10_00 } }), TODAY);
+  const v = validateBatch(s, Array(6).fill({ kind: "record_spend", params: { amountCents: 10_00 } }), TODAY);
   assertEq(v.length, 1);
   assertEq(v[0].ok, false);
 });

@@ -18,7 +18,7 @@ const MAX_SANE_BALANCE_CENTS = 100_000_000_00; // $100M sanity cap
 const AUTO_SPEND_LIMIT_CENTS = 50_00;          // <$50 auto-applies (with Undo)
 const HALF_BALANCE_FACTOR = 0.5;                // spend > 50% of balance = confirm
 const TEN_X_FACTOR = 10;                        // envelope amount > 10x balance = confirm
-const MAX_INTENTS_PER_TURN = 2;                 // hard cap; setup_account must be solo
+const MAX_INTENTS_PER_TURN = 5;                 // pipeline orchestration sequences these one at a time
 
 // Names that should default to monthly recurrence. Deterministic check
 // catches the "AI forgets recurrence" bug for the obvious cases.
@@ -273,19 +273,16 @@ function validateIntent(state, intent, todayStr) {
   }
 }
 
-// Validate a batch from one user turn. Caps cascades. Enforces atomicity
-// rules like "setup must be solo" so partial confirmations can't leave bad state.
+// Validate a batch from one user turn. Caps cascades. The pipeline
+// orchestrates multi-intent batches into sequential confirms — so a
+// "setup + envelope + envelope" batch is no longer rejected. The pipeline
+// applies setup first (ensuring atomicity) then sequences the rest. This
+// function is still used for solo and dual intent validation.
 function validateBatch(state, intents, todayStr) {
   if (!Array.isArray(intents)) return [reject("Intents must be an array")];
   if (intents.length === 0) return [];
   if (intents.length > MAX_INTENTS_PER_TURN) {
-    return [reject("That's too many things at once — let's do one at a time")];
-  }
-  // SETUP MUST BE SOLO. Otherwise user could approve setup but reject the
-  // sibling intent, leaving partial state.
-  const hasSetup = intents.some(i => i && i.kind === "setup_account");
-  if (hasSetup && intents.length > 1) {
-    return [reject("Let's do setup first on its own — then we'll add the rest.")];
+    return [reject("That's a lot — let's slow it down. Tell me one or two things and I'll guide you through.")];
   }
   return intents.map(i => validateIntent(state, i, todayStr));
 }

@@ -85,8 +85,8 @@ test("[STEP3] Phase 1+2 combined: balance + payday in one message → single set
   assertEq(r.decisions[0].verdict.ok, true);
 });
 
-// ── ATOMIC SETUP: bundling setup with extras still rejected ───────
-test("[STEP3] AI bundles setup+envelope → batch reject (Step 1's solo rule)", async () => {
+// ── ATOMIC SETUP via orchestration: setup runs FIRST, envelope queues ─
+test("[STEP3] AI bundles setup+envelope → pipeline sequences (setup first, envelope queued)", async () => {
   const fresh = m.createFreshState();
   const r = await processMessage(fresh, "5000 balance, rent 1400", [], {
     _aiCall: stub({
@@ -99,8 +99,11 @@ test("[STEP3] AI bundles setup+envelope → batch reject (Step 1's solo rule)", 
     }),
   });
   assertEq(r.kind, "do");
-  assertEq(r.decisions[0].verdict.ok, false);
-  assertTrue(/setup first/i.test(r.decisions[0].verdict.reason));
+  assertEq(r.decisions[0].intent.kind, "setup_account");
+  assertEq(r.decisions[0].verdict.ok, true);
+  assertEq(r.queueTotal, 2);
+  assertEq(r.queueAfter.length, 1);
+  assertEq(r.queueAfter[0].kind, "add_envelope");
 });
 
 // ── PHASE 3: BILLS LOOP ───────────────────────────────────────────

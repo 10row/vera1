@@ -111,7 +111,9 @@ function advancePayday(payday, freq, todayStr) {
 
 // ── DOMAIN CONSTANTS ─────────────────────────────────────────
 const ENVELOPE_KINDS = ["bill", "budget", "goal"];
-const RECURRENCES = ["once", "weekly", "biweekly", "monthly"];
+// Real humans have bills on cycles other than monthly: car insurance every
+// 6 months, gym quarterly, annual subscriptions, weekly groceries. Cover them.
+const RECURRENCES = ["once", "weekly", "biweekly", "monthly", "quarterly", "semiannual", "annual"];
 const PAY_FREQS = ["weekly", "biweekly", "monthly", "irregular"];
 
 const TX_KINDS = ["setup", "spend", "refund", "income", "bill_payment", "correction"];

@@ -85,13 +85,13 @@ test("ai: AI throws → safe talk fallback, error captured in warnings", async (
   assertTrue(/boom/.test(p.warnings[0]));
 });
 
-test("ai: more than 3 intents → capped to 3", async () => {
+test("ai: more than 5 intents → capped to 5 (orchestration sequences)", async () => {
   const s = freshSetup();
   const big = Array(10).fill({ kind: "record_spend", params: { amountCents: 100 } });
   const p = await parseProposal(s, "x", [], {
     _aiCall: stub({ mode: "do", message: "k", intents: big }),
   });
-  assertEq(p.intents.length, 3);
+  assertEq(p.intents.length, 5);
 });
 
 test("ai: intent without 'kind' string → dropped", async () => {

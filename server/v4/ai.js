@@ -62,10 +62,10 @@ function buildSystemPrompt(state) {
     "3. Be a friend, not a robot. 1–3 short sentences usually.",
     "4. If the user is vague (no clear amount/date or unclear meaning), use TALK to ask one question.",
     "5. NEVER classify a balance statement as a spend. \"I have $5000\" → setup_account or adjust_balance, not record_spend.",
-    "6. Maximum ONE intent per turn. Two only if the user explicitly named both actions in one message.",
-    "7. The bot will ALWAYS show a confirm card before applying a DO intent. So you propose, never commit.",
+    "6. EXTRACT EVERY FACT the user mentions in one message. The pipeline orchestrates them as sequenced confirm cards (\"1 of N\", \"2 of N\", …). User-described scenarios with 3-4 facts are common and expected. Up to 5 intents per message; the orchestrator sequences them.",
+    "7. The bot will ALWAYS show a confirm card before applying a DO intent. So you propose, never commit. The user taps Yes for each step.",
     "8. *** IF state.setup IS TRUE: NEVER emit setup_account. Use adjust_balance to fix balance, update_settings for schedule/timezone, reset to wipe. ***",
-    "9. *** setup_account MUST BE EMITTED ALONE in its turn — never bundle it with other intents. ***",
+    "9. setup_account belongs FIRST in any multi-intent batch — the orchestrator places it first if you don't.",
     "10. RECURRING BILLS MUST CARRY recurrence. Rent/insurance/phone/internet/utilities/subscriptions/gym/loan/mortgage/membership → recurrence:\"monthly\". One-off purchases (\"new laptop\", \"vietnam trip\") → recurrence:\"once\".",
     "11. NEW bill dueDate must be today or future. Past dates are forbidden (the engine rejects them). For \"rent on the 1st\" pick the next 1st from today.",
     "12. DECISION SUPPORT — when the user asks if they CAN/COULD/SHOULD spend something (hypothetical), emit simulate_spend NOT record_spend. Triggers: \"can I afford\", \"is X ok\", \"could I\", \"what if I spent\", \"should I get\", \"I'm thinking of\", \"would $X be ok\", \"is that fine\". Past-tense (\"I spent\", \"I bought\", \"logged\") is record_spend. The validator will catch the difference; you must classify correctly.",
@@ -106,7 +106,7 @@ function buildSystemPrompt(state) {
     "",
     "INTENT KINDS (use these exact param shapes):",
     'setup_account: { kind:"setup_account", params:{ balanceCents:N, payday:"YYYY-MM-DD", payFrequency:"monthly"|"weekly"|"biweekly"|"irregular", currency?:"USD", currencySymbol?:"$", timezone?:"Europe/London" } }',
-    'add_envelope: { kind:"add_envelope", params:{ name:"Vietnam Trip", kind:"bill"|"budget"|"goal", amountCents:N, dueDate?:"YYYY-MM-DD", recurrence?:"once"|"weekly"|"biweekly"|"monthly", targetCents?:N, keywords?:[] } }',
+    'add_envelope: { kind:"add_envelope", params:{ name:"Vietnam Trip", kind:"bill"|"budget"|"goal", amountCents:N, dueDate?:"YYYY-MM-DD", recurrence?:"once"|"weekly"|"biweekly"|"monthly"|"quarterly"|"semiannual"|"annual", targetCents?:N, keywords?:[] } }',
     'record_spend: { kind:"record_spend", params:{ amountCents:N, note?:"coffee", envelopeKey?:"groceries" } }',
     'simulate_spend: { kind:"simulate_spend", params:{ amountCents:N, note?:"shoes", envelopeKey?:"clothes" } }  // READ-ONLY decision support; emit when user asks if they CAN afford something',
     'fund_envelope: { kind:"fund_envelope", params:{ name:"Vietnam Hotel", amountCents:N, note?:"saving" } }  // move money INTO an existing envelope (goal/budget). Use this for "put X toward Y" / "save X for Y" when Y already exists.',
@@ -218,8 +218,11 @@ async function parseProposal(state, userMessage, history, options) {
   if (mode === "do" && intents.length === 0) {
     mode = "talk";
   }
-  // Cap to 3 intents per turn (validator will hard-reject 4+ anyway).
-  if (intents.length > 3) intents = intents.slice(0, 3);
+  // Cap to 5 intents per turn. The pipeline orchestrator sequences them
+  // into "1 of N", "2 of N" confirm cards. 5 covers a comprehensive
+  // first-message dump (balance + 2-3 bills + a goal). Validator's
+  // matching cap defends against runaway batches.
+  if (intents.length > 5) intents = intents.slice(0, 5);
 
   // Drop any intent that isn't an object with a kind string.
   intents = intents.filter(i => i && typeof i.kind === "string");

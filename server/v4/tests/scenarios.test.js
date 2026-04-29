@@ -21,8 +21,8 @@ function freshSetup(balance) {
   }).state;
 }
 
-// ── 1. THE VIETNAM SCENARIO (the original bug, replayed) ───
-test("[SCENARIO 1] Vietnam: AI tries re-setup + envelope on already-setup account → batch reject", async () => {
+// ── 1. THE VIETNAM SCENARIO — pipeline orchestration replaces batch-reject
+test("[SCENARIO 1] Vietnam: AI tries re-setup + envelope on already-setup account → setup is rejected on its own merits (Step 1 hardening), envelope is queued", async () => {
   const s = freshSetup();
   const r = await processMessage(s, "I want a Vietnam budget", [], {
     _aiCall: stub({
@@ -35,8 +35,11 @@ test("[SCENARIO 1] Vietnam: AI tries re-setup + envelope on already-setup accoun
     }),
   });
   assertEq(r.kind, "do");
+  // setup_account is rejected because the account is already setup
   assertEq(r.decisions[0].verdict.ok, false);
-  assertTrue(/setup first/i.test(r.decisions[0].verdict.reason));
+  assertTrue(/already set up/i.test(r.decisions[0].verdict.reason));
+  // envelope is queued as step 2 — user can still add it after acknowledging the setup rejection
+  assertTrue(Array.isArray(r.queueAfter) && r.queueAfter.length === 1);
 });
 
 test("[SCENARIO 1] Vietnam: AI tries to log balance as a spend → rejected (before setup)", async () => {

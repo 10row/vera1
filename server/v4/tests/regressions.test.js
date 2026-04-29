@@ -102,15 +102,21 @@ test("[BUG-2] non-monthly-pattern bill 'Vietnam Trip' with recurrence:once passe
 // ── BUG 3 / BUG 4: setup_account must be solo ─────────────────────
 // Symptom: bot tried to setup AND add envelope in the same turn, sending
 // two confirm cards. Setup must be its own atomic step.
-test("[BUG-4] setup_account bundled with add_envelope is rejected at batch level", () => {
+test("[BUG-4] setup_account bundled with add_envelope: pipeline now SEQUENCES (not rejects). validateBatch returns per-intent verdicts.", () => {
+  // Old behavior was a wholesale reject. New behavior is orchestration:
+  // pipeline lifts setup to step 1, queues envelope as step 2.
   const s = m.createFreshState();
   const v = validateBatch(s, [
     { kind: "setup_account", params: { balanceCents: 5000_00 } },
-    { kind: "add_envelope", params: { name: "Rent", kind: "bill", amountCents: 1400_00, recurrence: "monthly", dueDate: "2025-05-01" } },
+    { kind: "add_envelope", params: { name: "Rent", kind: "bill", amountCents: 1400_00, recurrence: "monthly", dueDate: m.addDays(m.today("UTC"), 30) } },
   ], TODAY);
-  assertEq(v.length, 1);
-  assertEq(v[0].ok, false);
-  assertTrue(/setup first/i.test(v[0].reason));
+  // validateBatch now returns 2 verdicts (one per intent) — pipeline does
+  // the sequencing. Both should be ok individually given the right state.
+  assertEq(v.length, 2);
+  assertEq(v[0].ok, true); // setup ok on fresh state
+  // envelope is rejected at this point because state.setup is still false
+  // (pipeline applies setup FIRST, then re-validates envelope against new state)
+  assertEq(v[1].ok, false);
 });
 
 test("[BUG-4] setup_account alone passes through validateBatch", () => {
@@ -143,30 +149,25 @@ test("[BUG-5] new bill with today's date is allowed", () => {
   assertEq(v.ok, true);
 });
 
-// ── BUG 6: cascade cap loophole ─────────────────────────────────
-// Old: AI sanitization trimmed to 3, then validator's >3 rule never fired.
-// New: validator caps at 2 (MAX_INTENTS_PER_TURN). Setup must be solo.
-test("[BUG-6] batch of 3 intents is rejected (validator cap is 2)", () => {
+// ── BUG 6: cascade cap moved to 5; orchestration sequences the rest ─
+// Pipeline now sequences multi-intent batches into "1 of N" confirms.
+// Validator returns per-intent verdicts; only > 5 in one turn is rejected.
+test("[BUG-6] batch of 3 intents now passes (validator cap is 5; orchestrated)", () => {
   const s = freshSetup();
   const v = validateBatch(s, [
     { kind: "record_spend", params: { amountCents: 100 } },
     { kind: "record_spend", params: { amountCents: 200 } },
     { kind: "record_spend", params: { amountCents: 300 } },
   ], TODAY);
-  assertEq(v.length, 1);
-  assertEq(v[0].ok, false);
-  assertTrue(/one at a time|too many/i.test(v[0].reason));
+  assertEq(v.length, 3);
+  v.forEach(x => assertEq(x.ok, true));
 });
 
-test("[BUG-6] batch of 2 valid intents passes", () => {
+test("[BUG-6] batch of 6 intents IS rejected wholesale (the new cap is 5)", () => {
   const s = freshSetup();
-  const v = validateBatch(s, [
-    { kind: "record_spend", params: { amountCents: 100 } },
-    { kind: "record_spend", params: { amountCents: 200 } },
-  ], TODAY);
-  assertEq(v.length, 2);
-  assertEq(v[0].ok, true);
-  assertEq(v[1].ok, true);
+  const v = validateBatch(s, Array(6).fill({ kind: "record_spend", params: { amountCents: 100 } }), TODAY);
+  assertEq(v.length, 1);
+  assertEq(v[0].ok, false);
 });
 
 // ── INTEGRATION via pipeline ──────────────────────────────────────

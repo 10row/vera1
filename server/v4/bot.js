@@ -39,10 +39,21 @@ function makeToken() {
 
 // Pending intents are now stored as an array so a batch card can apply
 // multiple intents on a single Yes. Single-intent callers pass [intent].
-function setPending(intents, userId) {
+// A pending entry can carry a queue. When the user taps Yes on a queued
+// confirm, the bot applies the current intent then advances to the next
+// item in the queue, presenting a fresh confirm card with "(idx+1) of N".
+function setPending(intents, userId, opts) {
   const arr = Array.isArray(intents) ? intents : [intents];
   const token = makeToken();
-  pending.set(token, { intents: arr, userId, expires: Date.now() + PENDING_TTL_MS });
+  pending.set(token, {
+    intents: arr,                            // the intents being confirmed by THIS card
+    queueAfter: (opts && opts.queueAfter) || null,  // remaining intents to process
+    queueTotal: (opts && opts.queueTotal) || arr.length,
+    queueIndex: (opts && opts.queueIndex) || 1,
+    originalMessage: (opts && opts.originalMessage) || null,
+    userId,
+    expires: Date.now() + PENDING_TTL_MS,
+  });
   return token;
 }
 
@@ -314,11 +325,26 @@ async function processText(prisma, ctx, telegramId, text, opts) {
 
     if (toConfirm.length === 1) {
       const { intent, verdict } = toConfirm[0];
-      const token = setPending([intent], u.id); // store as array for unified apply path
-      const cardText = (result.message && rejections.length === 0 && autoApplied.length === 0 ? result.message + "\n\n" : "")
-        + "*" + fmtIntent(intent, sym) + "*"
+      // QUEUE-AWARE: if pipeline returned a queueAfter, attach it to the
+      // pending token. The callback handler will advance through it on Yes.
+      const queueAfter = result.queueAfter || null;
+      const queueTotal = result.queueTotal || 1;
+      const queueIndex = result.queueIndex || 1;
+
+      const token = setPending([intent], u.id, { queueAfter, queueTotal, queueIndex });
+
+      // Header shows "1 of N" when sequencing
+      const stepLabel = queueTotal > 1 ? "*Step " + queueIndex + " of " + queueTotal + "*\n" : "";
+      const intro = (result.message && rejections.length === 0 && autoApplied.length === 0)
+        ? result.message + "\n\n" : "";
+
+      const cardText = intro + stepLabel
+        + fmtIntent(intent, sym)
         + (verdict.reason && verdict.reason !== "Set up your account?" ? "\n_" + verdict.reason + "_" : "");
-      await ctx.reply(cardText, { parse_mode: "Markdown", ...confirmCard(token) });
+
+      const yesLabel = queueTotal > 1 ? "Confirm · next" : "Yes, do it";
+      const noLabel = queueTotal > 1 ? "Skip" : "Cancel";
+      await ctx.reply(cardText, { parse_mode: "Markdown", ...confirmCard(token, { yesLabel, noLabel }) });
     } else if (toConfirm.length > 1) {
       const intents = toConfirm.map(c => c.intent);
       const token = setPending(intents, u.id);
@@ -642,10 +668,13 @@ function attach(prisma) {
         return;
       }
       if (!isYes) {
-        await ctx.editMessageText("Cancelled.").catch(() => {});
+        // Cancel: drops the rest of the queue too. User can re-describe.
+        const wasInQueue = entry.queueAfter && entry.queueAfter.length > 0;
+        await ctx.editMessageText(wasInQueue ? "Stopped — nothing else changed." : "Cancelled.").catch(() => {});
         return;
       }
       // Yes → apply each pending intent in order under one lock.
+      // Then, if a queue exists, present the NEXT confirm card.
       await db.withUserLock(u.id, async () => {
         let state = await db.loadState(prisma, u.id);
         const applied = [];
@@ -674,16 +703,82 @@ function attach(prisma) {
           }
 
           const lines = applied.map(i => "✓ " + fmtIntent(i, sym));
-          lines.push(heroLine(state, sym));
-          // Attach Undo button tied to the LAST event applied.
+
+          // QUEUE ADVANCEMENT: if there are more intents queued, validate the
+          // next one and present a fresh confirm card. Auto-applies are
+          // applied silently and we keep walking; rejections are reported
+          // and we keep walking; confirms become the new card.
+          let nextQueue = (entry.queueAfter || []).slice();
+          let nextIndex = (entry.queueIndex || 1) + 1;
+          const total = entry.queueTotal || 1;
+          let nextConfirmIntent = null;
+          let nextConfirmVerdict = null;
+          const queueRejections = [];
+
+          while (nextQueue.length > 0) {
+            const candidate = nextQueue.shift();
+            const verdict = validateIntent(state, candidate, m.today(state.timezone || "UTC"));
+            if (!verdict.ok) {
+              queueRejections.push("Skipped: " + verdict.reason);
+              nextIndex++;
+              continue;
+            }
+            if (verdict.severity === "auto") {
+              try {
+                const r = applyIntent(state, candidate);
+                state = r.state;
+                applied.push(candidate);
+                nextIndex++;
+              } catch (e) {
+                queueRejections.push("Couldn't apply: " + e.message);
+                nextIndex++;
+              }
+              continue;
+            }
+            // confirm tier — pause and show this card
+            nextConfirmIntent = candidate;
+            nextConfirmVerdict = verdict;
+            break;
+          }
+
+          // Persist any auto-applies that ran during queue walk
+          if (applied.length > entry.intents.length) {
+            await db.saveState(prisma, u.id, state);
+          }
+
+          // Edit the original card to a tight summary
+          const summary = lines.concat(queueRejections.map(r => "_" + r + "_")).join("\n");
+          await ctx.editMessageText(summary, { parse_mode: "Markdown" }).catch(() => {});
+
+          if (nextConfirmIntent) {
+            // Present the next queued confirm
+            const newToken = setPending([nextConfirmIntent], u.id, {
+              queueAfter: nextQueue,
+              queueTotal: total,
+              queueIndex: nextIndex,
+            });
+            const stepLabel = "*Step " + nextIndex + " of " + total + "*\n";
+            const cardText = stepLabel + fmtIntent(nextConfirmIntent, sym) +
+              (nextConfirmVerdict.reason && nextConfirmVerdict.reason !== "Set up your account?"
+                ? "\n_" + nextConfirmVerdict.reason + "_" : "");
+            const yesLabel = (nextIndex < total) ? "Confirm · next" : "Confirm";
+            const noLabel = "Skip";
+            await ctx.reply(cardText, { parse_mode: "Markdown", ...confirmCard(newToken, { yesLabel, noLabel }) });
+            return;
+          }
+
+          // No more queued items — final summary message with hero line
           const lastEventId = state.events && state.events.length
             ? state.events[state.events.length - 1].id
             : null;
-          const opts = { parse_mode: "Markdown" };
+          const finalLines = [];
+          if (total > 1) finalLines.push("*All set.*");
+          finalLines.push(heroLine(state, sym));
+          const finalOpts = { parse_mode: "Markdown" };
           if (lastEventId) {
-            opts.reply_markup = undoButton(setUndoToken(lastEventId, u.id)).reply_markup;
+            finalOpts.reply_markup = undoButton(setUndoToken(lastEventId, u.id)).reply_markup;
           }
-          await ctx.editMessageText(lines.join("\n"), opts).catch(() => {});
+          await ctx.reply(finalLines.join("\n"), finalOpts);
         } catch (e) {
           console.error("[v4 confirm apply]", e);
           await ctx.editMessageText("Couldn't apply that: " + e.message).catch(() => {});
