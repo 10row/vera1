@@ -1,0 +1,90 @@
+# 02-onboarding-dump
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ Hey, I have about 5000 in my account and I get paid the 15th of each month
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-15.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $312.50/day, 16 days to payday.
+
+[bot] ► Yep, $5,000.00 is what I see — payday locked in for the 15th each month. Anything you want to change?
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $312.50/day, 16 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 7,
+    "warm": 8,
+    "safe": 8
+  },
+  "overall": 8,
+  "verdict": "pass",
+  "critique": [
+    "Bot sends TWO messages after parsing—first confirmatory (good), second asking for changes (redundant). Should be one.",
+    "Safe score docked because second message re-asks 'anything you want to change?' when setup is already complete and confirmed. This is loop-adjacent.",
+    "Efficiency slightly soft due to the two-message pattern when one could nail it.",
+    "Natural and warm are strong—tone is friendly, conversational, zero robotic jargon.",
+    "Clear is excellent: user immediately sees balance, payday, and daily burn rate with emojis guiding mood."
+  ],
+  "fixes": [
+    "Remove the second bot message entirely. After the first confirmatory message with the /today snapshot, setup is done—wait for user's next intent.",
+    "If you feel you must confirm, fold it into the first message: 'All set ✅ — $5,000.00, payday 2026-05-15. 🟢 *Calm* — $312.50/day, 16 days to payday. Just talk to me naturally from here.' (single message)",
+    "Add guard: if setup is already `true`, never output 'anything you want to change?'—that's a tell the bot is uncertain."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "211ccc601a17c951883c2be8",
+      "ts": 1777458638273,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "d02b1f934a13108d40fc13d5",
+      "ts": 1777458638273,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

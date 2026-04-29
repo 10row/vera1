@@ -1,0 +1,129 @@
+# Checkpoint day 3
+# score=0/10
+
+## RECENT TRANSCRIPT (last 20 events)
+
+                              [you] ◄ rent is 1400 due the 1st
+
+[bot] ► Logging rent: $1,400 due May 1st, monthly. You'll have $3,600 left after bills.
+       
+       Add bill *rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Add bill *rent* — $1,400.00 · 2026-05-01 · monthly
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,600.00 for 26 days ($138.46/day).
+       [Undo]
+
+                              [you] ◄ gas 65
+
+[bot] ► Logging gas, $65. You're at $4,935 now.
+       
+       Spend $65.00 · gas
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $65.00 · gas
+
+[bot] ► 🟢 *Calm* — $135.96/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,535.00 for 26 days ($135.96/day).
+       [Undo]
+
+                              [you] ◄ groceries 42
+
+[bot] ► Logging groceries, $42. You're at $4,893 now.
+       
+       Spend $42.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $42.00 · groceries
+
+[bot] ► 🟢 *Calm* — $134.34/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,493.00 for 26 days ($134.34/day).
+       [Undo]
+
+                              [you] ◄ is a $50 dinner ok?
+
+[bot] ► Running the math on a $50 dinner...
+       🟢 *Yep, you're fine* — after that you'd have $4,843.00, $132.42/day.
+       [Log it] [Skip]
+                              [you tapped: Log it]
+
+[bot] ► (edit) ✓ Spend $50.00
+
+[bot] ► 🟢 *Calm* — $132.42/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,443.00 for 26 days ($132.42/day).
+       [Undo]
+
+                              [you] ◄ could I do a $300 weekend trip?
+
+[bot] ► Let me check if a $300 weekend trip fits. You'd have $4,593 left after—still plenty of runway before payday in 26 days.
+       🟢 *Yep, you're fine* — after that you'd have $4,543.00, $120.88/day.
+       [Log it] [Skip]
+                              [you tapped: Log it]
+
+[bot] ► (edit) ✓ Spend $300.00
+
+[bot] ► 🟢 *Calm* — $120.88/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,143.00 for 26 days ($120.88/day).
+       [Undo]
+
+                              [you] ◄ lunch 18 at work
+
+[bot] ► Logging lunch, $18. You're at $4,875 now.
+       
+       Spend $18.00 · lunch at work
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $18.00 · lunch at work
+
+[bot] ► 🟢 *Calm* — $120.19/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,125.00 for 26 days ($120.19/day).
+       [Undo]
+
+## HERO LINE
+🟢 *Calm* — $120.19/day, 26 days to payday.
+
+## DNA
+DNA SUMMARY:
+- last 7d spend: $475.00
+- last 30d spend: $475.00
+- monthly bills load: $1,400.00
+- after bills runway: $3,125.00 for 26 days ($120.19/day)
+- top categories last 30d: other ($368.00), transport ($65.00), groceries ($42.00)
+- BIGGEST DISCRETIONARY LEAKS: other ($368.00 = 77% of discretionary)
+CATEGORIES (≥3 txs):
+- other: 3 txs, $368.00 in 30d, avg $122.67
+BILLS:
+- rent: $1,400.00/monthly · due 2026-05-01 (in 2d)
+
+## STATE SUMMARY
+{
+  "day": 3,
+  "setup": true,
+  "balance": "$4,525.00",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": [
+    "rent"
+  ],
+  "txCount": 6,
+  "eventCount": 7,
+  "status": "calm",
+  "dailyPace": "$120.19",
+  "daysToPayday": 26
+}
+
+## JUDGE VERDICT
+{
+  "score": 0,
+  "summary": "judge JSON parse failed",
+  "critique": [
+    "{\n  \"score\": 7,\n  \"summary\": \"Solid math, missing pattern insights. Trustworthy but not yet wise.\",\n  \"critique\": [\n    \"Hero line is purely mechanical—just math, no context. Why should I care that it"
+  ],
+  "opportunities": []
+}

@@ -1,0 +1,72 @@
+
+                              [you] ◄ I have about 5000 in checking, get paid the 25th of each month
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ rent is 1400 due the 1st
+
+[bot] ► Logging rent: $1,400 due the 1st of each month.
+       
+       Add bill *rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Add bill *rent* — $1,400.00 · 2026-05-01 · monthly
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+       [Undo]
+
+                              [you] ◄ could I do a $300 weekend trip?
+
+[bot] ► Let me check if a $300 trip fits your budget.
+       🟢 *Yep, you're fine* — after that you'd have $4,700.00, $126.92/day.
+       [Log it] [Skip]
+                              [you tapped: Log it]
+
+[bot] ► (edit) ✓ Spend $300.00
+
+[bot] ► 🟢 *Calm* — $126.92/day, 26 days to payday.
+       [Undo]
+
+                              [you] ◄ got coffee, 6 bucks
+
+[bot] ► Recording $6.00 coffee spend.
+       
+       Spend $6.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $6.00 · coffee
+
+[bot] ► 🟢 *Calm* — $126.69/day, 26 days to payday.
+       [Undo]
+
+                              [you] ◄ got coffee, 4 bucks
+
+[bot] ► Recording $4.00 coffee spend.
+       
+       Spend $4.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $4.00 · coffee
+
+[bot] ► 🟢 *Calm* — $126.53/day, 26 days to payday.
+       [Undo]
+
+                              [you] ◄ spent 5 on coffee
+
+[bot] ► Recording $5.00 coffee spend.
+       
+       Spend $5.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $5.00 · coffee
+
+[bot] ► 🟢 *Calm* — $126.34/day, 26 days to payday.
+       [Undo]

@@ -1,0 +1,99 @@
+# 10-russian-onboarding
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ привет
+
+[bot] ► Привет 👋 Я SpendYes — помогу следить за деньгами без хлопот.
+       
+       Сколько сейчас на основном счёте — примерно? Просто число.
+
+                              [you] ◄ 5000
+
+[bot] ► Записал — $5,000.00. 👍
+       
+       А когда следующая зарплата? Дата ("15-го", "30 апреля") или *пропустить*, если зарплата нерегулярная.
+
+                              [you] ◄ 15-го
+
+[bot] ► Готово ✅ — $5,000.00, зарплата 2026-05-15.
+       
+       Дальше просто говори: "потратил 20 на кофе", "платёж аренда 1400 1-го", "могу позволить 200?". Я разберусь.
+       
+       🟢 *Спокойно* — $312.50/день, 16 дн до зарплаты.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Спокойно* — $312.50/день, 16 дн до зарплаты.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Bot never asks for the same data twice — clean, linear flow",
+    "Russian tone is conversational ('Дальше просто говори') without being overly casual",
+    "Clear examples given ('потратил 20 на кофе', 'платёж аренда 1400 1-го') make next steps obvious",
+    "Status summary at end ('Спокойно — $312.50/день, 16 дн до зарплаты') is reassuring and actionable",
+    "Minor: 'дата' instruction ('15-го', '30 апреля') could be slightly clearer — user understood but phrasing is a touch ambiguous"
+  ],
+  "fixes": [
+    "Change payday prompt to: 'Когда следующая зарплата? (например: 15 мая или 15-го)' — removes 'дата' jargon",
+    "Consider auto-detecting month context — user said '15-го' but bot inferred May 2026; if this is today's context, might confuse if user meant this month"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "ru",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "c22161cb6f5b7a5ec63fd631",
+      "ts": 1777458683890,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "ee321c89e49991ca212795f2",
+      "ts": 1777458683890,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

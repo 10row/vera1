@@ -1,0 +1,110 @@
+# 03-onboarding-vague
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ hi
+
+[bot] ► Hey 👋 I'm SpendYes — your money buddy.
+       
+       Let's start simple: what's roughly in your main account right now? A ballpark number is fine.
+
+                              [you] ◄ what does this do?
+
+[bot] ► This is just for me — so I can spot your rhythm and nudge in the moment. No bank link, nothing shared. What's roughly in your account?
+
+                              [you] ◄ ok
+
+[bot] ► No stress — just say *skip* and we'll move on. You can give me the balance later.
+
+                              [you] ◄ fine, around 3000
+
+[bot] ► Got it — $3,000.00. 👍
+       
+       When's your next paycheck? A date like *"the 15th"* or *"April 30"*, or *"skip"* if it's irregular.
+
+                              [you] ◄ skip
+
+[bot] ► All set ✅ — $3,000.00, irregular pay.
+       
+       From here just talk to me: "spent 20 on coffee", "got 3000", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $3,000.00 on hand, $100.00/day for a month.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $3,000.00 on hand, $100.00/day for a month.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 7,
+    "clear": 8,
+    "efficient": 8,
+    "warm": 7,
+    "safe": 9
+  },
+  "overall": 7.8,
+  "verdict": "pass",
+  "critique": [
+    "Bot gracefully handles dodging without looping—offers skip, doesn't repeat the same question",
+    "Reassurance on data privacy ('no bank link') is timely and helpful",
+    "Skip mechanic is clear and reduces friction for hesitant users",
+    "Tone is patient, never condescending or pushy",
+    "Final state shows setup completed cleanly with no redundant asks",
+    "Minor: 'All set ✅' message could be slightly warmer/more celebratory given user hesitation overcome",
+    "Minor: '$100.00/day for a month' calculation isn't explained—user may wonder where that comes from"
+  ],
+  "fixes": [
+    "Add subtle celebration in the 'All set' message: 'All set ✅ — $3,000.00, irregular pay. You're ready to roll.' to feel less transactional",
+    "When showing the $100/day baseline, briefly explain it: 'That's about $100/day based on your balance—we'll refine as you spend.'",
+    "Consider offering one tangible next action after setup: 'Now just tell me what you spend, and I'll keep watch.' to guide the conversation"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 300000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-29",
+  "payFrequency": "irregular",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "174593464612f0f625d5c164",
+      "ts": 1777458643941,
+      "kind": "setup",
+      "amountCents": 300000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "86c35aa08459c90be9e05a50",
+      "ts": 1777458643941,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 300000,
+          "payday": "2026-05-29",
+          "payFrequency": "irregular"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 300000
+    }
+  ],
+  "onboardingDraft": null
+}

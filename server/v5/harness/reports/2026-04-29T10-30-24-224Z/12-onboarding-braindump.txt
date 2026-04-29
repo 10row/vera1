@@ -1,0 +1,104 @@
+# 12-onboarding-braindump
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ Hey so I have about 5000 in my account, I get paid the 15th of each month, and rent is 1400 due the 1st
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-15.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $312.50/day, 16 days to payday.
+
+[bot] ► Got it — adding rent ($1,400 due May 1st). You're set: $5,000 balance, payday the 15th each month.
+       
+       Add bill *Rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Add bill *Rent* — $1,400.00 · 2026-05-01 · monthly
+
+[bot] ► 🟢 *Calm* — $225.00/day, 16 days to payday.
+       ⏰ Rent ($1,400.00) due in 2 days. After: $3,600.00 for 16 days ($225.00/day).
+       [Undo]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $225.00/day, 16 days to payday.
+       ⏰ Rent ($1,400.00) due in 2 days. After: $3,600.00 for 16 days ($225.00/day).
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+null
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-15",
+  "payFrequency": "monthly",
+  "bills": {
+    "rent": {
+      "name": "Rent",
+      "amountCents": 140000,
+      "dueDate": "2026-05-01",
+      "recurrence": "monthly",
+      "paidThisCycle": false,
+      "createdAt": 1777458626520
+    }
+  },
+  "transactions": [
+    {
+      "id": "81dea899284d46b5e450370e",
+      "ts": 1777458624315,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "61afe9f77cb9b9a57dcaf8c7",
+      "ts": 1777458624315,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-15",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "e6772399c90b7798f4e8a9ae",
+      "ts": 1777458626520,
+      "intent": {
+        "kind": "add_bill",
+        "params": {
+          "name": "Rent",
+          "amountCents": 140000,
+          "dueDate": "2026-05-01",
+          "recurrence": "monthly"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 500000,
+      "billKey": "rent"
+    }
+  ],
+  "onboardingDraft": null
+}

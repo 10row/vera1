@@ -1,0 +1,347 @@
+{
+  "days": 10,
+  "checkpoints": [
+    {
+      "day": 3,
+      "score": 7,
+      "summary": "Bot understands basics, reassures well, but lacks insight and pattern recognition.",
+      "trustworthy": false,
+      "critique": [
+        "Hero line is pure math—$126.53/day repeats mechanically with no context or warning about the $1,400 rent due in 2 days",
+        "Bot never flagged that rent arrives before payday; no urgency or cash-flow timeline visualization",
+        "DNA summary shows $300 'other' spend but bot never asked what it was or connected it to the $300 trip—missed personalization",
+        "Coffee pattern ($6 + $4) is tracked but not surfaced; no gentle nudge or insight ('you're averaging $5/day on coffee')",
+        "Bot confirmed trip affordability but didn't warn that post-trip balance ($4,390) leaves only $1,390 buffer before $1,400 rent—thin margin",
+        "No proactive advice; only reactive confirmations. Feels like a calculator, not a financial advisor",
+        "Recent interactions show zero context loss, but zero curiosity either—didn't ask about the $300 'other' or lifestyle patterns"
+      ],
+      "opportunities": [
+        "Add cash-flow timeline: show rent due in 2 days with a visual countdown and suggested action ('ensure $1,400 available by May 1st')",
+        "Highlight spending patterns: 'You're on pace for $190/month on coffee—that's $10/day. Want to set a limit?'",
+        "Warn on thin margins: after big spends, flag buffer size ('You'll have $1,390 left before rent—want to pause spending?')",
+        "Personalize hero line: swap static math for dynamic insight ('Rent hits in 2d—you're on track ✓' or 'Trending tight, watch pace')",
+        "Proactive questions: ask about the $300 'other' category or weekend trip to build richer spending DNA",
+        "Build trust through predictions: 'At this pace, you'll have $X left after rent and normal bills. Here's what you can safely spend.'"
+      ],
+      "recent": "\n                              [you] ◄ I have about 5000 in checking, get paid the 25th of each month\n\n[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.\n       \n       From here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n       \n       🟢 *Calm* — $192.30/day, 26 days to payday.\n\n                              [you] ◄ rent is 1400 due the 1st\n\n[bot] ► Logging rent: $1,400 due the 1st of each month.\n       \n       Add bill *rent* — $1,400.00 · 2026-05-01 · monthly\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Add bill *rent* — $1,400.00 · 2026-05-01 · monthly\n\n[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ could I do a $300 weekend trip?\n\n[bot] ► Let me check if a $300 trip fits your budget.\n       🟢 *Yep, you're fine* — after that you'd have $4,700.00, $126.92/day.\n       [Log it] [Skip]\n                              [you tapped: Log it]\n\n[bot] ► (edit) ✓ Spend $300.00\n\n[bot] ► 🟢 *Calm* — $126.92/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ got coffee, 6 bucks\n\n[bot] ► Recording $6.00 coffee spend.\n       \n       Spend $6.00 · coffee\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Spend $6.00 · coffee\n\n[bot] ► 🟢 *Calm* — $126.69/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ got coffee, 4 bucks\n\n[bot] ► Recording $4.00 coffee spend.\n       \n       Spend $4.00 · coffee\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Spend $4.00 · coffee\n\n[bot] ► 🟢 *Calm* — $126.53/day, 26 days to payday.\n       [Undo]",
+      "hero": "🟢 *Calm* — $126.53/day, 26 days to payday.",
+      "dnaText": "DNA SUMMARY:\n- last 7d spend: $310.00\n- last 30d spend: $310.00\n- monthly bills load: $1,400.00\n- top categories last 30d: other ($300.00), coffee ($10.00)\nBILLS:\n- rent: $1,400.00/monthly · due 2026-05-01 (in 2d)",
+      "stateSummary": {
+        "day": 3,
+        "setup": true,
+        "balance": "$4,690.00",
+        "payday": "2026-05-25",
+        "payFrequency": "monthly",
+        "bills": [
+          "rent"
+        ],
+        "txCount": 4,
+        "eventCount": 5,
+        "status": "calm",
+        "dailyPace": "$126.53",
+        "daysToPayday": 26
+      },
+      "judgeRaw": {
+        "score": 7,
+        "summary": "Bot understands basics, reassures well, but lacks insight and pattern recognition.",
+        "critique": [
+          "Hero line is pure math—$126.53/day repeats mechanically with no context or warning about the $1,400 rent due in 2 days",
+          "Bot never flagged that rent arrives before payday; no urgency or cash-flow timeline visualization",
+          "DNA summary shows $300 'other' spend but bot never asked what it was or connected it to the $300 trip—missed personalization",
+          "Coffee pattern ($6 + $4) is tracked but not surfaced; no gentle nudge or insight ('you're averaging $5/day on coffee')",
+          "Bot confirmed trip affordability but didn't warn that post-trip balance ($4,390) leaves only $1,390 buffer before $1,400 rent—thin margin",
+          "No proactive advice; only reactive confirmations. Feels like a calculator, not a financial advisor",
+          "Recent interactions show zero context loss, but zero curiosity either—didn't ask about the $300 'other' or lifestyle patterns"
+        ],
+        "opportunities": [
+          "Add cash-flow timeline: show rent due in 2 days with a visual countdown and suggested action ('ensure $1,400 available by May 1st')",
+          "Highlight spending patterns: 'You're on pace for $190/month on coffee—that's $10/day. Want to set a limit?'",
+          "Warn on thin margins: after big spends, flag buffer size ('You'll have $1,390 left before rent—want to pause spending?')",
+          "Personalize hero line: swap static math for dynamic insight ('Rent hits in 2d—you're on track ✓' or 'Trending tight, watch pace')",
+          "Proactive questions: ask about the $300 'other' category or weekend trip to build richer spending DNA",
+          "Build trust through predictions: 'At this pace, you'll have $X left after rent and normal bills. Here's what you can safely spend.'"
+        ],
+        "trustworthy": false
+      }
+    },
+    {
+      "day": 6,
+      "score": 7,
+      "summary": "Competent tracker with solid understanding; lacks predictive insight and pattern reflection.",
+      "trustworthy": true,
+      "critique": [
+        "Hero line is functional but repetitive—same 'Calm' + daily pace every time. No progression or behavioral insight after 6 days.",
+        "Bot logs transactions accurately but never reflects patterns back ('Hey, you're averaging $5 coffee runs—want a weekly check-in?').",
+        "DNA summary exists but is never surfaced to user—bot knows user spends $315/month but never offers category trends, warnings, or micro-habits.",
+        "Missing proactive features: no 'days to payday' anxiety signal, no 'on track?' micro-prompts, no celebration of discipline (e.g., 'You've logged 5 coffees honestly—respect').",
+        "Setup was smooth and bot understood payday + bills correctly, but interaction after that is purely transactional—no personality, no 'getting to know you' evolution.",
+        "Rent due in 2 days ($1,400) is never flagged prominently; user has $4,685 but bot doesn't say 'Your rent lands in 2 days—you're solid, but watch the next 20 days'."
+      ],
+      "opportunities": [
+        "Surface DNA summary as weekly insight: 'Last 7 days: coffee was your only spend. Tracking is honest—keep it up.'",
+        "Add predictive anxiety detection: at day 26-to-payday, offer 'Payday roadmap' showing rent due, remaining runway, and a 'stay on track' daily target.",
+        "Celebrate user behavior: 'You've logged every coffee honestly. That's the foundation of real budgeting.'",
+        "Pattern nudges: 'Coffee is $5/visit. At 3x/week, that's $60/month. Want a coffee goal?'",
+        "Hero line evolution: rotate insights (not just daily pace): 'Rent lands in 2d ✓ | $1,300 cushion after | Stay at $126/day'.",
+        "Proactive check-in at payday-50: 'Halfway to payday. You're tracking well—any surprises coming?'"
+      ],
+      "recent": "\n                              [you] ◄ I have about 5000 in checking, get paid the 25th of each month\n\n[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.\n       \n       From here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n       \n       🟢 *Calm* — $192.30/day, 26 days to payday.\n\n                              [you] ◄ rent is 1400 due the 1st\n\n[bot] ► Logging rent: $1,400 due the 1st of each month.\n       \n       Add bill *rent* — $1,400.00 · 2026-05-01 · monthly\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Add bill *rent* — $1,400.00 · 2026-05-01 · monthly\n\n[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ could I do a $300 weekend trip?\n\n[bot] ► Let me check if a $300 trip fits your budget.\n       🟢 *Yep, you're fine* — after that you'd have $4,700.00, $126.92/day.\n       [Log it] [Skip]\n                              [you tapped: Log it]\n\n[bot] ► (edit) ✓ Spend $300.00\n\n[bot] ► 🟢 *Calm* — $126.92/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ got coffee, 6 bucks\n\n[bot] ► Recording $6.00 coffee spend.\n       \n       Spend $6.00 · coffee\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Spend $6.00 · coffee\n\n[bot] ► 🟢 *Calm* — $126.69/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ got coffee, 4 bucks\n\n[bot] ► Recording $4.00 coffee spend.\n       \n       Spend $4.00 · coffee\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Spend $4.00 · coffee\n\n[bot] ► 🟢 *Calm* — $126.53/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ spent 5 on coffee\n\n[bot] ► Recording $5.00 coffee spend.\n       \n       Spend $5.00 · coffee\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Spend $5.00 · coffee\n\n[bot] ► 🟢 *Calm* — $126.34/day, 26 days to payday.\n       [Undo]",
+      "hero": "🟢 *Calm* — $126.34/day, 26 days to payday.",
+      "dnaText": "DNA SUMMARY:\n- last 7d spend: $315.00\n- last 30d spend: $315.00\n- monthly bills load: $1,400.00\n- top categories last 30d: other ($300.00), coffee ($15.00)\nCATEGORIES (≥3 txs):\n- coffee: 3 txs, $15.00 in 30d, avg $5.00\nBILLS:\n- rent: $1,400.00/monthly · due 2026-05-01 (in 2d)",
+      "stateSummary": {
+        "day": 6,
+        "setup": true,
+        "balance": "$4,685.00",
+        "payday": "2026-05-25",
+        "payFrequency": "monthly",
+        "bills": [
+          "rent"
+        ],
+        "txCount": 5,
+        "eventCount": 6,
+        "status": "calm",
+        "dailyPace": "$126.34",
+        "daysToPayday": 26
+      },
+      "judgeRaw": {
+        "score": 7,
+        "summary": "Competent tracker with solid understanding; lacks predictive insight and pattern reflection.",
+        "critique": [
+          "Hero line is functional but repetitive—same 'Calm' + daily pace every time. No progression or behavioral insight after 6 days.",
+          "Bot logs transactions accurately but never reflects patterns back ('Hey, you're averaging $5 coffee runs—want a weekly check-in?').",
+          "DNA summary exists but is never surfaced to user—bot knows user spends $315/month but never offers category trends, warnings, or micro-habits.",
+          "Missing proactive features: no 'days to payday' anxiety signal, no 'on track?' micro-prompts, no celebration of discipline (e.g., 'You've logged 5 coffees honestly—respect').",
+          "Setup was smooth and bot understood payday + bills correctly, but interaction after that is purely transactional—no personality, no 'getting to know you' evolution.",
+          "Rent due in 2 days ($1,400) is never flagged prominently; user has $4,685 but bot doesn't say 'Your rent lands in 2 days—you're solid, but watch the next 20 days'."
+        ],
+        "opportunities": [
+          "Surface DNA summary as weekly insight: 'Last 7 days: coffee was your only spend. Tracking is honest—keep it up.'",
+          "Add predictive anxiety detection: at day 26-to-payday, offer 'Payday roadmap' showing rent due, remaining runway, and a 'stay on track' daily target.",
+          "Celebrate user behavior: 'You've logged every coffee honestly. That's the foundation of real budgeting.'",
+          "Pattern nudges: 'Coffee is $5/visit. At 3x/week, that's $60/month. Want a coffee goal?'",
+          "Hero line evolution: rotate insights (not just daily pace): 'Rent lands in 2d ✓ | $1,300 cushion after | Stay at $126/day'.",
+          "Proactive check-in at payday-50: 'Halfway to payday. You're tracking well—any surprises coming?'"
+        ],
+        "trustworthy": true
+      }
+    },
+    {
+      "day": 9,
+      "score": 7,
+      "summary": "Reliable tracker, basic understanding, lacks deeper insights and proactivity.",
+      "trustworthy": false,
+      "critique": [
+        "Hero line is purely transactional—just math. No behavioral insight or warning capacity shown.",
+        "Bot correctly logs transactions and maintains state, but never volunteers pattern analysis (e.g., 'You've had coffee 3 times in 2 days—$15/week on track').",
+        "Zero proactive guidance: no savings tips, no category trends flagged, no 'heads up' before payday pressure.",
+        "DNA summary exists but is never shown to user—bot hoards insights instead of sharing them.",
+        "Rent due in 2 days not emphasized; bot treats it like any other logged item despite being critical.",
+        "Trip approval was fast but missed opportunity to say 'Smart—leaves $4,700 for rent + cushion.'",
+        "No context loss observed, but also no deepening relationship—feels like a dumb calculator that remembers.",
+        "User had to manually specify all data; bot never asked clarifying questions (savings goal? emergency fund? income variability?)."
+      ],
+      "opportunities": [
+        "Surface DNA summary daily: 'Your coffee habit is $15/mo so far—you're on pace for $25 by month-end. Small but consistent.'",
+        "Proactive alerts: 'Rent due in 2 days—$1,400. You'll have ~$3,285 after. Want a spending plan for the other 24 days?'",
+        "Behavioral nudges: After 3rd coffee transaction, ask 'Noticing a pattern—want a daily coffee budget of $5?'",
+        "Context-aware approvals: Instead of just 'Yep, you're fine,' say 'Trip is safe. Post-trip you'll have $4,385 for 25 days—that's $175/day, well above rent.'",
+        "Ask for intent: 'What's your ideal balance on the 25th?' or 'Any savings target?' to move beyond reactive logging.",
+        "Risk framing: Show 'days of expenses covered' or 'buffer above rent' to build trust in financial stability."
+      ],
+      "recent": "\n                              [you] ◄ I have about 5000 in checking, get paid the 25th of each month\n\n[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.\n       \n       From here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n       \n       🟢 *Calm* — $192.30/day, 26 days to payday.\n\n                              [you] ◄ rent is 1400 due the 1st\n\n[bot] ► Logging rent: $1,400 due the 1st of each month.\n       \n       Add bill *rent* — $1,400.00 · 2026-05-01 · monthly\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Add bill *rent* — $1,400.00 · 2026-05-01 · monthly\n\n[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ could I do a $300 weekend trip?\n\n[bot] ► Let me check if a $300 trip fits your budget.\n       🟢 *Yep, you're fine* — after that you'd have $4,700.00, $126.92/day.\n       [Log it] [Skip]\n                              [you tapped: Log it]\n\n[bot] ► (edit) ✓ Spend $300.00\n\n[bot] ► 🟢 *Calm* — $126.92/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ got coffee, 6 bucks\n\n[bot] ► Recording $6.00 coffee spend.\n       \n       Spend $6.00 · coffee\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Spend $6.00 · coffee\n\n[bot] ► 🟢 *Calm* — $126.69/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ got coffee, 4 bucks\n\n[bot] ► Recording $4.00 coffee spend.\n       \n       Spend $4.00 · coffee\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Spend $4.00 · coffee\n\n[bot] ► 🟢 *Calm* — $126.53/day, 26 days to payday.\n       [Undo]\n\n                              [you] ◄ spent 5 on coffee\n\n[bot] ► Recording $5.00 coffee spend.\n       \n       Spend $5.00 · coffee\n       [Yes] [Cancel]\n                              [you tapped: Yes]\n\n[bot] ► (edit) ✓ Spend $5.00 · coffee\n\n[bot] ► 🟢 *Calm* — $126.34/day, 26 days to payday.\n       [Undo]",
+      "hero": "🟢 *Calm* — $126.34/day, 26 days to payday.",
+      "dnaText": "DNA SUMMARY:\n- last 7d spend: $315.00\n- last 30d spend: $315.00\n- monthly bills load: $1,400.00\n- top categories last 30d: other ($300.00), coffee ($15.00)\nCATEGORIES (≥3 txs):\n- coffee: 3 txs, $15.00 in 30d, avg $5.00\nBILLS:\n- rent: $1,400.00/monthly · due 2026-05-01 (in 2d)",
+      "stateSummary": {
+        "day": 9,
+        "setup": true,
+        "balance": "$4,685.00",
+        "payday": "2026-05-25",
+        "payFrequency": "monthly",
+        "bills": [
+          "rent"
+        ],
+        "txCount": 5,
+        "eventCount": 6,
+        "status": "calm",
+        "dailyPace": "$126.34",
+        "daysToPayday": 26
+      },
+      "judgeRaw": {
+        "score": 7,
+        "summary": "Reliable tracker, basic understanding, lacks deeper insights and proactivity.",
+        "critique": [
+          "Hero line is purely transactional—just math. No behavioral insight or warning capacity shown.",
+          "Bot correctly logs transactions and maintains state, but never volunteers pattern analysis (e.g., 'You've had coffee 3 times in 2 days—$15/week on track').",
+          "Zero proactive guidance: no savings tips, no category trends flagged, no 'heads up' before payday pressure.",
+          "DNA summary exists but is never shown to user—bot hoards insights instead of sharing them.",
+          "Rent due in 2 days not emphasized; bot treats it like any other logged item despite being critical.",
+          "Trip approval was fast but missed opportunity to say 'Smart—leaves $4,700 for rent + cushion.'",
+          "No context loss observed, but also no deepening relationship—feels like a dumb calculator that remembers.",
+          "User had to manually specify all data; bot never asked clarifying questions (savings goal? emergency fund? income variability?)."
+        ],
+        "opportunities": [
+          "Surface DNA summary daily: 'Your coffee habit is $15/mo so far—you're on pace for $25 by month-end. Small but consistent.'",
+          "Proactive alerts: 'Rent due in 2 days—$1,400. You'll have ~$3,285 after. Want a spending plan for the other 24 days?'",
+          "Behavioral nudges: After 3rd coffee transaction, ask 'Noticing a pattern—want a daily coffee budget of $5?'",
+          "Context-aware approvals: Instead of just 'Yep, you're fine,' say 'Trip is safe. Post-trip you'll have $4,385 for 25 days—that's $175/day, well above rent.'",
+          "Ask for intent: 'What's your ideal balance on the 25th?' or 'Any savings target?' to move beyond reactive logging.",
+          "Risk framing: Show 'days of expenses covered' or 'buffer above rent' to build trust in financial stability."
+        ],
+        "trustworthy": false
+      }
+    }
+  ],
+  "averageScore": "7.00",
+  "finalState": {
+    "schema": "v5",
+    "setup": true,
+    "balanceCents": 468500,
+    "currency": "USD",
+    "currencySymbol": "$",
+    "language": "en",
+    "timezone": "UTC",
+    "payday": "2026-05-25",
+    "payFrequency": "monthly",
+    "bills": {
+      "rent": {
+        "name": "rent",
+        "amountCents": 140000,
+        "dueDate": "2026-05-01",
+        "recurrence": "monthly",
+        "paidThisCycle": false,
+        "createdAt": 1777456320187
+      }
+    },
+    "transactions": [
+      {
+        "id": "ea79c290d7802153a44521e3",
+        "ts": 1777456318364,
+        "kind": "setup",
+        "amountCents": 500000,
+        "note": "starting balance",
+        "date": "2026-04-29"
+      },
+      {
+        "id": "9f78509a99fb61ff5fb0d27d",
+        "ts": 1777456321494,
+        "kind": "spend",
+        "amountCents": -30000,
+        "note": "",
+        "billKey": null,
+        "date": "2026-04-29"
+      },
+      {
+        "id": "6a4b240f7383c40330ecc1f4",
+        "ts": 1777456323262,
+        "kind": "spend",
+        "amountCents": -600,
+        "note": "coffee",
+        "billKey": null,
+        "date": "2026-04-29"
+      },
+      {
+        "id": "b12dd5001bbb30a58656f18c",
+        "ts": 1777456325041,
+        "kind": "spend",
+        "amountCents": -400,
+        "note": "coffee",
+        "billKey": null,
+        "date": "2026-04-29"
+      },
+      {
+        "id": "77afa512d17c29e3a3c10f79",
+        "ts": 1777456333795,
+        "kind": "spend",
+        "amountCents": -500,
+        "note": "coffee",
+        "billKey": null,
+        "date": "2026-04-29"
+      }
+    ],
+    "events": [
+      {
+        "id": "f49b45f24bde12c7a292acf8",
+        "ts": 1777456318364,
+        "intent": {
+          "kind": "setup_account",
+          "params": {
+            "balanceCents": 500000,
+            "payday": "2026-05-25",
+            "payFrequency": "monthly"
+          }
+        },
+        "prevBalance": 0,
+        "newBalance": 500000
+      },
+      {
+        "id": "50424102155451200f6b7bfc",
+        "ts": 1777456320187,
+        "intent": {
+          "kind": "add_bill",
+          "params": {
+            "name": "rent",
+            "amountCents": 140000,
+            "dueDate": "2026-05-01",
+            "recurrence": "monthly"
+          }
+        },
+        "prevBalance": 500000,
+        "newBalance": 500000,
+        "billKey": "rent"
+      },
+      {
+        "id": "fe45d9cab07557a6d24b9cf0",
+        "ts": 1777456321494,
+        "intent": {
+          "kind": "record_spend",
+          "params": {
+            "amountCents": 30000,
+            "note": ""
+          }
+        },
+        "prevBalance": 500000,
+        "newBalance": 470000
+      },
+      {
+        "id": "57bac8eb9909db4325471be7",
+        "ts": 1777456323262,
+        "intent": {
+          "kind": "record_spend",
+          "params": {
+            "amountCents": 600,
+            "note": "coffee"
+          }
+        },
+        "prevBalance": 470000,
+        "newBalance": 469400
+      },
+      {
+        "id": "6e4416aecf32e62833d2d8d1",
+        "ts": 1777456325041,
+        "intent": {
+          "kind": "record_spend",
+          "params": {
+            "amountCents": 400,
+            "note": "coffee"
+          }
+        },
+        "prevBalance": 469400,
+        "newBalance": 469000
+      },
+      {
+        "id": "dd09dd08db08e5d42402c8e5",
+        "ts": 1777456333795,
+        "intent": {
+          "kind": "record_spend",
+          "params": {
+            "amountCents": 500,
+            "note": "coffee"
+          }
+        },
+        "prevBalance": 469000,
+        "newBalance": 468500
+      }
+    ],
+    "onboardingDraft": null
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "runId": "2026-04-29T10-38-27-143Z",
+  "total": 2,
+  "passed": 1,
+  "failed": 1,
+  "results": [
+    {
+      "name": "11-typos",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    },
+    {
+      "name": "12-onboarding-braindump",
+      "pass": false,
+      "mech": {
+        "passed": false,
+        "reasons": [
+          "bills expected [\"rent\"] got []"
+        ]
+      },
+      "llm": null
+    }
+  ]
+}

@@ -1,0 +1,135 @@
+# 11-typos
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5k bal pay 1st
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-01.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ spnet 25 on cofee
+
+[bot] ► Logging $25 coffee. That's your first spend this week.
+       
+       Spend $25.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $25.00 · coffee
+
+[bot] ► 🟢 *Calm* — $2,487.50/day, 2 days to payday.
+       [Undo]
+
+                              [you] ◄ got 3000 pay chek
+
+[bot] ► Recording $3,000 paycheck. You're all set.
+       
+       Income $3,000.00 · paycheck
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Income $3,000.00 · paycheck
+
+[bot] ► 🟢 *Calm* — $3,987.50/day, 2 days to payday.
+       [Undo]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $3,987.50/day, 2 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+null
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 797500,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-01",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "453df4165705ea83a17f663f",
+      "ts": 1777459107211,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    },
+    {
+      "id": "22ce51a1497c12ea91a45f0e",
+      "ts": 1777459109291,
+      "kind": "spend",
+      "amountCents": -2500,
+      "note": "coffee",
+      "billKey": null,
+      "date": "2026-04-29"
+    },
+    {
+      "id": "5677f7925364003b65373cf8",
+      "ts": 1777459110849,
+      "kind": "income",
+      "amountCents": 300000,
+      "note": "paycheck",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "80a9b6b0c633f9bb89f5b415",
+      "ts": 1777459107211,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-01",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "6ff03d9b14f86dc73f0d2363",
+      "ts": 1777459109291,
+      "intent": {
+        "kind": "record_spend",
+        "params": {
+          "amountCents": 2500,
+          "note": "coffee"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 497500
+    },
+    {
+      "id": "d6716b5920d2850377b1f43b",
+      "ts": 1777459110849,
+      "intent": {
+        "kind": "record_income",
+        "params": {
+          "amountCents": 300000,
+          "note": "paycheck"
+        }
+      },
+      "prevBalance": 497500,
+      "newBalance": 797500
+    }
+  ],
+  "onboardingDraft": null
+}

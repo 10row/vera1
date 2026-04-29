@@ -1,0 +1,116 @@
+# Checkpoint day 3
+# score=7/10
+
+## RECENT TRANSCRIPT (last 20 events)
+
+                              [you] ◄ I have about 5000 in checking, get paid the 25th of each month
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ rent is 1400 due the 1st
+
+[bot] ► Logging rent: $1,400 due the 1st of each month.
+       
+       Add bill *rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Add bill *rent* — $1,400.00 · 2026-05-01 · monthly
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+       [Undo]
+
+                              [you] ◄ could I do a $300 weekend trip?
+
+[bot] ► Let me check if a $300 trip fits your budget.
+       🟢 *Yep, you're fine* — after that you'd have $4,700.00, $126.92/day.
+       [Log it] [Skip]
+                              [you tapped: Log it]
+
+[bot] ► (edit) ✓ Spend $300.00
+
+[bot] ► 🟢 *Calm* — $126.92/day, 26 days to payday.
+       [Undo]
+
+                              [you] ◄ got coffee, 6 bucks
+
+[bot] ► Recording $6.00 coffee spend.
+       
+       Spend $6.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $6.00 · coffee
+
+[bot] ► 🟢 *Calm* — $126.69/day, 26 days to payday.
+       [Undo]
+
+                              [you] ◄ got coffee, 4 bucks
+
+[bot] ► Recording $4.00 coffee spend.
+       
+       Spend $4.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $4.00 · coffee
+
+[bot] ► 🟢 *Calm* — $126.53/day, 26 days to payday.
+       [Undo]
+
+## HERO LINE
+🟢 *Calm* — $126.53/day, 26 days to payday.
+
+## DNA
+DNA SUMMARY:
+- last 7d spend: $310.00
+- last 30d spend: $310.00
+- monthly bills load: $1,400.00
+- top categories last 30d: other ($300.00), coffee ($10.00)
+BILLS:
+- rent: $1,400.00/monthly · due 2026-05-01 (in 2d)
+
+## STATE SUMMARY
+{
+  "day": 3,
+  "setup": true,
+  "balance": "$4,690.00",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": [
+    "rent"
+  ],
+  "txCount": 4,
+  "eventCount": 5,
+  "status": "calm",
+  "dailyPace": "$126.53",
+  "daysToPayday": 26
+}
+
+## JUDGE VERDICT
+{
+  "score": 7,
+  "summary": "Bot understands basics, reassures well, but lacks insight and pattern recognition.",
+  "critique": [
+    "Hero line is pure math—$126.53/day repeats mechanically with no context or warning about the $1,400 rent due in 2 days",
+    "Bot never flagged that rent arrives before payday; no urgency or cash-flow timeline visualization",
+    "DNA summary shows $300 'other' spend but bot never asked what it was or connected it to the $300 trip—missed personalization",
+    "Coffee pattern ($6 + $4) is tracked but not surfaced; no gentle nudge or insight ('you're averaging $5/day on coffee')",
+    "Bot confirmed trip affordability but didn't warn that post-trip balance ($4,390) leaves only $1,390 buffer before $1,400 rent—thin margin",
+    "No proactive advice; only reactive confirmations. Feels like a calculator, not a financial advisor",
+    "Recent interactions show zero context loss, but zero curiosity either—didn't ask about the $300 'other' or lifestyle patterns"
+  ],
+  "opportunities": [
+    "Add cash-flow timeline: show rent due in 2 days with a visual countdown and suggested action ('ensure $1,400 available by May 1st')",
+    "Highlight spending patterns: 'You're on pace for $190/month on coffee—that's $10/day. Want to set a limit?'",
+    "Warn on thin margins: after big spends, flag buffer size ('You'll have $1,390 left before rent—want to pause spending?')",
+    "Personalize hero line: swap static math for dynamic insight ('Rent hits in 2d—you're on track ✓' or 'Trending tight, watch pace')",
+    "Proactive questions: ask about the $300 'other' category or weekend trip to build richer spending DNA",
+    "Build trust through predictions: 'At this pace, you'll have $X left after rent and normal bills. Here's what you can safely spend.'"
+  ],
+  "trustworthy": false
+}

@@ -1,0 +1,143 @@
+# Checkpoint day 3
+# score=6/10
+
+## RECENT TRANSCRIPT (last 20 events)
+
+                              [you] ◄ rent is 1400 due the 1st
+
+[bot] ► Logging rent: $1,400 due May 1st, monthly. That's your main bill — leaves you $3,600 after.
+       
+       Add bill *Rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Add bill *Rent* — $1,400.00 · 2026-05-01 · monthly
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+       ⏰ Rent ($1,400.00) due in 2 days.
+       [Undo]
+
+                              [you] ◄ gas 65
+
+[bot] ► Logging gas, $65. You're tracking well.
+       
+       Spend $65.00 · gas
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $65.00 · gas
+
+[bot] ► 🟢 *Calm* — $135.96/day, 26 days to payday.
+       ⏰ Rent ($1,400.00) due in 2 days.
+       [Undo]
+
+                              [you] ◄ groceries 42
+
+[bot] ► Logging groceries, $42. You're at $107 spent this week.
+       
+       Spend $42.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $42.00 · groceries
+
+[bot] ► 🟢 *Calm* — $134.34/day, 26 days to payday.
+       ⏰ Rent ($1,400.00) due in 2 days.
+       [Undo]
+
+                              [you] ◄ is a $50 dinner ok?
+
+[bot] ► Running the math on a $50 dinner...
+       🟢 *Yep, you're fine* — after that you'd have $4,843.00, $132.42/day.
+       [Log it] [Skip]
+                              [you tapped: Log it]
+
+[bot] ► (edit) ✓ Spend $50.00
+
+[bot] ► 🟢 *Calm* — $132.42/day, 26 days to payday.
+       ⏰ Rent ($1,400.00) due in 2 days.
+       [Undo]
+
+                              [you] ◄ could I do a $300 weekend trip?
+
+[bot] ► Let me run that for you — $300 weekend trip.
+       🟢 *Yep, you're fine* — after that you'd have $4,543.00, $120.88/day.
+       [Log it] [Skip]
+                              [you tapped: Log it]
+
+[bot] ► (edit) ✓ Spend $300.00
+
+[bot] ► 🟢 *Calm* — $120.88/day, 26 days to payday.
+       ⏰ Rent ($1,400.00) due in 2 days.
+       [Undo]
+
+                              [you] ◄ lunch 18 at work
+
+[bot] ► Logging lunch, $18. That's groceries + meals adding up quick this week.
+       
+       Spend $18.00 · lunch at work
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $18.00 · lunch at work
+
+[bot] ► 🟢 *Calm* — $120.19/day, 26 days to payday.
+       ⏰ Rent ($1,400.00) due in 2 days.
+       [Undo]
+
+## HERO LINE
+🟢 *Calm* — $120.19/day, 26 days to payday.
+
+## DNA
+DNA SUMMARY:
+- last 7d spend: $475.00
+- last 30d spend: $475.00
+- monthly bills load: $1,400.00
+- top categories last 30d: other ($368.00), transport ($65.00), groceries ($42.00)
+CATEGORIES (≥3 txs):
+- other: 3 txs, $368.00 in 30d, avg $122.67
+BILLS:
+- Rent: $1,400.00/monthly · due 2026-05-01 (in 2d)
+
+## STATE SUMMARY
+{
+  "day": 3,
+  "setup": true,
+  "balance": "$4,525.00",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": [
+    "rent"
+  ],
+  "txCount": 6,
+  "eventCount": 7,
+  "status": "calm",
+  "dailyPace": "$120.19",
+  "daysToPayday": 26
+}
+
+## JUDGE VERDICT
+{
+  "score": 6,
+  "summary": "Bot understands basics, but lacks depth and proactive insight.",
+  "critique": [
+    "Hero line is functional but generic — tells me pace, not *why* I should care or what to do.",
+    "Bot accepts every spend without friction; never asks 'is this aligned with your goals?' or flags patterns.",
+    "Large 'other' category ($368/30d) is unexamined — bot doesn't dig into what that is or if it's sustainable.",
+    "Rent due in 2 days but bot never proactively warns about buffer or suggests a payoff plan.",
+    "Repeats 'you're fine' without context — $50 dinner and $300 trip get identical thumbs-up, no nuance.",
+    "Bot seems passive; I'm asking it permission, not getting strategic help.",
+    "No goals mentioned — bot doesn't know if I want to save, invest, or reduce spend.",
+    "7 events in 3 days feels high-touch but low-value; mostly confirmation, not insight."
+  ],
+  "opportunities": [
+    "Ask about financial goals on day 1 — emergency fund? Savings target? Debt payoff?",
+    "Flag and ask about 'other' category — is it recurring? Fixable? Or expected variance?",
+    "Proactive alerts: 'Rent due in 2d. You'll have $3,125 left for 26 days. Pace is healthy.'",
+    "Introduce spending friction for non-essentials — ask why, not just whether, for big discretionary spend.",
+    "Weekly summaries with patterns: 'You've spent $107 on food this week. On pace for $460/month.'",
+    "Compare daily pace to paycheck rhythm — show runway to payday, not just remaining balance.",
+    "Offer micro-goals: 'Save $200 before payday?' or 'Cut food spend by 15%?' to feel purposeful."
+  ],
+  "trustworthy": false
+}

@@ -3,6 +3,12 @@
 // Hero math: how much do I have, how much per day, how many days to payday.
 
 const m = require("./model");
+// Lazy-loaded DNA helpers (avoid require cycle).
+let _dna = null;
+function dnaModule() {
+  if (!_dna) _dna = require("./dna");
+  return _dna;
+}
 
 // dueBefore: bills with dueDate ≤ payday count as obligated this cycle.
 function compute(state) {
@@ -94,6 +100,17 @@ function compute(state) {
   };
 }
 
+// Build the canonical hero line. Adds a context-aware second line when
+// there's enough activity for it to matter:
+//   - urgent bill (≤2 days): explicit warning
+//   - top spend category last 7 days
+// Both lines together are still tight (under ~120 chars).
+function heroLineWithInsight(state, lang) {
+  const base = heroLine(state, lang);
+  const insight = heroInsight(state, lang);
+  return insight ? base + "\n" + insight : base;
+}
+
 // One-line status for chat replies. For irregular pay we DO NOT mention
 // "days to payday" — the user explicitly told us their pay is irregular,
 // so claiming 30 days is a lie. Show balance + daily pace based on a
@@ -137,6 +154,83 @@ function heroLine(state, lang) {
     : "🟢 *Calm* — " + v.dailyPaceFormatted + "/day, " + v.daysToPayday + " days to payday.";
 }
 
+// heroInsight — optional second line for the hero card. Surfaces DNA-derived
+// observations: urgent bill due, top category this week, coffee pattern.
+// Returns "" when nothing notable. Designed for ONE line max.
+function heroInsight(state, lang) {
+  if (!state || !state.setup) return "";
+  const L = (lang || state.language || "en") === "ru" ? "ru" : "en";
+  const sym = state.currencySymbol || "$";
+  const todayStr = m.today(state.timezone || "UTC");
+
+  // Urgent bill check — beats DNA insights, never miss a bill due in ≤2d.
+  // ALSO surface post-bill runway so the user sees the real picture, not
+  // just "calm $/day" that doesn't account for rent landing in 2 days.
+  const urgentBill = (Object.values(state.bills || {})
+    .filter(b => b && !b.paidThisCycle))
+    .map(b => ({ b, days: m.daysBetween(todayStr, b.dueDate) }))
+    .filter(x => x.days >= 0 && x.days <= 2)
+    .sort((a, b) => a.days - b.days)[0];
+  if (urgentBill) {
+    const b = urgentBill.b;
+    const days = urgentBill.days;
+    const dayWord = days === 0
+      ? (L === "ru" ? "сегодня" : "today")
+      : (days === 1 ? (L === "ru" ? "завтра" : "tomorrow") : (L === "ru" ? "через 2 дня" : "in 2 days"));
+    // Compute post-bill runway.
+    const graph = dnaModule().compute(state);
+    const post = graph.summary && graph.summary.postBillsBalance;
+    const minDaily = graph.summary && graph.summary.postBillsDailyMin;
+    if (post && minDaily) {
+      return L === "ru"
+        ? "⏰ " + b.name + " (" + m.toMoney(b.amountCents, sym) + ") " + dayWord + " — после: " + post + " на " + graph.summary.daysToPayday + " дн (" + minDaily + "/день)."
+        : "⏰ " + b.name + " (" + m.toMoney(b.amountCents, sym) + ") due " + dayWord + ". After: " + post + " for " + graph.summary.daysToPayday + " days (" + minDaily + "/day).";
+    }
+    return L === "ru"
+      ? "⏰ " + b.name + " (" + m.toMoney(b.amountCents, sym) + ") — " + dayWord + "."
+      : "⏰ " + b.name + " (" + m.toMoney(b.amountCents, sym) + ") due " + dayWord + ".";
+  }
+
+  // DNA-driven insights, in priority order.
+  const txCount = (state.transactions || []).filter(t => t.kind === "spend").length;
+  if (txCount < 5) return "";
+
+  const graph = dnaModule().compute(state);
+
+  // Trending-up category — highest priority advisory after urgent bills.
+  if (graph.summary.trends && Object.keys(graph.summary.trends).length) {
+    const [cat, t] = Object.entries(graph.summary.trends)[0];
+    return L === "ru"
+      ? "📈 *" + cat + "* вырос " + t.ratio + " — " + t.last7 + " за неделю (было ~" + t.priorWeekly + ")."
+      : "📈 *" + cat + "* up " + t.ratio + " — " + t.last7 + " this week (was ~" + t.priorWeekly + ").";
+  }
+
+  // Leak callout — expose biggest discretionary share.
+  if (graph.summary.leaks && graph.summary.leaks.length) {
+    const l = graph.summary.leaks[0];
+    return L === "ru"
+      ? "💧 *" + l.name + "* — " + l.last30 + " за 30д (" + l.share + " дискреционных трат)."
+      : "💧 *" + l.name + "* — " + l.last30 + " in 30d (" + l.share + " of discretionary).";
+  }
+
+  // Top category this week — observational fallback.
+  const cats = graph.nodes.filter(n => n.type === "category");
+  const top = cats.sort((a, b) => parseAmt(b.last7) - parseAmt(a.last7))[0];
+  if (top && parseAmt(top.last7) > 0) {
+    const patternClause = top.pattern ? " · " + top.pattern : "";
+    return L === "ru"
+      ? "📊 На этой неделе больше всего: " + top.name + " — " + top.last7 + patternClause + "."
+      : "📊 This week's biggest: " + top.name + " — " + top.last7 + patternClause + ".";
+  }
+
+  return "";
+}
+
+function parseAmt(formatted) {
+  const m = String(formatted || "").replace(/[^0-9.\-]/g, "");
+  return parseFloat(m) || 0;
+}
+
 // Decision support: project state if user spent N cents.
 function simulateSpend(state, amountCents) {
   const cur = compute(state);
@@ -155,4 +249,4 @@ function simulateSpend(state, amountCents) {
   };
 }
 
-module.exports = { compute, heroLine, simulateSpend };
+module.exports = { compute, heroLine, heroLineWithInsight, heroInsight, simulateSpend };

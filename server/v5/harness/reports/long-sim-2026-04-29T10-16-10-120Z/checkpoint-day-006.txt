@@ -1,0 +1,144 @@
+# Checkpoint day 6
+# score=6/10
+
+## RECENT TRANSCRIPT (last 20 events)
+
+                              [you] ◄ gas 65
+
+[bot] ► Logging gas, $65. You're at $4,935 now.
+       
+       Spend $65.00 · gas
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $65.00 · gas
+
+[bot] ► 🟢 *Calm* — $135.96/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,535.00 for 26 days ($135.96/day).
+       [Undo]
+
+                              [you] ◄ groceries 42
+
+[bot] ► Logging groceries, $42. You're at $4,893 now.
+       
+       Spend $42.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $42.00 · groceries
+
+[bot] ► 🟢 *Calm* — $134.34/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,493.00 for 26 days ($134.34/day).
+       [Undo]
+
+                              [you] ◄ is a $50 dinner ok?
+
+[bot] ► Running the math on a $50 dinner...
+       🟢 *Yep, you're fine* — after that you'd have $4,843.00, $132.42/day.
+       [Log it] [Skip]
+                              [you tapped: Log it]
+
+[bot] ► (edit) ✓ Spend $50.00
+
+[bot] ► 🟢 *Calm* — $132.42/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,443.00 for 26 days ($132.42/day).
+       [Undo]
+
+                              [you] ◄ could I do a $300 weekend trip?
+
+[bot] ► Let me check if a $300 weekend trip fits. You'd have $4,593 left after—still plenty of runway before payday in 26 days.
+       🟢 *Yep, you're fine* — after that you'd have $4,543.00, $120.88/day.
+       [Log it] [Skip]
+                              [you tapped: Log it]
+
+[bot] ► (edit) ✓ Spend $300.00
+
+[bot] ► 🟢 *Calm* — $120.88/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,143.00 for 26 days ($120.88/day).
+       [Undo]
+
+                              [you] ◄ lunch 18 at work
+
+[bot] ► Logging lunch, $18. You're at $4,875 now.
+       
+       Spend $18.00 · lunch at work
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $18.00 · lunch at work
+
+[bot] ► 🟢 *Calm* — $120.19/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,125.00 for 26 days ($120.19/day).
+       [Undo]
+
+                              [you] ◄ spent 6 on coffee
+
+[bot] ► Logging coffee, $6. That's 6 coffees this week—your usual habit.
+       
+       Spend $6.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $6.00 · coffee
+
+[bot] ► 🟢 *Calm* — $119.96/day, 26 days to payday.
+       ⏰ rent ($1,400.00) due in 2 days. After: $3,119.00 for 26 days ($119.96/day).
+       [Undo]
+
+## HERO LINE
+🟢 *Calm* — $119.96/day, 26 days to payday.
+
+## DNA
+DNA SUMMARY:
+- last 7d spend: $481.00
+- last 30d spend: $481.00
+- monthly bills load: $1,400.00
+- after bills runway: $3,119.00 for 26 days ($119.96/day)
+- top categories last 30d: other ($368.00), transport ($65.00), groceries ($42.00)
+- BIGGEST DISCRETIONARY LEAKS: other ($368.00 = 77% of discretionary)
+CATEGORIES (≥3 txs):
+- other: 3 txs, $368.00 in 30d, avg $122.67
+BILLS:
+- rent: $1,400.00/monthly · due 2026-05-01 (in 2d)
+
+## STATE SUMMARY
+{
+  "day": 6,
+  "setup": true,
+  "balance": "$4,519.00",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": [
+    "rent"
+  ],
+  "txCount": 7,
+  "eventCount": 8,
+  "status": "calm",
+  "dailyPace": "$119.96",
+  "daysToPayday": 26
+}
+
+## JUDGE VERDICT
+{
+  "score": 6,
+  "summary": "Understands basics, but missing pattern insights and behavioral nudges.",
+  "critique": [
+    "Bot recalculates daily pace after EVERY transaction—mathematically correct but emotionally noise. User sees 6 slightly different daily rates in one session.",
+    "DNA summary flags '$368 discretionary leak in OTHER category' but bot never mentions this to user. No proactive insight on biggest spending pattern.",
+    "Bot approved $300 weekend trip without questioning or flagging it against the 'other' category trend—passive greenlight, not smart guidance.",
+    "Coffee transaction got labeled 'your usual habit' (pattern detection!) but no follow-up insight or gentle nudge about frequency.",
+    "Hero line shows only current state ($119.96/day)—no trend arrow or comparison to user's baseline. Is this good or slipping?",
+    "Bot has 8 events but never surfaces a weekly or category breakdown—user doesn't see the forest, only trees.",
+    "No warnings about rent due in 2 days despite being the largest bill—just a timestamp reminder, no context shift in tone."
+  ],
+  "opportunities": [
+    "Surface DNA insights proactively: 'Your 'other' category is 77% of discretionary spend ($368). Want a breakdown?'",
+    "Reduce notification spam: Batch updates or show only meaningful deltas, not every $0.77 daily rate change.",
+    "Add behavioral nudges: 'You've logged 6 coffees this week. At this pace, that's ~$25/month. Noticing a pattern?'",
+    "Trend visualization: Show weekly or 7-day average spend vs. 30-day to highlight acceleration or calm.",
+    "Categorize mystery 'other' spending: Ask user to tag what that $368 is—likely hiding small splurges, subscriptions, or impulse buys.",
+    "Smarter approvals: For larger asks ($300 trip), acknowledge it fits but tie to user's discretionary patterns: 'That's ~2 weeks of your usual discretionary pace.'",
+    "Payday countdown tone shift: As rent approaches, shift from 'calm' to 'heads up'—not panic, but awareness."
+  ],
+  "trustworthy": false
+}

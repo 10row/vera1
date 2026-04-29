@@ -1,0 +1,97 @@
+# 08-can-i-afford
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ Can I afford a $200 jacket?
+
+[bot] ► Let me run the numbers on a $200 jacket for you.
+       🟢 *Yep, you're fine* — after that you'd have $4,800.00, $184.61/day.
+       [Log it] [Skip]
+                              [you tapped: Skip]
+
+[bot] ► (edit) Got it — skipped.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Setup felt ultra-natural—user gave input in conversational form, bot parsed it cleanly without asking clarifying questions",
+    "Affordability check was instant and actionable with clear before/after numbers and a helpful daily burn-down metric",
+    "Bot correctly offered to log the transaction without forcing it—user had full control",
+    "Tone is friendly but professional; no over-cuteness, no robotic jargon",
+    "Zero redundancy: bot never re-asked for balance, payday, or frequency after first message",
+    "Minor: 'Let me run the numbers' is slightly theatrical (0.5-point deduction from natural), but doesn't break immersion"
+  ],
+  "fixes": [
+    "Remove 'Let me run the numbers on' preamble—jump straight to result. Example: '🟢 *Yep, you're fine* — after that you'd have $4,800.00, $184.61/day.' feels faster and more conversational",
+    "Consider showing the jacket transaction in `/today` summary for consistency (currently invisible after skip), or make skip truly silent with just '(edit) Got it — skipped' with no follow-up prompt"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "12e10fb6cfd56ff1b77688e5",
+      "ts": 1777458670434,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "0e3daf7e6eab4aef629dd7bf",
+      "ts": 1777458670434,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

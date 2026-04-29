@@ -1,0 +1,128 @@
+# 05-add-bill
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ rent is 1400 due the 1st
+
+[bot] ► Adding rent: $1,400 monthly, due May 1st. That's your biggest monthly bill—leaves you $3,600 after.
+       
+       Add bill *Rent* — $1,400.00 · 2026-05-01 · monthly
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Add bill *Rent* — $1,400.00 · 2026-05-01 · monthly
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+       ⏰ Rent ($1,400.00) due in 2 days. After: $3,600.00 for 26 days ($138.46/day).
+       [Undo]
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $138.46/day, 26 days to payday.
+       ⏰ Rent ($1,400.00) due in 2 days. After: $3,600.00 for 26 days ($138.46/day).
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 9,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 9,
+    "safe": 10
+  },
+  "overall": 9.2,
+  "verdict": "pass",
+  "critique": [
+    "Conversational parsing is excellent—bot interprets 'rent is 1400 due the 1st' naturally without forms or prompts",
+    "Clear confirmation step: shows parsed values before commit, user can [Yes]/[Cancel]",
+    "Efficient flow: 3 user messages → setup complete + bill added + status updated",
+    "Tone is warm and reassuring ('Calm', 'That's your biggest monthly bill', empathetic math)",
+    "Zero safety violations: never asks for setup twice, no loops, correct state tracking (bills array, txCount, eventCount all accurate)",
+    "Post-add status immediately recalculates and highlights deadline urgency ('due in 2 days')",
+    "Undo button provides graceful error recovery without being pushy"
+  ],
+  "fixes": [
+    "None critical. Minor: 'Add bill *Rent*' label in confirmation could be 'Confirm:' for even more natural feel, but not necessary"
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {
+    "rent": {
+      "name": "Rent",
+      "amountCents": 140000,
+      "dueDate": "2026-05-01",
+      "recurrence": "monthly",
+      "paidThisCycle": false,
+      "createdAt": 1777458657466
+    }
+  },
+  "transactions": [
+    {
+      "id": "584a7cd3dca894e424ce89b4",
+      "ts": 1777458655671,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "ab4fdd246526e17cb379a3b2",
+      "ts": 1777458655671,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "f64b7c5f2ee5ede102e9c882",
+      "ts": 1777458657466,
+      "intent": {
+        "kind": "add_bill",
+        "params": {
+          "name": "Rent",
+          "amountCents": 140000,
+          "dueDate": "2026-05-01",
+          "recurrence": "monthly"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 500000,
+      "billKey": "rent"
+    }
+  ],
+  "onboardingDraft": null
+}

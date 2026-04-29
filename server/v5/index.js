@@ -73,20 +73,157 @@ function whoami(req, res) {
   res.json({ ok: !!user, user: user || null, hasToken: !!token });
 }
 app.get("/api/v5/whoami", whoami);
-// Legacy alias — existing Mini App still calls /api/v4/whoami.
 app.get("/api/v4/whoami", whoami);
-// Mini App is being migrated to v5; placeholder so it shows "set up via chat"
-// instead of 500-ing.
+
+// ── MINI APP COMPATIBILITY (v4 endpoints, v5 backend) ─────────
+// The Mini App was built against v4's view shape. v5 has fewer concepts
+// (bills only, no envelopes/budgets/goals split). We translate v5 state
+// into the v4-compatible view shape so the Mini App keeps rendering.
+function v5ToV4View(state) {
+  const view = compute(state); // v5 view
+  const sym = state.currencySymbol || "$";
+  const todayStr = m.today(state.timezone || "UTC");
+
+  if (!view.setup) return { setup: false, language: state.language || "en", currency: state.currency || "USD", currencySymbol: sym };
+
+  // Map v5 bills → v4 envelopes shape (kind: "bill").
+  const envelopes = Object.values(state.bills || {}).map(b => ({
+    key: m.billKey(b.name),
+    name: b.name,
+    kind: "bill",
+    amountCents: b.amountCents,
+    amountFormatted: m.toMoney(b.amountCents, sym),
+    spentCents: 0,
+    spentFormatted: m.toMoney(0, sym),
+    dueDate: b.dueDate,
+    daysUntilDue: m.daysBetween(todayStr, b.dueDate),
+    recurrence: b.recurrence,
+    paidThisCycle: !!b.paidThisCycle,
+    isDue: m.daysBetween(todayStr, b.dueDate) <= 1 && !b.paidThisCycle,
+    createdAt: b.createdAt,
+  }));
+
+  // Today's remaining = dailyPace - what they've spent today.
+  const todayRem = Math.max(0, view.dailyPaceCents - view.todaySpentCents);
+
+  return {
+    setup: true,
+    state: view.status,
+    language: state.language || "en",
+    currency: state.currency || "USD",
+    currencySymbol: sym,
+    timezone: state.timezone || "UTC",
+    payday: state.payday,
+    payFrequency: state.payFrequency,
+    daysToPayday: view.daysToPayday,
+
+    balanceCents: view.balanceCents,
+    balanceFormatted: view.balanceFormatted,
+    obligatedCents: view.obligatedCents,
+    obligatedFormatted: view.obligatedFormatted,
+    disposableCents: view.disposableCents,
+    disposableFormatted: view.disposableFormatted,
+    deficitCents: view.deficitCents,
+    deficitFormatted: view.deficitFormatted,
+    dailyPaceCents: view.dailyPaceCents,
+    dailyPaceFormatted: view.dailyPaceFormatted,
+
+    todaySpentCents: view.todaySpentCents,
+    todaySpentFormatted: view.todaySpentFormatted,
+    weekSpentCents: view.weekSpentCents,
+    weekSpentFormatted: view.weekSpentFormatted,
+    todayRemainingCents: todayRem,
+    todayRemainingFormatted: m.toMoney(todayRem, sym),
+
+    envelopes,
+    dueNow: view.dueNow.map(d => ({ key: d.key, name: d.name, amountFormatted: d.amountFormatted, dueDate: d.dueDate, daysUntilDue: d.daysUntilDue })),
+    upcoming: view.upcoming.map(d => ({ key: d.key, name: d.name, amountFormatted: d.amountFormatted, dueDate: d.dueDate, daysUntilDue: d.daysUntilDue })),
+    statusWord: view.status,
+
+    invariantOk: true,
+  };
+}
+
+// Mini App's GET /api/v4/view/:sid — translate v5 → v4 view shape +
+// return the recent transaction list it renders in the heatmap & feed.
 app.get("/api/v4/view/:sid", requireTelegramAuth, async (req, res) => {
   try {
     const u = await db.resolveUser(prisma, req.params.sid);
     const state = await db.loadState(prisma, u.id);
-    res.json({
-      pic: { setup: state.setup, miniAppNeedsUpdate: true },
-      state: { setup: state.setup, language: state.language || "en" },
-    });
+    const pic = v5ToV4View(state);
+    // The Mini App expects state.transactions for the feed/heatmap.
+    const stateForApp = {
+      setup: state.setup,
+      language: state.language || "en",
+      currency: state.currency || "USD",
+      currencySymbol: state.currencySymbol || "$",
+      timezone: state.timezone || "UTC",
+      payday: state.payday,
+      payFrequency: state.payFrequency,
+      transactions: (state.transactions || []).slice(-200), // last 200 only
+      envelopes: pic.envelopes,
+    };
+    res.json({ pic, state: stateForApp });
   } catch (e) {
+    console.error("[v5 v4-view alias]", e);
     res.status(500).json({ error: "Internal" });
+  }
+});
+
+// Mini App POST /api/v4/action/:sid — translate v4-shaped action to v5 intent.
+// Used today for "mark paid" inline. Other actions are read-only via chat now.
+app.post("/api/v4/action/:sid", requireTelegramAuth, async (req, res) => {
+  try {
+    const action = req.body && req.body.action;
+    if (!action || !action.type) return res.status(400).json({ error: "Missing action" });
+    const u = await db.resolveUser(prisma, req.params.sid);
+    let result = null;
+    await db.withUserLock(u.id, async () => {
+      const state = await db.loadState(prisma, u.id);
+      let intent = null;
+      // Translate the actions Mini App still emits.
+      if (action.type === "confirm_payment" && action.data && action.data.envelopeKey) {
+        // Mark a bill paid → record_spend with billKey.
+        const key = action.data.envelopeKey;
+        const bill = state.bills && state.bills[key];
+        if (!bill) { result = { ok: false, error: "no such bill" }; return; }
+        intent = {
+          kind: "record_spend",
+          params: { amountCents: bill.amountCents, note: bill.name, billKey: key },
+        };
+      } else if (action.type === "remove_envelope" && action.data && action.data.key) {
+        intent = { kind: "remove_bill", params: { name: action.data.key } };
+      }
+      if (!intent) { result = { ok: false, error: "Action not supported in v5 yet — use chat." }; return; }
+      const v = validateIntent(state, intent, m.today(state.timezone || "UTC"));
+      if (!v.ok) { result = { ok: false, error: v.reason }; return; }
+      try {
+        const r = applyIntent(state, intent);
+        await db.saveState(prisma, u.id, r.state);
+        result = { ok: true, pic: v5ToV4View(r.state) };
+      } catch (e) {
+        result = { ok: false, error: e.message };
+      }
+    });
+    res.json(result);
+  } catch (e) {
+    console.error("[v5 v4-action alias]", e);
+    res.status(500).json({ error: "Internal" });
+  }
+});
+
+// Mini App locale endpoint — uses v4's locale files (still in repo with
+// the keys the Mini App expects).
+const _v4Locales = require("../v4/locales");
+app.get("/api/v4/locale", (req, res) => {
+  try {
+    const lang = (req.query.lang || "en").toString();
+    const base = (_v4Locales.normalizeLang ? _v4Locales.normalizeLang(lang) : "en");
+    const strings = (_v4Locales.LOCALES && _v4Locales.LOCALES[base]) || (_v4Locales.LOCALES && _v4Locales.LOCALES.en) || {};
+    res.json({ lang: base, strings });
+  } catch (e) {
+    console.error("[v5 locale alias]", e);
+    res.json({ lang: "en", strings: {} });
   }
 });
 

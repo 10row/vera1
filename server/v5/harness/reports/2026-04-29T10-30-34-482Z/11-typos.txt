@@ -1,0 +1,131 @@
+# 11-typos
+# pass=false mech=false llm=fail
+
+## TRANSCRIPT
+
+                              [you] ◄ 5k bal pay 1st
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-01.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ spnet 25 on cofee
+
+[bot] ► Logging $25 coffee. That's your first spend this week.
+       
+       Spend $25.00 · coffee
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $25.00 · coffee
+
+[bot] ► 🟢 *Calm* — $2,487.50/day, 2 days to payday.
+       [Undo]
+
+                              [you] ◄ got 3000 pay chek
+
+[bot] ► Sorry, brain blip — try that again?
+                              [you tapped: Undo]
+
+[bot] ► Undone.
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+## MECHANICAL
+{
+  "passed": false,
+  "reasons": [
+    "balance expected 797500 got 500000"
+  ]
+}
+
+## LLM JUDGE
+{
+  "scores": {},
+  "overall": 0,
+  "verdict": "fail",
+  "critique": [
+    "judge call failed: Connection error."
+  ],
+  "fixes": []
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-01",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "481b62a511ebca164fae7b2a",
+      "ts": 1777458687619,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "38bfaf10adcf5a42955fc6d1",
+      "ts": 1777458687619,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-01",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "6505b9242844a8e57d32dec4",
+      "ts": 1777458695974,
+      "intent": {
+        "kind": "record_spend",
+        "params": {
+          "amountCents": 2500,
+          "note": "coffee"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 497500,
+      "undone": true
+    },
+    {
+      "id": "a115cea1eb1c3f40c5aa38a2",
+      "ts": 1777458741383,
+      "intent": {
+        "kind": "undo_last",
+        "params": {}
+      },
+      "prevBalance": 497500,
+      "newBalance": 500000,
+      "undid": {
+        "eventId": "6505b9242844a8e57d32dec4",
+        "intent": {
+          "kind": "record_spend",
+          "params": {
+            "amountCents": 2500,
+            "note": "coffee"
+          }
+        }
+      }
+    }
+  ],
+  "onboardingDraft": null
+}

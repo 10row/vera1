@@ -13,6 +13,7 @@
 
 const m = require("./model");
 const { compute } = require("./view");
+const dna = require("./dna");
 
 const MODEL = "gpt-4o-mini";
 const MAX_TOKENS = 500;
@@ -43,10 +44,15 @@ function buildSystemPrompt(state) {
     '   { "mode":"do",   "message":"reply text", "intent":{"kind":"...","params":{...}} }',
     '   { "mode":"talk", "message":"reply text" }',
     '   { "mode":"ask_simulate", "message":"reply text", "amountCents":N }',
-    "3. NEVER calculate. Quote numbers from STATE only. Don't add daily pace + days; that's the bot's job.",
+    "3. NEVER calculate. Quote numbers from STATE / DNA SUMMARY only. Don't add daily pace + days; that's the bot's job.",
     "4. ONE intent per message. If user mentions multiple actions, pick the most important and tell them to send the rest separately.",
     "5. Keep replies SHORT — 1-2 sentences. No paragraphs.",
     "6. NEVER say \"setting up your account\" or \"I'll set up\" — they're already set up. Use plain action words: \"logging\", \"adding\", \"recording\".",
+    "7. USE THE DNA SUMMARY — it shows the user's recent spend patterns, top categories, recurring habits. When logging a spend or answering a question, ADD a tiny insight from DNA when relevant. Examples:",
+    "   - User logs 'coffee 5' and DNA shows coffee already 4 txs at $20 in 7d → \"Logging coffee. That's 5 this week, $25 total — your usual.\"",
+    "   - User asks 'how am I doing?' → quote spendLast7 + top category + bills load.",
+    "   - User asks 'can I afford X?' → bot replies in ask_simulate mode; the orchestrator runs the math, but in your message hint at the post-balance feel.",
+    "   Keep insights to ONE short sentence. Don't lecture. Don't always add an insight — only when it's meaningfully present in DNA.",
     "",
     "INTENT KINDS:",
     '  adjust_balance  — { newBalanceCents:N }              // "actually I have $X now" / balance correction',
@@ -64,6 +70,12 @@ function buildSystemPrompt(state) {
     "- \"rent is X due 1st\" / \"phone bill X monthly\" → add_bill",
     "- \"can I afford X?\" / \"is X ok?\" / \"could I X?\" → ask_simulate (READ-ONLY)",
     "- \"undo\"                                       → undo_last",
+    "",
+    "WHEN IN DOUBT BETWEEN do AND talk: pick do.",
+    "- If the user mentions a number paired with a money concept (rent 1400, spent 25 on coffee, got 3000 paycheck, $50 on lunch), EXTRACT THE INTENT. Don't \"just acknowledge\" — the user is telling you to record something.",
+    "- BAD: user says \"rent is 1400 due the 1st\" → you reply \"Got it, noted!\" (no intent). The bot can't act on that. The user's data is lost.",
+    "- GOOD: same input → emit add_bill with name=Rent, amountCents=140000, dueDate=<next 1st>, recurrence=monthly. Reply \"Adding rent — $1,400 monthly.\"",
+    "- If the user message has MULTIPLE actionable items (\"rent 1400 due 1st AND I spent 25 on coffee\"), pick the MOST IMPORTANT one (bills > income > big spend > small spend) and in your message acknowledge the rest: \"Adding rent. Heard you also spent 25 on coffee — send that as a separate note and I'll log it.\"",
     "",
     "BALANCE CORRECTION GUIDE — IMPORTANT:",
     "- adjust_balance is ONLY for explicit corrections, signaled by words like:",
@@ -98,9 +110,16 @@ function buildSystemPrompt(state) {
     "STATE:",
     JSON.stringify(snap, null, 2),
     "",
+    // ── USER DNA ──
+    // Goldratt-style compact picture of the user's money shape: spend
+    // categories, patterns, recent rates. Lets the AI answer "how much do
+    // I spend on coffee?" and "what's draining my budget?" without
+    // walking the raw transaction list.
+    dna.renderForPrompt(dna.compute(state)),
+    "",
     "TODAY: " + m.today(state.timezone || "UTC"),
     "LANGUAGE: " + lang + " (reply in this language).",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 async function defaultAiCall(messages) {

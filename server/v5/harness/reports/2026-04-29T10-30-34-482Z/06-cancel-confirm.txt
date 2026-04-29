@@ -1,0 +1,97 @@
+# 06-cancel-confirm
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 1st
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-01.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+                              [you] ◄ spent 200 on groceries
+
+[bot] ► Logging $200 on groceries. You're at $4,800 left.
+       
+       Spend $200.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Cancel]
+
+[bot] ► (edit) Got it — skipped.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $2,500.00/day, 2 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 8,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 8,
+    "safe": 10
+  },
+  "overall": 8.8,
+  "verdict": "pass",
+  "critique": [
+    "Confirmation flow is tight: bot previews before committing, user cancels cleanly, no re-asks.",
+    "Language is conversational ('Got it — skipped') and avoids robotic patterns.",
+    "User never confused about state; balance math checks out ($5000 - $200 = $4800 is shown, but ultimately not persisted).",
+    "Minor: '(edit) Got it' label is slightly unclear — could be 'Cancelled' for absolute clarity, but context makes it obvious.",
+    "Tone stays warm and supportive throughout; no scolding on the cancel."
+  ],
+  "fixes": [
+    "Change '(edit) Got it — skipped.' to just 'Cancelled ✓' for maximum clarity on what happened.",
+    "Optional: Add brief reassurance like 'No worries — nothing logged.' to reinforce the safety."
+  ]
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-01",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "4232bbba421ff6d1c806a5af",
+      "ts": 1777458661552,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "11050793e801c495cd79a028",
+      "ts": 1777458661552,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-01",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    }
+  ],
+  "onboardingDraft": null
+}

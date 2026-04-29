@@ -7,7 +7,7 @@ const OpenAI = require("openai");
 const { toFile } = require("openai/uploads");
 const m = require("./model");
 const { applyIntent } = require("./engine");
-const { compute, heroLine, simulateSpend } = require("./view");
+const { compute, heroLine, heroLineWithInsight, simulateSpend } = require("./view");
 const { processMessage } = require("./pipeline");
 const db = require("./db");
 
@@ -19,6 +19,21 @@ function normalizeLang(code) {
   const c = String(code).toLowerCase().split(/[-_]/)[0];
   if (c === "ru") return "ru";
   return "en";
+}
+
+// hasBrainDumpExtras — heuristic: does the message contain content beyond
+// a simple balance + payday? Triggers post-onboarding AI extraction so
+// items like "rent 1400 due 1st", "spent 50 on groceries", "got paid"
+// don't get silently dropped.
+//
+// Trigger if the message is reasonably long (> 8 words) AND contains
+// trigger keywords like rent/bill/spent/paid/got/spotify/insurance/etc.
+const BRAIN_DUMP_TRIGGERS = /\b(rent|bill|insurance|spotify|netflix|gym|phone|internet|mortgage|loan|subscription|spent|spend|paid|paying|got|received|paycheck|bought|coffee|grocer|food|delivery|uber|gas|petrol|due\b)/i;
+function hasBrainDumpExtras(text) {
+  if (!text || typeof text !== "string") return false;
+  const wordCount = text.trim().split(/\s+/).length;
+  if (wordCount < 6) return false;
+  return BRAIN_DUMP_TRIGGERS.test(text);
 }
 
 const BOT_TOKEN = (process.env.BOT_TOKEN || "").trim();
@@ -161,6 +176,11 @@ async function processText(prisma, ctx, telegramId, text, options) {
   const u = await db.resolveUser(prisma, "tg_" + telegramId);
   await ctx.replyWithChatAction("typing").catch(() => {});
 
+  // Set to true inside the lock if we need to tail-process the same
+  // message AFTER releasing the lock (brain-dump capture). Defined
+  // outside the lock callback so we can read it after it returns.
+  let runBrainDumpTail = false;
+
   await db.withUserLock(u.id, async () => {
     let state = await db.loadState(prisma, u.id);
 
@@ -210,10 +230,19 @@ async function processText(prisma, ctx, telegramId, text, options) {
       // Reply text + hero on completion.
       let reply = result.reply;
       if (result.done && state.setup) {
-        reply += "\n\n" + heroLine(state, lang);
+        reply += "\n\n" + heroLineWithInsight(state, lang);
       }
       await db.appendHistory(prisma, u.id, "assistant", reply);
       await safeReply(ctx, reply, { parse_mode: "Markdown" });
+
+      // ── BRAIN-DUMP CAPTURE ────────────────────────
+      // If onboarding just completed AND the original message has bill /
+      // spend / income content beyond balance + payday, signal that we
+      // should re-route the same message through the AI AFTER releasing
+      // this user's lock. (Re-entering the lock would deadlock.)
+      if (result.done && state.setup && hasBrainDumpExtras(text)) {
+        runBrainDumpTail = true;
+      }
       return;
     }
 
@@ -293,6 +322,19 @@ async function processText(prisma, ctx, telegramId, text, options) {
       return;
     }
   });
+
+  // ── BRAIN-DUMP TAIL ──
+  // Onboarding completed and the message had additional content (a bill,
+  // a spend, etc.). Re-process the same message through the AI path now
+  // that state.setup is true. This call is OUTSIDE the lock; it acquires
+  // its own. Errors are logged but don't break the user's flow.
+  if (runBrainDumpTail) {
+    try {
+      await processText(prisma, ctx, telegramId, text, options);
+    } catch (e) {
+      console.error("[v5 brain-dump tail]", e.message);
+    }
+  }
 }
 
 // ── COMMAND PROCESSORS (testable) ────────────────
@@ -309,7 +351,7 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     if (!state.setup) {
       await processText(prisma, ctx, telegramId, "/start");
     } else {
-      await safeReply(ctx, heroLine(state, lang), { parse_mode: "Markdown" });
+      await safeReply(ctx, heroLineWithInsight(state, lang), { parse_mode: "Markdown" });
     }
     return;
   }
@@ -321,7 +363,7 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
       await safeReply(ctx, lang === "ru" ? "Сначала настроим — какой баланс?" : "Set up first — what's your balance?");
       return;
     }
-    await safeReply(ctx, heroLine(state, lang), { parse_mode: "Markdown" });
+    await safeReply(ctx, heroLineWithInsight(state, lang), { parse_mode: "Markdown" });
     return;
   }
   if (command === "undo") {
@@ -340,7 +382,7 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
           ? describeIntent(r.event.undid.intent, state)
           : "";
         const head = lang === "ru" ? "Отменено" : "Undone";
-        await safeReply(ctx, head + (what ? ": " + what : "") + "\n" + heroLine(r.state, lang), { parse_mode: "Markdown" });
+        await safeReply(ctx, head + (what ? ": " + what : "") + "\n" + heroLineWithInsight(r.state, lang), { parse_mode: "Markdown" });
       } catch (e) {
         await safeReply(ctx, "_" + m.escapeMd(e.message) + "_", { parse_mode: "Markdown" });
       }
@@ -397,7 +439,7 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
         const r = applyIntent(state, { kind: "undo_last", params: {} });
         await db.saveState(prisma, u.id, r.state);
         await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
-        await safeReply(ctx, (lang === "ru" ? "Отменено.\n" : "Undone.\n") + heroLine(r.state, lang), { parse_mode: "Markdown" });
+        await safeReply(ctx, (lang === "ru" ? "Отменено.\n" : "Undone.\n") + heroLineWithInsight(r.state, lang), { parse_mode: "Markdown" });
       } catch (e) {
         await safeReply(ctx, "_" + m.escapeMd(e.message) + "_", { parse_mode: "Markdown" });
       }
@@ -454,7 +496,7 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
       if (eventId && entry.intent.kind !== "undo_last") {
         opts.reply_markup = undoKeyboard(eventId, lang).reply_markup;
       }
-      await safeReply(ctx, heroLine(r.state, lang), opts);
+      await safeReply(ctx, heroLineWithInsight(r.state, lang), opts);
     } catch (e) {
       console.error("[v5 confirm apply]", e);
       await safeEdit(ctx, "_" + m.escapeMd(e.message) + "_", Object.assign({ parse_mode: "Markdown" }, clearButtons));

@@ -1,0 +1,135 @@
+# 07-undo-flow
+# pass=true mech=true llm=pass
+
+## TRANSCRIPT
+
+                              [you] ◄ 5000 paid the 25th
+
+[bot] ► All set ✅ — $5,000.00, payday 2026-05-25.
+       
+       From here just talk to me: "spent 20 on coffee", "rent 1400 due the 1st", "can I afford 200?" — I'll handle it.
+       
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ spent 80 on groceries
+
+[bot] ► Logging $80 on groceries.
+       
+       Spend $80.00 · groceries
+       [Yes] [Cancel]
+                              [you tapped: Yes]
+
+[bot] ► (edit) ✓ Spend $80.00 · groceries
+
+[bot] ► 🟢 *Calm* — $189.23/day, 26 days to payday.
+       [Undo]
+                              [you tapped: Undo]
+
+[bot] ► Undone.
+       🟢 *Calm* — $192.30/day, 26 days to payday.
+
+                              [you] ◄ /today
+
+[bot] ► 🟢 *Calm* — $192.30/day, 26 days to payday.
+
+## MECHANICAL
+{
+  "passed": true,
+  "reasons": []
+}
+
+## LLM JUDGE
+{
+  "scores": {
+    "natural": 9,
+    "clear": 9,
+    "efficient": 9,
+    "warm": 9,
+    "safe": 10
+  },
+  "overall": 9.2,
+  "verdict": "pass",
+  "critique": [
+    "Undo button appears *after* confirmation, which is intuitive and prevents accidental reversals.",
+    "Bot never re-asks for setup data; cleanly handles undo without redundancy.",
+    "Status updates with dailybudget math are helpful, not verbose.",
+    "Tone is calm and conversational without cuteness or corporate stiffness.",
+    "No loops, no 'setting up' redundancy, no repeat requests."
+  ],
+  "fixes": []
+}
+
+## FINAL STATE
+{
+  "schema": "v5",
+  "setup": true,
+  "balanceCents": 500000,
+  "currency": "USD",
+  "currencySymbol": "$",
+  "language": "en",
+  "timezone": "UTC",
+  "payday": "2026-05-25",
+  "payFrequency": "monthly",
+  "bills": {},
+  "transactions": [
+    {
+      "id": "874388ba41e5294a7749ab03",
+      "ts": 1777458666685,
+      "kind": "setup",
+      "amountCents": 500000,
+      "note": "starting balance",
+      "date": "2026-04-29"
+    }
+  ],
+  "events": [
+    {
+      "id": "82f7a9ac87f3c42bd5328083",
+      "ts": 1777458666685,
+      "intent": {
+        "kind": "setup_account",
+        "params": {
+          "balanceCents": 500000,
+          "payday": "2026-05-25",
+          "payFrequency": "monthly"
+        }
+      },
+      "prevBalance": 0,
+      "newBalance": 500000
+    },
+    {
+      "id": "1d65da188d8f9689b5151551",
+      "ts": 1777458668120,
+      "intent": {
+        "kind": "record_spend",
+        "params": {
+          "amountCents": 8000,
+          "note": "groceries"
+        }
+      },
+      "prevBalance": 500000,
+      "newBalance": 492000,
+      "undone": true
+    },
+    {
+      "id": "2903c6faca92afe366fb0547",
+      "ts": 1777458668120,
+      "intent": {
+        "kind": "undo_last",
+        "params": {}
+      },
+      "prevBalance": 492000,
+      "newBalance": 500000,
+      "undid": {
+        "eventId": "1d65da188d8f9689b5151551",
+        "intent": {
+          "kind": "record_spend",
+          "params": {
+            "amountCents": 8000,
+            "note": "groceries"
+          }
+        }
+      }
+    }
+  ],
+  "onboardingDraft": null
+}

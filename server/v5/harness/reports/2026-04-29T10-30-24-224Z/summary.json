@@ -1,0 +1,17 @@
+{
+  "runId": "2026-04-29T10-30-24-224Z",
+  "total": 1,
+  "passed": 1,
+  "failed": 0,
+  "results": [
+    {
+      "name": "12-onboarding-braindump",
+      "pass": true,
+      "mech": {
+        "passed": true,
+        "reasons": []
+      },
+      "llm": null
+    }
+  ]
+}
