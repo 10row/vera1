@@ -44,30 +44,41 @@ const ACTION_VERBS = {
   ],
 };
 
-// Returns null if the proposal is consistent (or has no obvious action
-// verbs). Returns a string (the rewritten honest reply) if a promise was
-// detected without a matching intent.
+// Returns null if consistent. Returns rewritten honest reply if AI
+// promised an action it didn't emit.
+//
+// IMPORTANT — when this fires:
+//   - Mode `do` or `do_batch`: AI emitted intents, but its TEXT promised
+//     an action that isn't covered by any of those intents.
+//
+// When it does NOT fire (deliberately):
+//   - Mode `talk`: pure conversation; "I'll add support for that
+//     feature" is meta, not a money-action promise.
+//   - Mode `ask_simulate`: read-only by design.
+//
+// Tightened after persona test (Mike) — the looser version was firing
+// on legit conversational replies and producing repeated "couldn't pin
+// down" errors. False-positive cost was higher than false-negative.
 function detectSilentLie(proposal, lang) {
   if (!proposal || !proposal.message) return null;
-  // Only check do/talk modes; ask_simulate is read-only by design.
-  if (proposal.mode === "ask_simulate") return null;
+  if (proposal.mode !== "do" && proposal.mode !== "do_batch") return null;
 
   const text = proposal.message;
   const verbs = ACTION_VERBS[lang === "ru" ? "ru" : "en"] || ACTION_VERBS.en;
 
-  // Collect intent kinds proposed (single OR batch).
   const proposedKinds = new Set();
   if (proposal.intent && proposal.intent.kind) proposedKinds.add(proposal.intent.kind);
   if (Array.isArray(proposal.intents)) {
     for (const i of proposal.intents) if (i && i.kind) proposedKinds.add(i.kind);
   }
+  // If there are no intents at all, this isn't a do/do_batch state per
+  // contract — guard regardless.
+  if (proposedKinds.size === 0) return null;
 
   for (const [re, expectedKinds] of verbs) {
     if (!re.test(text)) continue;
-    // Match — does the proposal include any expected intent kind?
     const ok = expectedKinds.some(k => proposedKinds.has(k));
     if (!ok) {
-      // Promise without action. Return honest fallback in the right language.
       return lang === "ru"
         ? "_(хм, я сказал что сделаю, но не получилось. Попробуй переформулировать или уточнить — например указать сумму и дату.)_"
         : "_(I said I'd do it but couldn't pin down the exact action. Try again with the specific amount/date — e.g. \"adjust balance to 5000\" or \"log 25 on coffee\".)_";
