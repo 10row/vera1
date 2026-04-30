@@ -21,6 +21,17 @@ function normalizeLang(code) {
   return "en";
 }
 
+// defaultCurrencyForLang — paired with normalizeLang. Russian user gets
+// RUB+₽ by default; English gets USD+$. Without this, language commit
+// without currency commit shows RU users "$" and breaks trust.
+const _DEFAULT_CURRENCY = {
+  en: { code: "USD", symbol: "$" },
+  ru: { code: "RUB", symbol: "₽" },
+};
+function defaultCurrencyForLang(lang) {
+  return _DEFAULT_CURRENCY[lang] || _DEFAULT_CURRENCY.en;
+}
+
 // hasBrainDumpExtras — heuristic: does the message contain content beyond
 // a simple balance + payday? Triggers post-onboarding AI extraction so
 // items like "rent 1400 due 1st", "spent 50 on groceries", "got paid"
@@ -202,6 +213,14 @@ async function processText(prisma, ctx, telegramId, text, options) {
       && (!state.events || state.events.length === 0);
     if (isVirgin && tgLang && state.language !== normalizeLang(tgLang)) {
       state.language = normalizeLang(tgLang);
+      // CRITICAL: language change implies currency change for the
+      // virgin user. Without this, RU users see "$120,000" and lose
+      // trust before turn 3 (persona test 0003.1). Defaults are
+      // overridable later via update_settings if user explicitly says
+      // "switch to USD".
+      const def = defaultCurrencyForLang(state.language);
+      state.currency = def.code;
+      state.currencySymbol = def.symbol;
       await db.saveState(prisma, u.id, state);
     }
 

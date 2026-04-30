@@ -1,0 +1,59 @@
+{
+  "scores": {
+    "mechanical_correctness": 1,
+    "voice_consistency": 7,
+    "conversational_quality": 3,
+    "intent_capture": 2,
+    "ux_friction": 1
+  },
+  "overall": 2,
+  "summary": "Critical currency handling bug rendered the bot unusable for a professional user; bot acknowledged the failure but could not resolve it, leading to complete task abandonment and support escalation.",
+  "strengths": [
+    "Maintained Russian language consistently throughout conversation",
+    "Gracefully acknowledged systemic failure rather than denying it",
+    "Offered reasonable escalation path (support contact) when unable to resolve",
+    "Tone remained respectful and apologetic despite repeated failures"
+  ],
+  "failures": [
+    "CRITICAL: Currency field hardcoded to USD ($) despite user explicitly specifying RUB (₽) four times across turns 1, 3, 7, 11",
+    "Balance displayed as $120,000.00 in final state instead of 120,000 ₽ — confirms backend persistence bug",
+    "Same USD bug replicated on bill creation (turn 20: $15,000.00 instead of 15,000 ₽)",
+    "Daily budget calculation wrong twice: showed $12,000/day instead of ≈5,000 ₽/day",
+    "Bot proposed corrections in plain text but UI confirmation buttons still rendered wrong currency — disconnect between intent layer and view",
+    "No currency-switching mechanism or fallback UI offered despite user requesting it twice",
+    "Turns 23–52: conversation devolved into repetitive goodbye loop, user clearly disengaged, bot kept engaging"
+  ],
+  "bug_candidates": [
+    {
+      "title": "Currency field hardcoded to USD in all data model outputs",
+      "symptom": "User sets lang=ru and explicitly states balance in ₽, but bot renders all amounts (balance, daily budget, bills) as $ USD throughout conversation and in final state",
+      "likely_layer": "data_model|bot",
+      "severity": "high"
+    },
+    {
+      "title": "Currency display not tied to user locale or explicit currency selection",
+      "symptom": "Bot accepts currency correction in natural language (turn 3), acknowledges it in prose, but UI/state layer ignores it and continues rendering USD",
+      "likely_layer": "pipeline|view",
+      "severity": "high"
+    },
+    {
+      "title": "Confirmation button text does not reflect corrected values",
+      "symptom": "Bot says 'Исправляю баланс на 120 000 ₽' (turn 8) but button shows '$120,000.00'; user taps Да, but stored value remains $",
+      "likely_layer": "prompt|view",
+      "severity": "high"
+    },
+    {
+      "title": "Daily budget calculation uses wrong divisor or ignores user salary input",
+      "symptom": "User specifies 150,000 ₽/month → should be ~5,000 ₽/day; bot calculates 150k÷10 days = 15k/day, then displays $12,000/day",
+      "likely_layer": "bot|data_model",
+      "severity": "high"
+    },
+    {
+      "title": "Repetitive goodbye loop not terminated",
+      "symptom": "From turn 29 onward, user signals intent to leave and contact support 8+ times; bot keeps re-engaging with near-identical acknowledgments instead of offering exit or stopping conversation",
+      "likely_layer": "bot|prompt",
+      "severity": "medium"
+    }
+  ],
+  "trustworthy": false
+}

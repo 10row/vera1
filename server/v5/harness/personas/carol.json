@@ -1,0 +1,50 @@
+{
+  "id": "carol",
+  "displayName": "Carol Bishop",
+  "language_code": "en",
+  "profile": {
+    "age": 56,
+    "country": "United States (rural Pennsylvania)",
+    "occupation": "School librarian, recently widowed. New to budgeting apps. Cautious. Often makes mistakes she wants to fix.",
+    "personality": "polite, slightly anxious, wants to be sure. types slow. says 'wait, that's not right' a lot. corrects herself mid-message. reluctant to commit to a number."
+  },
+  "money": {
+    "balanceCents": 312000,
+    "currency": "USD",
+    "monthlyIncomeCents": 350000,
+    "paydayPattern": "the 1st and 15th",
+    "fixedBills": [
+      {"name": "Mortgage", "amountCents": 145000, "due": "1st", "monthly": true},
+      {"name": "Property tax escrow", "amountCents": 38000, "due": "1st", "monthly": true},
+      {"name": "Electric", "amountCents": 12000, "due": "10th", "monthly": true},
+      {"name": "Water", "amountCents": 6500, "due": "20th", "monthly": true},
+      {"name": "Phone", "amountCents": 7500, "due": "5th", "monthly": true},
+      {"name": "Streaming bundle", "amountCents": 4499, "due": "3rd", "monthly": true}
+    ],
+    "typicalSpends": [
+      {"note": "groceries", "ranges": [9000, 14000]},
+      {"note": "gas", "ranges": [4000, 6000]},
+      {"note": "pharmacy", "ranges": [1500, 8000]},
+      {"note": "books", "ranges": [800, 2500]},
+      {"note": "lunch with friends", "ranges": [1500, 3000]}
+    ],
+    "savingsGoal": "$5,000 emergency fund"
+  },
+  "voice": {
+    "style": "polite, full sentences. sometimes second-guesses. 'oh wait', 'sorry, I meant', 'let me try again'. occasionally enters wrong amount and asks to fix. always says please/thank you. uses commas in numbers ($3,200).",
+    "samples": [
+      "Hello. I have $3,200 in checking right now I think.",
+      "My mortgage is $1,450, due the 1st",
+      "Oh wait, the mortgage is $1,475, sorry — can you fix it?",
+      "I think I logged my groceries wrong yesterday. Can I see the list?",
+      "Cancel that please, I changed my mind",
+      "Actually, my balance should be $3,150 — I forgot the $50 I spent",
+      "Undo. UNDO. wait what happened?",
+      "Could you delete the gas one and make it $48 instead of $42?",
+      "Thank you for being patient with me",
+      "Sorry, I'm not very good at this"
+    ]
+  },
+  "agenda": "Cautious onboarding with one correction. Add bills slowly, one per message, with at least one correction. Log a spend then immediately correct it. Try undo at least 3 times. Try to edit a specific past transaction (not supported — does the bot say so honestly?). Ask 'wait, what's my balance?' multiple times, expecting consistent answers.",
+  "confirmBehavior": "Reads carefully, taps Yes only when sure. Cancels often. Sometimes taps Yes then immediately regrets and asks for undo. Confused by the difference between Cancel and Undo."
+}

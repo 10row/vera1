@@ -1,0 +1,87 @@
+<!doctype html><meta charset="utf-8"><title>Ольга Петрова (olga)</title>
+<style>
+body { background:#0F0F0F; color:#EFEFEF; font:14px/1.5 -apple-system,sans-serif; padding:20px; max-width:600px; margin:auto; }
+h2 { font-weight:500; color:#888; font-size:14px; }
+.row { display:flex; margin:8px 0; }
+.row.me, .row.me-tap { justify-content:flex-end; }
+.bubble { max-width:80%; padding:10px 14px; border-radius:14px; }
+.bubble.me { background:#2B5278; color:#fff; }
+.bubble.bot { background:#1f1f1f; color:#EFEFEF; }
+.tap { font-size:11px; color:#888; padding:4px 10px; background:#222; border-radius:8px; }
+.edit-tag { color:#888; font-size:11px; margin-right:6px; }
+.btnrow { display:flex; gap:6px; margin-top:8px; }
+.btn { background:#2B5278; padding:6px 12px; border-radius:6px; font-size:12px; }
+</style>
+<h2>Ольга Петрова · ru</h2>
+<div class="row me"><div class="bubble me">Здравствуйте. Это первый раз я пользуюсь таким приложением. Скажите, оно надёжно хранит данные о расходах? Мне нужно вести учёт всех трат по статьям.</div></div>
+<div class="row bot"><div class="bubble bot">Это нужно только мне — чтобы понимать твой ритм трат и подсказывать в моменте. Никаких связей с банком. Сколько на счёте — приблизительно?</div></div>
+<div class="row me"><div class="bubble me">Хорошо, понимаю. На счёте сейчас 120000 рублей. Зарплата приходит 10-го числа, это 150000 рублей. Можете это зафиксировать?</div></div>
+<div class="row bot"><div class="bubble bot">Готово ✅ — ₽120,000.00, зарплата 2026-05-10.<br><br>Дальше просто говори: &quot;потратил 20 на кофе&quot;, &quot;платёж аренда 1400 1-го&quot;, &quot;могу позволить 200?&quot;. Я разберусь.<br><br>🟢 *Спокойно* — ₽12,000.00/день, 10 дн до зарплаты.</div></div>
+<div class="row me"><div class="bubble me">Спасибо. Но мне нужно добавить регулярные платежи — квартплата, интернет, мобильная. Можно ли это сделать сразу, чтобы не забывать?</div></div>
+<div class="row bot"><div class="bubble bot">Добавляю три счёта. Назови суммы и даты платежей — квартплата (сумма и число), интернет (сумма и число), мобильная (сумма и число).</div></div>
+<div class="row me"><div class="bubble me">Квартплата 15000 рублей, платёж 20-го числа. Интернет 800 рублей, 5-го числа. Мобильная связь 600 рублей, 15-го числа. Правильно ввёл?</div></div>
+<div class="row bot"><div class="bubble bot">Добавляю три счёта: квартплата ₽15,000 (20-го), интернет ₽800 (5-го), мобильная ₽600 (15-го). Всего ₽16,400/месяц — остаётся ₽103,600 на жизнь.<br><br>*Хочу добавить:*<br>  1. Добавить счёт *Квартплата* — ₽15,000.00 · 2026-05-20 · monthly<br>  2. Добавить счёт *Интернет* — ₽800.00 · 2026-05-05 · monthly<br>  3. Добавить счёт *Мобильная связь* — ₽600.00 · 2026-05-15 · monthly<div class="btnrow"><span class="btn">Да, всё (3)</span><span class="btn">Отмена</span></div></div></div>
+<div class="row me-tap"><div class="tap">tapped: Да, всё (3)</div></div>
+<div class="row bot"><div class="bubble bot"><span class="edit-tag">(edit)</span>✓ Добавить счёт *Квартплата* — ₽15,000.00 · 2026-05-20 · monthly<br>✓ Добавить счёт *Интернет* — ₽800.00 · 2026-05-05 · monthly<br>✓ Добавить счёт *Мобильная связь* — ₽600.00 · 2026-05-15 · monthly</div></div>
+<div class="row bot"><div class="bubble bot">🟢 *Спокойно* — ₽11,920.00/день, 10 дн до зарплаты.<div class="btnrow"><span class="btn">Отменить</span></div></div></div>
+<div class="row me"><div class="bubble me">Хорошо, спасибо. Теперь нужно добавить траты. Сегодня потратила 450 рублей на продукты и 35 рублей на обед на работе. Это записать?</div></div>
+<div class="row bot"><div class="bubble bot">Записываю: ₽450 на продукты и ₽35 на обед. Итого ₽485 за день — в норме.<br><br>*Хочу добавить:*<br>  1. Расход ₽450.00 · продукты<br>  2. Расход ₽35.00 · обед на работе<div class="btnrow"><span class="btn">Да, всё (2)</span><span class="btn">Отмена</span></div></div></div>
+<div class="row me-tap"><div class="tap">tapped: Да, всё (2)</div></div>
+<div class="row bot"><div class="bubble bot"><span class="edit-tag">(edit)</span>✓ Расход ₽450.00 · продукты<br>✓ Расход ₽35.00 · обед на работе</div></div>
+<div class="row bot"><div class="bubble bot">🟢 *Спокойно* — ₽11,871.50/день, 10 дн до зарплаты.<div class="btnrow"><span class="btn">Отменить</span></div></div></div>
+<div class="row me"><div class="bubble me">Спасибо. А сколько у меня осталось до зарплаты 10-го числа? Нужно понять, хватит ли на все расходы до получки.</div></div>
+<div class="row bot"><div class="bubble bot">До зарплаты 10 дней. Баланс ₽119,515 − биллы ₽16,400 = ₽103,115 на жизнь. При темпе ₽485/день хватит легко. Интернет платишь 5-го, мобильная 15-го (после зарплаты), квартплата 20-го — распределено удачно.</div></div>
+<div class="row me-tap"><div class="tap">tapped: Отменить</div></div>
+
+<div class="row bot"><div class="bubble bot">Отменено.<br>🟢 *Спокойно* — ₽11,875.00/день, 10 дн до зарплаты.</div></div>
+<div class="row me"><div class="bubble me">Спасибо за расчёт. Теперь хочу поставить цель — откладывать на подушку безопасности. На три месяца расходов нужно примерно 50000 рублей в месяц. Можно это настроить?</div></div>
+<div class="row bot"><div class="bubble bot">Цели пока не встроены в SpendYes, но я помогу! Откладывай ₽50k в месяц — это реально при твоём темпе. После биллей остаётся ₽103k на 10 дней до зарплаты. Предложу: каждую зарплату переводи ₽50k на отдельный счёт, остальное на жизнь. Через 3 месяца — подушка ₽150k готова.</div></div>
+<div class="row me"><div class="bubble me">Хорошо, понимаю. Тогда буду переводить 50000 рублей после получки на отдельный счёт. Это имеет смысл. А можно ещё добавить квартплату 20-го числа в систему? Чтобы не забыть.</div></div>
+<div class="row bot"><div class="bubble bot">Квартплата уже в системе — ₽15,000 на 20-го. Проверь список биллей выше. Переводить ₽50k на подушку после получки — отличный план!</div></div>
+<div class="row me"><div class="bubble me">Спасибо, я вижу. Квартплата уже добавлена. Тогда всё в порядке — буду придерживаться плана. После зарплаты 10-го переведу 50000 на подушку, остальное на текущие расходы и биллы. Ясно.</div></div>
+<div class="row bot"><div class="bubble bot">Супер! План ясен: ₽50k на подушку после получки, остальное на жизнь и биллы. Всё под контролем. Пишешь, когда что-то потратил — я буду отслеживать темп.</div></div>
+<div class="row me"><div class="bubble me">Спасибо. Тогда я начну вносить траты по мере того, как буду их совершать. Сейчас куплю продукты — потратила 4500 рублей. Можно это записать?</div></div>
+<div class="row bot"><div class="bubble bot">Записываю — ₽4,500 на продукты.<br><br>Расход ₽4,500.00 · продукты<div class="btnrow"><span class="btn">Да</span><span class="btn">Отмена</span></div></div></div>
+<div class="row me-tap"><div class="tap">tapped: Да</div></div>
+<div class="row bot"><div class="bubble bot"><span class="edit-tag">(edit)</span>✓ Расход ₽4,500.00 · продукты</div></div>
+<div class="row bot"><div class="bubble bot">🟢 *Спокойно* — ₽11,425.00/день, 10 дн до зарплаты.<div class="btnrow"><span class="btn">Отменить</span></div></div></div>
+<div class="row me"><div class="bubble me">Хорошо, спасибо. Буду ещё вносить траты по мере их совершения. А сколько у меня остаётся до 10-го числа на непредвиденные расходы, кроме плана?</div></div>
+<div class="row bot"><div class="bubble bot">После продуктов у тебя ₽110,550. До 10-го (10 дней) остаётся ₽114,250 на непредвиденное после биллей — это ₽11,425/день. Спокойно, есть люфт. Вся &#39;другое&#39; трата (₽4,950) — без тегов, добавляй заметки при логах, чтобы ловить утечки.</div></div>
+<div class="row me-tap"><div class="tap">tapped: Отменить</div></div>
+
+<div class="row bot"><div class="bubble bot">Отменено.<br>🟢 *Спокойно* — ₽11,875.00/день, 10 дн до зарплаты.</div></div>
+<div class="row me"><div class="bubble me">Понятно. Значит, на непредвиденное у меня есть запас. Хорошо, буду внимательнее отмечать траты с заметками. Сейчас пошла на обед на работе — потратила 3200 рублей. Можно записать?</div></div>
+<div class="row bot"><div class="bubble bot">Записываю обед — ₽3,200. За 2 дня уже ₽7,700 на еду — следи за темпом до получки.<br><br>Расход ₽3,200.00 · обед на работе<div class="btnrow"><span class="btn">Да</span><span class="btn">Отмена</span></div></div></div>
+<div class="row me-tap"><div class="tap">tapped: Да</div></div>
+<div class="row bot"><div class="bubble bot"><span class="edit-tag">(edit)</span>✓ Расход ₽3,200.00 · обед на работе</div></div>
+<div class="row bot"><div class="bubble bot">🟢 *Спокойно* — ₽11,555.00/день, 10 дн до зарплаты.<div class="btnrow"><span class="btn">Отменить</span></div></div></div>
+<div class="row me"><div class="bubble me">Спасибо. Да, вижу, что на еду уходит больше, чем я планировала. Нужно следить внимательнее. А можно уточнить — когда у вас будет готова сводка по всем тратам за месяц? Мне привычнее смотреть полный отчёт в Excel, с категориями и итогами.</div></div>
+<div class="row bot"><div class="bubble bot">Сводки я показываю прямо в чате — по дням, неделям, месяцам. Excel экспорт — это уже на стороне основного приложения, туда я данные передаю. Спроси там в настройках экспорта или напиши разработчикам — они помогут с форматом, который тебе нужен. Я же буду отслеживать траты и подсказывать, когда что-то выбивается из плана.</div></div>
+<div class="row me-tap"><div class="tap">tapped: Отменить</div></div>
+
+<div class="row bot"><div class="bubble bot">Отменено.<br>🟢 *Спокойно* — ₽11,875.00/день, 10 дн до зарплаты.</div></div>
+<div class="row me"><div class="bubble me">Хорошо, спасибо за уточнение. Я понимаю логику — вы отслеживаете, а основное приложение обрабатывает. Тогда попробую так работать. А сводку на конец месяца можно будет запросить прямо у вас? Просто привычка — каждый месяц в Excel смотрю остаток по категориям.</div></div>
+<div class="row bot"><div class="bubble bot">Да, в конце месяца пиши мне «сводка» или «итоги за апрель» — я покажу все траты по категориям, остаток и сравню с планом. Всё прямо здесь, в чате.</div></div>
+<div class="row me"><div class="bubble me">Отлично, спасибо. Это удобнее, чем ждать выписки от банка. Тогда я буду регулярно отмечать траты здесь, и в конце месяца запрошу у вас сводку. А сейчас — можно я добавлю вторую регулярную статью расходов? У меня есть лекарства, они идут каждый месяц примерно на 200-300 тысяч рублей.</div></div>
+<div class="row bot"><div class="bubble bot">Погодите — 200–300 тысяч в месяц на лекарства? Это огромная сумма. Давайте проверим: если добавить ₽250,000/месяц, после всех биллей (₽16,400) у вас останется минус. Это реально, или опечатка? Уточните сумму — может, ₽2–3 тысячи или ₽20–30 тысяч?<br>🔴 *Не стоит* — это даст ₽131,250.00 дефицита. Останется -₽130,450.00.<div class="btnrow"><span class="btn">Записать</span><span class="btn">Не сейчас</span></div></div></div>
+<div class="row me-tap"><div class="tap">tapped: Записать</div></div>
+<div class="row bot"><div class="bubble bot"><span class="edit-tag">(edit)</span>✗ Расход ₽250,000.00 — _That&#39;s more than your balance — really ₽250,000.00?_</div></div>
+<div class="row me"><div class="bubble me">Нет, постойте. Я ошиблась с суммой. Лекарства — это 20-30 тысяч в месяц, не 200. Извините, невнимательно прочитала. Можно исправить?</div></div>
+<div class="row bot"><div class="bubble bot">Добавляю лекарства — ₽25,000 ежемесячно. С учётом этого и текущих биллей твой запас после счётов станет плотнее, но управляемо.<br><br>Добавить счёт *Лекарства* — ₽25,000.00 · 2026-05-30 · monthly<div class="btnrow"><span class="btn">Да</span><span class="btn">Отмена</span></div></div></div>
+<div class="row me-tap"><div class="tap">tapped: Да</div></div>
+<div class="row bot"><div class="bubble bot"><span class="edit-tag">(edit)</span>✓ Добавить счёт *Лекарства* — ₽25,000.00 · 2026-05-30 · monthly</div></div>
+<div class="row bot"><div class="bubble bot">🟢 *Спокойно* — ₽11,875.00/день, 10 дн до зарплаты.<div class="btnrow"><span class="btn">Отменить</span></div></div></div>
+<div class="row me"><div class="bubble me">Спасибо, разобрались. Теперь у меня есть три основных счёта — квартплата, интернет, мобильная и лекарства. А вот подскажите — когда я запрашиваю сводку в конце месяца, она будет учитывать и эти регулярные платежи, и мои текущие траты вместе?</div></div>
+<div class="row bot"><div class="bubble bot">Да, сводка покажет всё вместе — и регулярные платежи (квартплата, интернет, мобила, лекарства), и все твои текущие траты по категориям. Полная картина за месяц.</div></div>
+<div class="row me-tap"><div class="tap">tapped: Отменить</div></div>
+
+<div class="row bot"><div class="bubble bot">Отменено.<br>🟢 *Спокойно* — ₽11,875.00/день, 10 дн до зарплаты.</div></div>
+<div class="row me"><div class="bubble me">Хорошо, спасибо за уточнение. Теперь мне понятна логика работы приложения. У меня остаётся вопрос — можно ли установить автоматическое напоминание перед датой платежа? Например, за день до квартплаты?</div></div>
+<div class="row bot"><div class="bubble bot">Напоминания пока не встроены в SpendYes, но я могу помочь по-другому: скажи мне за день до платежа «напомни про квартплату» — и я дам тебе сводку по счёту. Или используй встроенный календарь телефона — синхронизировать даты биллей туда легко.</div></div>
+<div class="row me"><div class="bubble me">Понимаю. Календарь телефона — это разумно. Спасибо за помощь. Приложение мне нравится уже больше, чем я ожидала. Всё логично и понятно расписано. Буду пользоваться.</div></div>
+<div class="row bot"><div class="bubble bot">Спасибо! Рады, что всё ясно. Я здесь, когда нужно залогировать трату, доход или уточнить, потянешь ли на какой-то расход. Удачи с бюджетом! 💚</div></div>
+<div class="row me"><div class="bubble me">Спасибо, буду писать. Сейчас попробую записать сегодняшние траты — 450 рублей на продукты и 35 рублей на обед. Как это сделать?</div></div>
+<div class="row bot"><div class="bubble bot">Логирую траты — ₽450 на продукты и ₽35 на обед. Вместе ₽485 за день.<br><br>*Хочу добавить:*<br>  1. Расход ₽450.00 · продукты<br>  2. Расход ₽35.00 · обед<div class="btnrow"><span class="btn">Да, всё (2)</span><span class="btn">Отмена</span></div></div></div>
+<div class="row me-tap"><div class="tap">tapped: Да, всё (2)</div></div>
+<div class="row bot"><div class="bubble bot"><span class="edit-tag">(edit)</span>✓ Расход ₽450.00 · продукты<br>✓ Расход ₽35.00 · обед</div></div>
+<div class="row bot"><div class="bubble bot">🟢 *Спокойно* — ₽11,826.50/день, 10 дн до зарплаты.<div class="btnrow"><span class="btn">Отменить</span></div></div></div>

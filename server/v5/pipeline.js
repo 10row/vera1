@@ -16,6 +16,66 @@ const { validateIntent } = require("./validator");
 const { simulateSpend } = require("./view");
 const onboarding = require("./onboarding");
 
+// ── PROMISE-ACTION CONSISTENCY ────────────────────────────────
+// THE silent-lie failure mode: AI's text says "I'll adjust your balance"
+// but no adjust_balance intent is emitted. Bot ships the promise, nothing
+// happens, user is confused. We detect this here and rewrite the reply
+// to an honest "I'm not sure what to do — be more specific?" rather than
+// shipping a lie.
+//
+// We're conservative: only catch UNAMBIGUOUS action verbs that should be
+// paired with intents. False positives here would suppress legitimate
+// chatty replies ("you'd be fine" is a simulation answer, not a promise).
+const ACTION_VERBS = {
+  // matchers → kind they require
+  // Each entry: [regex, expected intent kinds (any of)]
+  en: [
+    [/\b(i'?ll|i will|i'?m|let me|going to)\s+(add|adding)\b/i, ["add_bill", "do_batch_add_bill"]],
+    [/\b(i'?ll|i will|i'?m)\s+(log|logging|record|recording)\b/i, ["record_spend", "record_income"]],
+    [/\b(i'?ll|i will|i'?m)\s+(adjust|adjusting|set|setting|chang|chang|updat)/i, ["adjust_balance", "update_payday"]],
+    [/\b(i'?ll|i will|i'?m)\s+(remov|delet)/i, ["remove_bill"]],
+    [/\b(undoing|reverting|i'?ll undo)/i, ["undo_last"]],
+  ],
+  ru: [
+    [/\b(добавл|добавляю|записываю)/i, ["add_bill", "record_spend", "record_income"]],
+    [/\b(исправл|поправл|меняю|корректирую)/i, ["adjust_balance", "update_payday"]],
+    [/\b(удаля|убираю)/i, ["remove_bill"]],
+    [/\b(отменяю|откатыв)/i, ["undo_last"]],
+  ],
+};
+
+// Returns null if the proposal is consistent (or has no obvious action
+// verbs). Returns a string (the rewritten honest reply) if a promise was
+// detected without a matching intent.
+function detectSilentLie(proposal, lang) {
+  if (!proposal || !proposal.message) return null;
+  // Only check do/talk modes; ask_simulate is read-only by design.
+  if (proposal.mode === "ask_simulate") return null;
+
+  const text = proposal.message;
+  const verbs = ACTION_VERBS[lang === "ru" ? "ru" : "en"] || ACTION_VERBS.en;
+
+  // Collect intent kinds proposed (single OR batch).
+  const proposedKinds = new Set();
+  if (proposal.intent && proposal.intent.kind) proposedKinds.add(proposal.intent.kind);
+  if (Array.isArray(proposal.intents)) {
+    for (const i of proposal.intents) if (i && i.kind) proposedKinds.add(i.kind);
+  }
+
+  for (const [re, expectedKinds] of verbs) {
+    if (!re.test(text)) continue;
+    // Match — does the proposal include any expected intent kind?
+    const ok = expectedKinds.some(k => proposedKinds.has(k));
+    if (!ok) {
+      // Promise without action. Return honest fallback in the right language.
+      return lang === "ru"
+        ? "_(хм, я сказал что сделаю, но не получилось. Попробуй переформулировать или уточнить — например указать сумму и дату.)_"
+        : "_(I said I'd do it but couldn't pin down the exact action. Try again with the specific amount/date — e.g. \"adjust balance to 5000\" or \"log 25 on coffee\".)_";
+    }
+  }
+  return null;
+}
+
 async function processMessage(state, userMessage, history, options) {
   // ── PHASE 1: deterministic onboarding while !setup ──
   if (!state || !state.setup) {
@@ -33,6 +93,20 @@ async function processMessage(state, userMessage, history, options) {
 
   // ── PHASE 2: AI for everything else ──
   const proposal = await parseProposal(state, userMessage, history, options);
+  const lang = state && state.language === "ru" ? "ru" : "en";
+
+  // ── PROMISE-ACTION CHECK ──
+  // If AI's text promises an action but no matching intent exists,
+  // rewrite to an honest fallback. Better to admit confusion than ship a
+  // lie. (See ACTION_VERBS / detectSilentLie above.)
+  const lieReply = detectSilentLie(proposal, lang);
+  if (lieReply) {
+    return {
+      kind: "talk",
+      message: lieReply,
+      _silentLieDetected: true, // diagnostic flag for harness
+    };
+  }
 
   if (proposal.mode === "ask_simulate") {
     const sim = simulateSpend(state, proposal.amountCents);

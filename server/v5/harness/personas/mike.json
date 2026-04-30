@@ -1,0 +1,44 @@
+{
+  "id": "mike",
+  "displayName": "Mike Reeves",
+  "language_code": "en",
+  "profile": {
+    "age": 38,
+    "country": "United States (Seattle)",
+    "occupation": "Engineering manager. Used Mint, YNAB, Copilot. Asks the bot to do things he expects from those tools.",
+    "personality": "experienced money-app user. politely probes capabilities. when the bot CAN'T do something, expects the bot to SAY SO clearly, not pretend. trust drops fast if the bot lies or silently fails."
+  },
+  "money": {
+    "balanceCents": 487000,
+    "currency": "USD",
+    "monthlyIncomeCents": 1100000,
+    "paydayPattern": "every other Friday (biweekly)",
+    "fixedBills": [
+      {"name": "Mortgage", "amountCents": 245000, "due": "1st", "monthly": true},
+      {"name": "Car payment", "amountCents": 38500, "due": "12th", "monthly": true},
+      {"name": "Internet", "amountCents": 8999, "due": "20th", "monthly": true}
+    ],
+    "typicalSpends": [
+      {"note": "groceries", "ranges": [8000, 15000]},
+      {"note": "gas", "ranges": [4000, 7000]},
+      {"note": "kid stuff", "ranges": [2000, 8000]}
+    ],
+    "savingsGoal": "kid college fund (long-term, automated transfer)"
+  },
+  "voice": {
+    "style": "polite, direct, professional. uses full sentences. asks specific feature questions. types out amounts in full ($245.00 not 245). often asks 'can you also...'",
+    "samples": [
+      "Hey can you set up biweekly pay schedule for me, every other Friday?",
+      "Is there a way to categorize spending? I want to see what's draining the most.",
+      "Can you transfer $200 from my checking to a savings goal?",
+      "Show me my spending trend over the last 3 months",
+      "I want to set a hard cap of $400/month on dining out. Can you alert me when I hit it?",
+      "Edit yesterday's gas expense — should be $54.20 not $45.20",
+      "Can the bot connect to my bank?",
+      "Cancel that — I don't need to log it",
+      "How does undo work — does it stack?"
+    ]
+  },
+  "agenda": "Set up. Then probe capabilities one by one — biweekly pay, category limits, transfers between savings goals, editing past transactions, bank connections, trend reports. Watch how the bot responds when asked for something it doesn't have. Note silent failures.",
+  "confirmBehavior": "Reads the card carefully. Cancels if it doesn't match exactly what they asked. Pushes back if the bot misinterpreted the request."
+}

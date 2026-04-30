@@ -1,0 +1,64 @@
+{
+  "scores": {
+    "mechanical_correctness": 4,
+    "voice_consistency": 7,
+    "conversational_quality": 6,
+    "intent_capture": 5,
+    "ux_friction": 3
+  },
+  "overall": 5,
+  "summary": "Bot captured core intents but exhibited critical currency display bugs, dropped transaction logging on first brain-dump, and created significant friction around a fundamental UX issue that should have been caught in onboarding.",
+  "strengths": [
+    "Conversational tone remained consistent and empathetic throughout currency frustration",
+    "Bot correctly stored amounts in pence (base units) and math was internally sound",
+    "Successfully escalated GBP display issue to support as user requested",
+    "Handled bill rename/delete workaround (Gym → Equinox) smoothly",
+    "Payday calculation and daily runway math remained consistent"
+  ],
+  "failures": [
+    "Currency display bug: bot showed $ symbols for GBP amounts throughout entire session, contradicting user's setup in turn [1]",
+    "Intent capture failure in turn [46]: brain-dump included 5 recent spends but bot only acknowledged balance + payday, skipped the 5 transactions, requiring user to re-submit in turn [49]",
+    "Undo state management: turn [23] undo reverted to dollar display, suggesting state inconsistency between transaction layers",
+    "Gym bill ghost state: turns [14]–[16] bot claimed Gym already existed even after user deleted it (turn [7]), forced workaround to Equinox",
+    "Generic fallback responses in turns [36] and [42] broke conversational flow when user asked meta-questions about format"
+  ],
+  "bug_candidates": [
+    {
+      "title": "Currency display hardcoded to USD despite GBP storage",
+      "symptom": "User set up in GBP (£12,400 balance, £1,650 rent) but bot displayed $ symbols throughout. User flagged in turn [9], bot acknowledged it was a backend display issue but couldn't fix it mid-session.",
+      "likely_layer": "view",
+      "severity": "high"
+    },
+    {
+      "title": "Brain-dump transaction ingestion skips spends on first parse",
+      "symptom": "Turn [45]: user pasted balance + payday + 4 bills + 5 recent spends. Turn [46] bot only logged balance + payday, skipped all 5 transactions (lunch, coffee, uber, drinks, book), required re-submission in turn [49].",
+      "likely_layer": "pipeline",
+      "severity": "high"
+    },
+    {
+      "title": "Deleted bill persists in state after undo",
+      "symptom": "Turn [7]: user confirmed deletion of Gym bill. Turns [14]–[16]: bot claims 'You already have a bill named Gym' despite deletion confirmation. Suggests undo didn't properly rollback bill state.",
+      "likely_layer": "data_model",
+      "severity": "high"
+    },
+    {
+      "title": "Undo reverts view layer currency but not transaction context",
+      "symptom": "Turn [23]: user tapped Undo to revert Gym→Equinox. Turn [24] response shows $ symbols again, contradicting prior GBP context. Suggests undo state includes view formatting but loses currency context.",
+      "likely_layer": "bot",
+      "severity": "medium"
+    },
+    {
+      "title": "Generic fallback on meta-questions breaks intent capture",
+      "symptom": "Turns [36] and [42]: user asked procedural questions ('paste one message or split?', 'mention work vs personal?'). Bot responded with generic 'Try again with specific amount/date' error, ignoring the context and previous conversation.",
+      "likely_layer": "prompt",
+      "severity": "medium"
+    },
+    {
+      "title": "Currency setup not validated during onboarding",
+      "symptom": "Turn [1]: user explicitly stated all amounts in GBP. Turn [2] onboarding showed $12,400.00 without converting or confirming currency. Currency mismatch went uncaught until turn [5].",
+      "likely_layer": "onboarding",
+      "severity": "high"
+    }
+  ],
+  "trustworthy": false
+}

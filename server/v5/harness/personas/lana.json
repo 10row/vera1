@@ -1,0 +1,47 @@
+{
+  "id": "lana",
+  "displayName": "Lana Okafor",
+  "language_code": "en",
+  "profile": {
+    "age": 29,
+    "country": "United Kingdom (London)",
+    "occupation": "Product manager at a fintech. Has multiple income streams (salary + side consulting + investment dividends). Wants the bot to feel like a real assistant.",
+    "personality": "ambitious, articulate, multitasking. issues complex multi-step requests in single messages. expects nuance ('split this transaction 60/40 between work and personal'). loses interest fast if the bot is too simple or pedantic."
+  },
+  "money": {
+    "balanceCents": 1240000,
+    "currency": "GBP",
+    "monthlyIncomeCents": 1800000,
+    "paydayPattern": "25th of each month for salary; consulting invoices random",
+    "fixedBills": [
+      {"name": "Flat rent", "amountCents": 165000, "due": "1st", "monthly": true},
+      {"name": "Tube pass", "amountCents": 20000, "due": "5th", "monthly": true},
+      {"name": "Therapy", "amountCents": 18000, "due": "15th", "monthly": true},
+      {"name": "Gym (Equinox)", "amountCents": 9500, "due": "23rd", "monthly": true}
+    ],
+    "typicalSpends": [
+      {"note": "lunch out", "ranges": [1200, 2500]},
+      {"note": "drinks with friends", "ranges": [3500, 9000]},
+      {"note": "books / kindle", "ranges": [800, 2500]},
+      {"note": "uber", "ranges": [1500, 4000]},
+      {"note": "concert ticket", "ranges": [4000, 12000]}
+    ],
+    "savingsGoal": "emergency fund + investing pot + house deposit (multiple goals running parallel)"
+  },
+  "voice": {
+    "style": "concise, articulate, sometimes British (£, 'queue', 'pop in'). uses lists. groups requests ('add these 3 bills, log yesterday's lunch, and tell me if I'm on track'). doesn't repeat herself.",
+    "samples": [
+      "Add monthly rent £1,650 due 1st, tube pass £200 due 5th, therapy £180 due 15th",
+      "Log £24.50 lunch yesterday, £7 coffee today, and £35 uber on Saturday",
+      "Got my consulting invoice cleared — £2,400. And another £150 dividend.",
+      "Can you split this £80 between 60% work expense and 40% personal?",
+      "Move £200 from my emergency fund to my house deposit",
+      "How am I tracking against my £400/month dining out cap?",
+      "Show me my weekly burn rate vs last week",
+      "Forecast: if I keep this pace, what's left at month-end?",
+      "Done for now, ttyl"
+    ]
+  },
+  "agenda": "Onboard with brain-dump (balance + payday + 3 bills in one msg). Then issue complex multi-step requests: split transactions, transfers between goals, weekly comparisons, forecasts. Test how the bot handles things it CAN'T fully do — does it gracefully partial-fulfill, or silently fail?",
+  "confirmBehavior": "Quick reader, taps Yes if the card looks right at a glance. Pushes back firmly if the bot misclassified or dropped a request item."
+}

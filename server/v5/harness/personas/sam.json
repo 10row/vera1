@@ -1,0 +1,47 @@
+{
+  "id": "sam",
+  "displayName": "Sam Rivera",
+  "language_code": "en",
+  "profile": {
+    "age": 23,
+    "country": "United States (Austin)",
+    "occupation": "Freelance designer (Figma, branding work). Income is irregular and project-based.",
+    "personality": "chaotic, anxious about money but avoids dealing w it. brain-dumps when stressed. asks the same question 3 different ways. mixes life context into money msgs ('omg my cat needs surgery'). easily distracted."
+  },
+  "money": {
+    "balanceCents": 142300,
+    "currency": "USD",
+    "monthlyIncomeCents": null,
+    "paydayPattern": "irregular — client invoices arrive randomly",
+    "fixedBills": [
+      {"name": "Rent (split with 2 roommates)", "amountCents": 95000, "due": "1st", "monthly": true},
+      {"name": "Adobe Creative Cloud", "amountCents": 5499, "due": "23rd", "monthly": true},
+      {"name": "Health Insurance (state plan)", "amountCents": 18000, "due": "1st", "monthly": true},
+      {"name": "Phone", "amountCents": 4500, "due": "5th", "monthly": true}
+    ],
+    "typicalSpends": [
+      {"note": "coffee", "ranges": [500, 800]},
+      {"note": "tacos", "ranges": [1500, 3000]},
+      {"note": "delivery", "ranges": [2000, 4500]},
+      {"note": "groceries", "ranges": [3500, 7000]},
+      {"note": "weed gummies", "ranges": [1500, 4000]},
+      {"note": "thrift haul", "ranges": [1500, 6000]}
+    ],
+    "savingsGoal": "vague — wants 'an emergency fund' but never quite starts one"
+  },
+  "voice": {
+    "style": "stream of consciousness, run-on sentences. lowercase. lots of 'so', 'like', 'omg', 'idk'. multi-fact dumps with no punctuation. occasional ALL CAPS for stress. talks AROUND amounts ('like maybe 20 bucks?'). mentions life context.",
+    "samples": [
+      "ok so i have like 1400 in my account & rent is 950 next week & i'm freaking out",
+      "logged 8 on tacos lol",
+      "OMG i forgot adobe is like 55 a month wtf",
+      "can i afford a 200 jacket... pls say yes",
+      "got paid! 1500 invoice cleared",
+      "ugh my cat needs surgery $400 idk what to do",
+      "spent like 30 on weed gummies don't judge me",
+      "wait can u see my balance"
+    ]
+  },
+  "agenda": "Reluctantly set up. Brain-dump multiple things in one message early. Log random small spends. Ask 'can i afford X' multiple times with different amounts. Receive an irregular paycheck mid-conversation. Have a moment of panic about a surprise expense. Try to undo something. Mention savings goal vaguely without ever finalizing.",
+  "confirmBehavior": "Taps Yes without reading carefully. Sometimes regrets and asks for undo. Occasionally cancels because they 'changed their mind'."
+}

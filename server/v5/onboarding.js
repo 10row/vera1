@@ -209,6 +209,10 @@ function handle(state, text, todayStr) {
   const draft = (state && state.onboardingDraft) || {};
   const t = String(text || "").trim();
   const lang = (state && state.language === "ru") ? "ru" : "en";
+  // Currency symbol must follow language. Without this, RU users see
+  // "$120,000" in onboarding because state.currencySymbol defaults to "$"
+  // (persona test 0003.1).
+  const sym = (state && state.currencySymbol) || (lang === "ru" ? "₽" : "$");
   const isGreeting = GREETING_RE.test(t);
 
   // PHASE 1: collect balance.
@@ -254,13 +258,13 @@ function handle(state, text, todayStr) {
       return {
         intent: { kind: "setup_account", params: { balanceCents: amount, payday, payFrequency: "monthly" } },
         clearDraft: true,
-        reply: copy.allSet(lang, amount, payday),
+        reply: copy.allSet(lang, amount, payday, sym),
         done: true,
       };
     }
     return {
       draft: { balanceCents: amount, paydayAttempts: 0 },
-      reply: copy.gotBalanceAskPayday(lang, amount),
+      reply: copy.gotBalanceAskPayday(lang, amount, sym),
       done: false,
     };
   }
@@ -273,7 +277,7 @@ function handle(state, text, todayStr) {
         params: { balanceCents: draft.balanceCents, payday: m.addDays(todayStr, 30), payFrequency: "irregular" },
       },
       clearDraft: true,
-      reply: copy.allSetSkipped(lang, draft.balanceCents),
+      reply: copy.allSetSkipped(lang, draft.balanceCents, sym),
       done: true,
     };
   }
@@ -330,8 +334,8 @@ const copy = {
       ? "Не парься — скажи *пропустить* и продолжим. Поправим потом."
       : "No rush — just say *skip* and we'll move on. We can come back to this later.";
   },
-  gotBalanceAskPayday(L, amt) {
-    const fmt = m.toMoney(amt);
+  gotBalanceAskPayday(L, amt, sym) {
+    const fmt = m.toMoney(amt, sym);
     return L === "ru"
       ? "Записал — " + fmt + ". 👍\n\nА когда следующая зарплата? Дата (\"15-го\", \"30 апреля\") или *пропустить*, если зарплата нерегулярная."
       : "Got it — " + fmt + ". 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular.";
@@ -346,14 +350,14 @@ const copy = {
       ? "Не парься — скажи *пропустить* и поедем дальше, поправим потом."
       : "No stress — just say *skip* and we'll move on. You can update it later.";
   },
-  allSet(L, amt, payday) {
-    const fmt = m.toMoney(amt);
+  allSet(L, amt, payday, sym) {
+    const fmt = m.toMoney(amt, sym);
     return L === "ru"
       ? "Готово ✅ — " + fmt + ", зарплата " + payday + ".\n\nДальше просто говори: \"потратил 20 на кофе\", \"платёж аренда 1400 1-го\", \"могу позволить 200?\". Я разберусь."
       : "All set ✅ — " + fmt + ", payday " + payday + ".\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.";
   },
-  allSetSkipped(L, amt) {
-    const fmt = m.toMoney(amt);
+  allSetSkipped(L, amt, sym) {
+    const fmt = m.toMoney(amt, sym);
     return L === "ru"
       ? "Готово ✅ — " + fmt + ", зарплата нерегулярная.\n\nДальше просто говори: \"потратил 20 на кофе\", \"получил 3000\", \"могу позволить 200?\". Я разберусь."
       : "All set ✅ — " + fmt + ", irregular pay.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"got 3000\", \"can I afford 200?\" — I'll handle it.";

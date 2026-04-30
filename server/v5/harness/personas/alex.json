@@ -1,0 +1,46 @@
+{
+  "id": "alex",
+  "displayName": "Alex Chen",
+  "language_code": "en",
+  "profile": {
+    "age": 32,
+    "country": "United States (Brooklyn)",
+    "occupation": "Senior software engineer at a fintech startup",
+    "personality": "pragmatic, terse, slightly impatient. tracks money carefully. trusts a tool for ~3 messages then loses patience if it's slow or wrong. likes one-line answers."
+  },
+  "money": {
+    "balanceCents": 875000,
+    "currency": "USD",
+    "monthlyIncomeCents": 1250000,
+    "paydayPattern": "the 1st and 15th",
+    "fixedBills": [
+      {"name": "Rent", "amountCents": 280000, "due": "1st", "monthly": true},
+      {"name": "Spotify", "amountCents": 1599, "due": "10th", "monthly": true},
+      {"name": "Gym", "amountCents": 4900, "due": "15th", "monthly": true},
+      {"name": "Phone", "amountCents": 7500, "due": "20th", "monthly": true}
+    ],
+    "typicalSpends": [
+      {"note": "coffee", "ranges": [400, 700]},
+      {"note": "lunch", "ranges": [1200, 2200]},
+      {"note": "uber", "ranges": [800, 2500]},
+      {"note": "groceries", "ranges": [4000, 8000]},
+      {"note": "drinks", "ranges": [3000, 6000]}
+    ],
+    "savingsGoal": "vacation fund (Japan, ~$3500)"
+  },
+  "voice": {
+    "style": "lowercase, abbrevs (k=thousand, w=with, prob=probably). occasional emoji. multi-fact in one msg sometimes. uses '$' explicitly.",
+    "samples": [
+      "got 5k in checking, paid 1st and 15th",
+      "spent 12 on coffee + lunch",
+      "rent 2800 monthly due the 1st",
+      "can i afford new headphones $200?",
+      "logged 30 dinner",
+      "wtf is my balance",
+      "undo last",
+      "save 200/mo for japan trip"
+    ]
+  },
+  "agenda": "Set up account, log a few real spends and one paycheck, ask 'can i afford X?' once or twice, set up a savings goal, undo a mistake. Eventually voice-note brain-dump 3 things at once.",
+  "confirmBehavior": "Taps Yes confidently if the card matches what they meant. Cancels if amount or note is clearly wrong. Slightly impatient with multi-step confirms."
+}
