@@ -144,63 +144,97 @@ function v5ToV4View(state) {
   };
 }
 
-// Mini App's GET /api/v4/view/:sid — translate v5 → v4 view shape +
-// return the recent transaction list it renders in the heatmap & feed.
+// buildHeatmap — last-30-days daily spend totals, the shape Mini App
+// expects. Each cell: { date: "YYYY-MM-DD", spentCents: N }.
+function buildHeatmap(state) {
+  const tz = state.timezone || "UTC";
+  const today = m.today(tz);
+  const out = [];
+  // Walk back 29 days (so we get 30 cells ending today).
+  for (let offset = 29; offset >= 0; offset--) {
+    const date = m.addDays(today, -offset);
+    let cents = 0;
+    for (const t of state.transactions || []) {
+      // Only count discretionary (record_spend) — bills logged via
+      // record_bill are obligations, not "spend" in the heatmap.
+      if (t.kind !== "record_spend") continue;
+      if (t.date === date) cents += t.amountCents || 0;
+    }
+    out.push({ date, spentCents: cents });
+  }
+  return out;
+}
+
+// recentTransactionsForApp — last 50 spends/incomes formatted for the feed.
+function recentTransactionsForApp(state) {
+  const txs = state.transactions || [];
+  return txs.slice(-50).reverse().map(t => ({
+    id: t.id,
+    kind: t.kind,
+    amountCents: t.amountCents,
+    note: t.note || "",
+    envelopeKey: t.billKey || null,
+    date: t.date,
+    ts: t.ts,
+  }));
+}
+
+// Mini App GET /api/v4/view/:sid — returns { view, recentTransactions, heatmap }.
+// Mini App reads d.view, d.recentTransactions, d.heatmap. Keep that shape.
 app.get("/api/v4/view/:sid", requireTelegramAuth, async (req, res) => {
   try {
     const u = await db.resolveUser(prisma, req.params.sid);
     const state = await db.loadState(prisma, u.id);
-    const pic = v5ToV4View(state);
-    // The Mini App expects state.transactions for the feed/heatmap.
-    const stateForApp = {
-      setup: state.setup,
-      language: state.language || "en",
-      currency: state.currency || "USD",
-      currencySymbol: state.currencySymbol || "$",
-      timezone: state.timezone || "UTC",
-      payday: state.payday,
-      payFrequency: state.payFrequency,
-      transactions: (state.transactions || []).slice(-200), // last 200 only
-      envelopes: pic.envelopes,
-    };
-    res.json({ pic, state: stateForApp });
+    const view = v5ToV4View(state);
+    res.json({
+      view,
+      recentTransactions: recentTransactionsForApp(state),
+      heatmap: buildHeatmap(state),
+    });
   } catch (e) {
     console.error("[v5 v4-view alias]", e);
     res.status(500).json({ error: "Internal" });
   }
 });
 
-// Mini App POST /api/v4/action/:sid — translate v4-shaped action to v5 intent.
-// Used today for "mark paid" inline. Other actions are read-only via chat now.
+// Mini App POST /api/v4/action/:sid — body shape: { intent: { kind, params } }.
+// Supports the intents Mini App still triggers (pay_bill via "mark paid").
+// Anything else returns { ok: false, error: "..." }. Mini App expects
+// { ok, view } on success.
 app.post("/api/v4/action/:sid", requireTelegramAuth, async (req, res) => {
   try {
-    const action = req.body && req.body.action;
-    if (!action || !action.type) return res.status(400).json({ error: "Missing action" });
+    const intent = req.body && req.body.intent;
+    if (!intent || !intent.kind) return res.status(400).json({ ok: false, error: "Missing intent" });
     const u = await db.resolveUser(prisma, req.params.sid);
     let result = null;
     await db.withUserLock(u.id, async () => {
       const state = await db.loadState(prisma, u.id);
-      let intent = null;
-      // Translate the actions Mini App still emits.
-      if (action.type === "confirm_payment" && action.data && action.data.envelopeKey) {
-        // Mark a bill paid → record_spend with billKey.
-        const key = action.data.envelopeKey;
-        const bill = state.bills && state.bills[key];
+      // Translate v4 pay_bill → v5 record_spend on the matching bill.
+      let translated = intent;
+      if (intent.kind === "pay_bill" && intent.params && intent.params.name) {
+        const targetKey = m.billKey(intent.params.name);
+        const bill = state.bills && state.bills[targetKey];
         if (!bill) { result = { ok: false, error: "no such bill" }; return; }
-        intent = {
+        translated = {
           kind: "record_spend",
-          params: { amountCents: bill.amountCents, note: bill.name, billKey: key },
+          params: {
+            amountCents: bill.amountCents,
+            note: bill.name,
+            billKey: targetKey,
+          },
         };
-      } else if (action.type === "remove_envelope" && action.data && action.data.key) {
-        intent = { kind: "remove_bill", params: { name: action.data.key } };
       }
-      if (!intent) { result = { ok: false, error: "Action not supported in v5 yet — use chat." }; return; }
-      const v = validateIntent(state, intent, m.today(state.timezone || "UTC"));
+      const v = validateIntent(state, translated, m.today(state.timezone || "UTC"));
       if (!v.ok) { result = { ok: false, error: v.reason }; return; }
       try {
-        const r = applyIntent(state, intent);
+        const r = applyIntent(state, translated);
         await db.saveState(prisma, u.id, r.state);
-        result = { ok: true, pic: v5ToV4View(r.state) };
+        result = {
+          ok: true,
+          view: v5ToV4View(r.state),
+          recentTransactions: recentTransactionsForApp(r.state),
+          heatmap: buildHeatmap(r.state),
+        };
       } catch (e) {
         result = { ok: false, error: e.message };
       }
@@ -208,7 +242,7 @@ app.post("/api/v4/action/:sid", requireTelegramAuth, async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error("[v5 v4-action alias]", e);
-    res.status(500).json({ error: "Internal" });
+    res.status(500).json({ ok: false, error: "Internal" });
   }
 });
 
