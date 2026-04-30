@@ -41,18 +41,26 @@ function buildSystemPrompt(state) {
     "★ HARD RULES ★",
     "1. The user is ALREADY SET UP. NEVER emit setup_account. Use adjust_balance to fix balance.",
     "2. Output STRICT JSON only. One of these shapes:",
-    '   { "mode":"do",   "message":"reply text", "intent":{"kind":"...","params":{...}} }',
+    '   { "mode":"do",   "message":"reply text", "intent":{"kind":"...","params":{...}} }                         (single action)',
+    '   { "mode":"do",   "message":"reply text", "intents":[ {"kind":"...","params":{...}}, ... ] }              (brain-dump: 2-5 actions)',
     '   { "mode":"talk", "message":"reply text" }',
     '   { "mode":"ask_simulate", "message":"reply text", "amountCents":N }',
     "3. NEVER calculate. Quote numbers from STATE / DNA SUMMARY only. Don't add daily pace + days; that's the bot's job.",
-    "4. ONE intent per message. If user mentions multiple actions, pick the most important and tell them to send the rest separately.",
+    "4. EXTRACT EVERY ACTION the user mentions. If they brain-dump multiple things in one message (income + bill + budget), emit them all as an `intents` array (1-5 items max). Bot will show one combined confirm card with a single 'Yes, all N' button. NEVER drop intents on the floor — that's the worst failure mode.",
     "5. Keep replies SHORT — 1-2 sentences. No paragraphs.",
     "6. NEVER say \"setting up your account\" or \"I'll set up\" — they're already set up. Use plain action words: \"logging\", \"adding\", \"recording\".",
-    "7. USE THE DNA SUMMARY — it shows the user's recent spend patterns, top categories, recurring habits. When logging a spend or answering a question, ADD a tiny insight from DNA when relevant. Examples:",
-    "   - User logs 'coffee 5' and DNA shows coffee already 4 txs at $20 in 7d → \"Logging coffee. That's 5 this week, $25 total — your usual.\"",
-    "   - User asks 'how am I doing?' → quote spendLast7 + top category + bills load.",
-    "   - User asks 'can I afford X?' → bot replies in ask_simulate mode; the orchestrator runs the math, but in your message hint at the post-balance feel.",
-    "   Keep insights to ONE short sentence. Don't lecture. Don't always add an insight — only when it's meaningfully present in DNA.",
+    "7. USE THE DNA SUMMARY — DNA reflects the user's real money shape (categories, trends, leaks, post-bills runway). Be ASSERTIVE with it. After every spend log or status check, add ONE short insight from DNA when present. The bot's job is to be a money buddy who notices things, not a mute calculator.",
+    "   PRIORITY ORDER for which insight to surface:",
+    "   1. TRENDING category (DNA.summary.trends): \"Coffee up 2.3x this week — $32 vs ~$14 usual.\"",
+    "   2. BIGGEST LEAK (DNA.summary.leaks): \"$368 in 'other' last 30d — that's 74% of your discretionary. Want to start tagging notes?\"",
+    "   3. POST-BILLS RUNWAY tight (postBillsDailyMin < dailyPace * 0.5): \"After rent: $3,600 for 26 days = $138/day. Tight but doable.\"",
+    "   4. CATEGORY MILESTONE (e.g. coffee.transactions in 7d ≥ 5): \"Coffee #6 this week — about $30 total. Your usual.\"",
+    "",
+    "   THE 'OTHER' CATEGORY is uncategorized spends. If DNA shows 'other' as the leak, gently nudge the user to add notes like \"on coffee\" / \"on groceries\" so you can catch real leaks. Never lecture — one short sentence.",
+    "",
+    "   When the user asks 'how am I doing?' → use DNA actively: balance, post-bills runway, biggest leak, top category. Three short lines max.",
+    "",
+    "   When user asks 'can I afford X?' → reply in ask_simulate mode; the orchestrator runs the math.",
     "",
     "INTENT KINDS:",
     '  adjust_balance  — { newBalanceCents:N }              // "actually I have $X now" / balance correction',
@@ -179,14 +187,35 @@ async function parseProposal(state, userMessage, history, options) {
     };
   }
 
-  // do: a single intent. Drop arrays — strict single-intent contract.
-  if (parsed.mode === "do" && parsed.intent && typeof parsed.intent.kind === "string") {
-    return {
-      mode: "do",
-      message: message || (state.language === "ru" ? "Подтверди:" : "Quick check:"),
-      intent: { kind: parsed.intent.kind, params: parsed.intent.params || {} },
-      warnings: [],
-    };
+  // do: 1+ intents. Multi-intent brain-dumps come back as `intents: [...]`,
+  // single intents as `intent: {...}`. Normalize both into an array.
+  if (parsed.mode === "do") {
+    let intents = [];
+    if (Array.isArray(parsed.intents)) {
+      intents = parsed.intents.filter(i => i && typeof i.kind === "string")
+        .map(i => ({ kind: i.kind, params: i.params || {} }));
+    } else if (parsed.intent && typeof parsed.intent.kind === "string") {
+      intents = [{ kind: parsed.intent.kind, params: parsed.intent.params || {} }];
+    }
+    // Cap at 5 — defensive against runaway batches.
+    if (intents.length > 5) intents = intents.slice(0, 5);
+    if (intents.length === 1) {
+      return {
+        mode: "do",
+        message: message || (state.language === "ru" ? "Подтверди:" : "Quick check:"),
+        intent: intents[0],
+        warnings: [],
+      };
+    }
+    if (intents.length > 1) {
+      return {
+        mode: "do_batch",
+        message: message || (state.language === "ru" ? "Подтверди всё:" : "Confirm all:"),
+        intents,
+        warnings: [],
+      };
+    }
+    // Empty intents → fall through to talk.
   }
 
   // Anything else → talk.

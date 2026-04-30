@@ -56,9 +56,12 @@ function makeToken() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-function setPending(intent, userId) {
+// setPending accepts a single intent OR an array of intents (brain-dump).
+// Stored as `intents: []` either way; consumer applies them in sequence.
+function setPending(intentOrArray, userId) {
   const token = makeToken();
-  pending.set(token, { intent, userId, expires: Date.now() + PENDING_TTL_MS });
+  const intents = Array.isArray(intentOrArray) ? intentOrArray : [intentOrArray];
+  pending.set(token, { intents, userId, expires: Date.now() + PENDING_TTL_MS });
   return token;
 }
 
@@ -321,6 +324,40 @@ async function processText(prisma, ctx, telegramId, text, options) {
       });
       return;
     }
+
+    // ── DO_BATCH (multi-intent brain dump) ───────
+    if (result.kind === "do_batch") {
+      await db.appendHistory(prisma, u.id, "assistant", result.message);
+      const okItems = result.items.filter(i => i.verdict.ok);
+      const failItems = result.items.filter(i => !i.verdict.ok);
+      if (okItems.length === 0) {
+        // Nothing valid — show the rejections, no card.
+        const lines = failItems.map(i => "_" + m.escapeMd(i.verdict.reason) + "_");
+        await safeReply(ctx, lines.join("\n"), { parse_mode: "Markdown" });
+        return;
+      }
+      // One combined card listing each valid action with a single Yes-all.
+      const intents = okItems.map(i => i.intent);
+      const token = setPending(intents, u.id);
+      const intro = lang === "ru" ? "*Хочу добавить:*" : "*I'll add:*";
+      const numbered = intents.map((i, idx) => "  " + (idx + 1) + ". " + describeIntent(i, state));
+      const skippedLines = failItems.length
+        ? "\n\n" + (lang === "ru" ? "_Пропущено:_" : "_Skipped:_") + "\n" + failItems.map(i => "  • " + m.escapeMd(i.verdict.reason)).join("\n")
+        : "";
+      const message = (result.message ? result.message + "\n\n" : "") + intro + "\n" + numbered.join("\n") + skippedLines;
+      const yesLabel = lang === "ru" ? "Да, всё (" + intents.length + ")" : "Yes, all " + intents.length;
+      const noLabel = lang === "ru" ? "Отмена" : "Cancel";
+      await safeReply(ctx, message, {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [[
+            { text: yesLabel, callback_data: "yes:" + token },
+            { text: noLabel,  callback_data: "no:"  + token },
+          ]],
+        },
+      });
+      return;
+    }
   });
 
   // ── BRAIN-DUMP TAIL ──
@@ -480,23 +517,49 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
 
   await db.withUserLock(u.id, async () => {
     state = await db.loadState(prisma, u.id);
+    const intents = entry.intents || (entry.intent ? [entry.intent] : []);
+    const applied = [];
+    const failed = [];
     try {
-      const r = applyIntent(state, entry.intent);
-      await db.saveState(prisma, u.id, r.state);
-      const summary = "✓ " + describeIntent(entry.intent, r.state);
-      await safeEdit(ctx, summary, Object.assign({ parse_mode: "Markdown" }, clearButtons));
-      if (entry.intent.kind === "reset") {
+      for (const intent of intents) {
+        // Re-validate against the CURRENT state — applying intent N may
+        // have changed conditions for intent N+1 (e.g. balance check).
+        const todayStr = m.today(state.timezone || "UTC");
+        const v = require("./validator").validateIntent(state, intent, todayStr);
+        if (!v.ok) { failed.push({ intent, reason: v.reason }); continue; }
+        try {
+          const r = applyIntent(state, intent);
+          state = r.state;
+          applied.push(intent);
+        } catch (e) {
+          failed.push({ intent, reason: e.message });
+        }
+      }
+      if (applied.length > 0) await db.saveState(prisma, u.id, state);
+
+      // Edit the original card to a summary of what landed.
+      const summaryLines = applied.map(i => "✓ " + describeIntent(i, state));
+      const failedLines = failed.map(f => (lang === "ru" ? "✗ " : "✗ ") + describeIntent(f.intent, state) + " — _" + m.escapeMd(f.reason) + "_");
+      const summary = summaryLines.concat(failedLines).join("\n");
+      await safeEdit(ctx, summary || (lang === "ru" ? "Ничего не применили." : "Nothing applied."), Object.assign({ parse_mode: "Markdown" }, clearButtons));
+
+      // Reset short-circuit: same flow as before, only when reset was the SOLE applied intent.
+      if (applied.length === 1 && applied[0].kind === "reset") {
         await safeReply(ctx, lang === "ru" ? "Сброшено. Сколько примерно сейчас на счёте?" : "Reset done. What's roughly in your account?");
         return;
       }
-      const eventId = r.state.events && r.state.events.length
-        ? r.state.events[r.state.events.length - 1].id
+      if (applied.length === 0) return;
+
+      // Hero + undo for the most-recent applied event.
+      const eventId = state.events && state.events.length
+        ? state.events[state.events.length - 1].id
         : null;
       const opts = { parse_mode: "Markdown" };
-      if (eventId && entry.intent.kind !== "undo_last") {
+      const lastApplied = applied[applied.length - 1];
+      if (eventId && lastApplied.kind !== "undo_last") {
         opts.reply_markup = undoKeyboard(eventId, lang).reply_markup;
       }
-      await safeReply(ctx, heroLineWithInsight(r.state, lang), opts);
+      await safeReply(ctx, heroLineWithInsight(state, lang), opts);
     } catch (e) {
       console.error("[v5 confirm apply]", e);
       await safeEdit(ctx, "_" + m.escapeMd(e.message) + "_", Object.assign({ parse_mode: "Markdown" }, clearButtons));

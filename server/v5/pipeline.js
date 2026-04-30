@@ -5,6 +5,7 @@
 //   { kind: "onboarding", reply, intent?, draft?, clearDraft?, done }
 //   { kind: "talk", message }
 //   { kind: "do", message, intent, verdict }
+//   { kind: "do_batch", message, items: [{intent, verdict}, ...] }   // brain-dump
 //   { kind: "decision", message, simulate }     // "can I afford X"
 //
 // Pipeline NEVER mutates state. Bot applies intents after the user confirms.
@@ -51,6 +52,22 @@ async function processMessage(state, userMessage, history, options) {
       message: proposal.message,
       intent: proposal.intent,
       verdict,
+    };
+  }
+
+  // do_batch: 2-5 intents from a brain dump. Validate each independently
+  // against the SAME state snapshot (we don't simulate sequencing here —
+  // the bot applies them in order under one lock and reports failures).
+  if (proposal.mode === "do_batch" && Array.isArray(proposal.intents) && proposal.intents.length > 0) {
+    const todayStr = m.today((state && state.timezone) || "UTC");
+    const items = proposal.intents.map(intent => ({
+      intent,
+      verdict: validateIntent(state, intent, todayStr),
+    }));
+    return {
+      kind: "do_batch",
+      message: proposal.message,
+      items,
     };
   }
 
