@@ -172,12 +172,19 @@ async function safeEdit(ctx, text, options) {
   }
 }
 
+// Last-AI-output ring buffer per user. Powers `/debug` so we can
+// inspect what the AI actually returned without bothering the user.
+const { recordAiRaw, getAiRaw } = require("./ai-debug");
+
 // ── PROCESS A USER MESSAGE ────────────────────────
 // `options` is harness-only — `_aiCall` injects an alternate AI backend
 // for tests. Production callers don't pass it.
 async function processText(prisma, ctx, telegramId, text, options) {
   const u = await db.resolveUser(prisma, "tg_" + telegramId);
   await ctx.replyWithChatAction("typing").catch(() => {});
+
+  // Pass userId so ai.js can record raw output for /debug.
+  options = Object.assign({}, options || {}, { _debugUserId: telegramId });
 
   // Set to true inside the lock if we need to tail-process the same
   // message AFTER releasing the lock (brain-dump capture). Defined
@@ -455,6 +462,23 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     });
     return;
   }
+  if (command === "debug") {
+    // Production dev tool — show the last few raw AI responses for this
+    // user. Lets you (the dev / Claude) inspect what the AI saw without
+    // asking the user to retest. Truncates each entry for chat readability.
+    const arr = getAiRaw(telegramId);
+    if (arr.length === 0) {
+      await safeReply(ctx, "_No AI calls captured yet for this session._", { parse_mode: "Markdown" });
+      return;
+    }
+    const lines = arr.map((e, i) => {
+      const ago = Math.max(0, Math.round((Date.now() - e.ts) / 1000)) + "s ago";
+      const r = e.raw && e.raw.length > 1500 ? e.raw.slice(0, 1500) + "…" : (e.raw || "");
+      return "*[ai " + (i + 1) + " · " + ago + "]*\n```\n" + r.replace(/`/g, "'") + "\n```";
+    });
+    await safeReply(ctx, lines.join("\n\n"), { parse_mode: "Markdown" });
+    return;
+  }
 }
 
 // processCallbackData handles inline-button taps (yes/no/undo).
@@ -576,6 +600,7 @@ function attach(prisma) {
   bot.command("undo",  (ctx) => processCommand(prisma, ctx, ctx.from.id, "undo").catch(e => console.error("[v5 /undo]", e)));
   bot.command("reset", (ctx) => processCommand(prisma, ctx, ctx.from.id, "reset").catch(e => console.error("[v5 /reset]", e)));
   bot.command("app",   (ctx) => processCommand(prisma, ctx, ctx.from.id, "app").catch(e => console.error("[v5 /app]", e)));
+  bot.command("debug", (ctx) => processCommand(prisma, ctx, ctx.from.id, "debug").catch(e => console.error("[v5 /debug]", e)));
 
   bot.on("message:text", async (ctx) => {
     const text = ctx.message.text;

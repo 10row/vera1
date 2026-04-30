@@ -1,0 +1,65 @@
+{
+  "seed": "I have 5000 dollars, paid on the 15th of every month",
+  "expected": [
+    "setup_account"
+  ],
+  "count": 6,
+  "passed": 6,
+  "results": [
+    {
+      "variant": "every month on the 15th i get paid 5000 dollars",
+      "intents": [
+        "setup_account"
+      ],
+      "missing": [],
+      "extra": [],
+      "pass": true
+    },
+    {
+      "variant": "5k comes in monthly on the 15th",
+      "intents": [
+        "setup_account"
+      ],
+      "missing": [],
+      "extra": [],
+      "pass": true
+    },
+    {
+      "variant": "so i receive $5000, it's like on the 15th of each month, every month basically",
+      "intents": [
+        "setup_account"
+      ],
+      "missing": [],
+      "extra": [],
+      "pass": true
+    },
+    {
+      "variant": "monthly payment: 5000 dollars on the 15th",
+      "intents": [
+        "setup_account"
+      ],
+      "missing": [],
+      "extra": [],
+      "pass": true
+    },
+    {
+      "variant": "paid 5000 bucks the 15th each month",
+      "intents": [
+        "setup_account"
+      ],
+      "missing": [],
+      "extra": [],
+      "pass": true
+    },
+    {
+      "variant": "i get 5000 dollars on the 15th every single month",
+      "intents": [
+        "setup_account"
+      ],
+      "missing": [],
+      "extra": [],
+      "pass": true
+    }
+  ],
+  "timestamp": "2026-04-30T16:24:31.630Z"
+}

@@ -158,6 +158,10 @@ async function parseProposal(state, userMessage, history, options) {
   let raw = "";
   try {
     raw = await aiCall(msgs);
+    // Record to debug ring buffer if userId was passed (bot.js sets this).
+    if (opts._debugUserId != null) {
+      try { require("./ai-debug").recordAiRaw(opts._debugUserId, raw); } catch {}
+    }
   } catch (e) {
     return {
       mode: "talk",

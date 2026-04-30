@@ -41,14 +41,34 @@ function getBackend() {
       const nudge = "\n\nRespond with a single JSON object only — no prose, no code fences.";
       const r = await ant.messages.create({
         model: "claude-haiku-4-5",
-        max_tokens: 600,
+        // Judge calls produce verbose JSON (critique[] + opportunities[]);
+        // 600 was too tight and truncated responses mid-string. 1500 fits
+        // every judge call we've seen with headroom.
+        max_tokens: 1500,
         system: system + nudge,
         messages: conv,
       });
       // Claude returns content blocks; concat text blocks.
-      const text = (r.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
-      // If Claude wrapped in code fences, strip them.
-      return text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
+      let text = (r.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
+      // Strip code fences if present.
+      text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
+      // If Claude added explanatory prose before/after the JSON, extract
+      // the first {…} block. Brace-matching that handles nested objects.
+      const start = text.indexOf("{");
+      if (start > 0) text = text.slice(start);
+      if (text.startsWith("{")) {
+        let depth = 0, inStr = false, esc = false, end = -1;
+        for (let i = 0; i < text.length; i++) {
+          const c = text[i];
+          if (esc) { esc = false; continue; }
+          if (inStr) { if (c === "\\") esc = true; else if (c === '"') inStr = false; continue; }
+          if (c === '"') inStr = true;
+          else if (c === "{") depth++;
+          else if (c === "}") { depth--; if (depth === 0) { end = i; break; } }
+        }
+        if (end > 0) text = text.slice(0, end + 1);
+      }
+      return text;
     };
     cached.label = "anthropic/claude-haiku-4-5";
     return cached;

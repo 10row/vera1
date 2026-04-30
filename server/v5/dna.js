@@ -207,6 +207,29 @@ function compute(state) {
         name: node.name,
         last30: m.toMoney(c.total30, sym),
         share: Math.round((c.total30 / discretionary30) * 100) + "%",
+        // Mark "other" specially — it means uncategorized spends, not a real
+        // leak. The bot should nudge the user to add notes so we can
+        // categorize properly.
+        kind: node.name === "other" ? "uncategorized" : "real",
+      });
+    }
+  }
+
+  // ── COUNT MILESTONES ──
+  // Categories that crossed a notable count threshold this week (e.g. 5
+  // coffees, 3 take-out lunches). The AI can surface as a friendly "your
+  // usual"-style aside or a "want a budget?" prompt.
+  const milestones = [];
+  for (const node of categoryNodes) {
+    if (node.name === "other") continue;
+    const c = byCategory[node.name];
+    // Count this category's 7d transactions explicitly.
+    const last7Count = txs.filter(t => t.date >= day7 && categorize(t.note) === node.name).length;
+    if (last7Count >= 5) {
+      milestones.push({
+        name: node.name,
+        count7: last7Count,
+        total7: m.toMoney(c.total7, sym),
       });
     }
   }
@@ -223,6 +246,7 @@ function compute(state) {
     topCategories: topCats.slice(0, 3).map(c => ({ name: c.name, last30: c.last30 })),
     trends,
     leaks,
+    milestones,
   };
 
   return {
@@ -278,12 +302,18 @@ function renderForPrompt(graph) {
   }
   if (graph.summary.leaks && graph.summary.leaks.length) {
     lines.push("- BIGGEST DISCRETIONARY LEAKS: " + graph.summary.leaks
-      .map(l => l.name + " (" + l.last30 + " = " + l.share + " of discretionary)").join(", "));
+      .map(l => l.name + " (" + l.last30 + " = " + l.share + " of discretionary"
+        + (l.kind === "uncategorized" ? "; UNCATEGORIZED — nudge user to tag notes" : "")
+        + ")").join(", "));
   }
   if (graph.summary.trends && Object.keys(graph.summary.trends).length) {
     const trendStrs = Object.entries(graph.summary.trends)
       .map(([cat, t]) => cat + " up " + t.ratio + " (" + t.last7 + " vs ~" + t.priorWeekly + ")");
     lines.push("- TRENDING UP: " + trendStrs.join(", "));
+  }
+  if (graph.summary.milestones && graph.summary.milestones.length) {
+    lines.push("- 7-DAY COUNT MILESTONES: " + graph.summary.milestones
+      .map(m => m.name + " (" + m.count7 + "x this week, " + m.total7 + ")").join(", "));
   }
 
   const cats = graph.nodes.filter(n => n.type === "category" && n.transactions >= 3);

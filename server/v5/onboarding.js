@@ -14,12 +14,23 @@ const GREETING_RE = /^\s*(\/start|hi+|hello+|hey+|yo+|sup|hola|namaste|howdy|hii
 
 const SKIP_RE = /^\s*(skip|none|no|n\/a|na|later|not\s*sure|nope|idk|don'?t\s*know|whatever|doesn'?t\s*matter|irregular|varies|пропусти(ть)?|нет|неважно)\s*[!.?]*\s*$/i;
 
-// Word-numbers for "five thousand" etc. Coverage is rough — most users just type digits.
+// Word-numbers for "five thousand", "пять тысяч" etc. Most users type digits;
+// these handle the long-tail phrasings (especially mid-onboarding voice notes).
 const WORD_NUMBERS = {
+  // English
   zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
   eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
   eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70,
   eighty: 80, ninety: 90, hundred: 100, thousand: 1000, million: 1000000,
+  // Russian — masculine + feminine variants where forms differ in money context
+  ноль: 0, "один": 1, одна: 1, два: 2, две: 2, три: 3, четыре: 4, пять: 5, шесть: 6,
+  семь: 7, восемь: 8, девять: 9, десять: 10,
+  одиннадцать: 11, двенадцать: 12, тринадцать: 13, четырнадцать: 14, пятнадцать: 15,
+  шестнадцать: 16, семнадцать: 17, восемнадцать: 18, девятнадцать: 19,
+  двадцать: 20, тридцать: 30, сорок: 40, пятьдесят: 50, шестьдесят: 60, семьдесят: 70,
+  восемьдесят: 80, девяносто: 90, сто: 100,
+  тысяч: 1000, тысячи: 1000, тысяча: 1000, тыс: 1000,
+  миллион: 1000000, миллионов: 1000000, млн: 1000000,
 };
 
 // parseAmount — natural-language money → cents. Returns null if no number.
@@ -33,20 +44,25 @@ function parseAmount(text) {
   const s = String(text).toLowerCase();
 
   // Strip currency words / symbols, leave digits + suffixes.
-  // Try: optional currency mark, digits, optional decimal, optional k/m suffix.
-  const num = s.replace(/,/g, "").match(/(?:\$|usd|gbp|eur|rub|₽|£|€)?\s*(\d+(?:\.\d+)?)\s*(k|m|thousand|million|grand)?/);
+  // Suffix alternates include English (k, m, grand) AND Russian
+  // (к/тыс/тысяч/млн). The "к" Cyrillic-K is anchored after a digit so
+  // it can't match arbitrary words.
+  const num = s.replace(/,/g, "").match(/(?:\$|usd|gbp|eur|rub|₽|£|€)?\s*(\d+(?:\.\d+)?)\s*(k|m|thousand|million|grand|к|тыс(?:\.|яч|яча|ячи)?|млн)?\b/);
   if (num) {
     let n = parseFloat(num[1]);
     const sfx = num[2];
-    if (sfx === "k" || sfx === "thousand" || sfx === "grand") n *= 1000;
-    if (sfx === "m" || sfx === "million") n *= 1000000;
+    if (sfx === "k" || sfx === "thousand" || sfx === "grand" || sfx === "к"
+        || (sfx && /^тыс/.test(sfx))) n *= 1000;
+    if (sfx === "m" || sfx === "million" || sfx === "млн") n *= 1000000;
     if (Number.isFinite(n) && n >= 0 && n < 100000000) {
       return Math.round(n * 100);
     }
   }
 
-  // Word-number fallback: "five thousand", "two hundred"
-  const tokens = s.replace(/[^a-z\s]/g, " ").split(/\s+/).filter(t => WORD_NUMBERS[t] != null);
+  // Word-number fallback: "five thousand", "two hundred", "пять тысяч",
+  // "около пяти тыс". Tokenizer keeps Latin AND Cyrillic letters so
+  // Russian word-numbers survive into the lookup.
+  const tokens = s.replace(/[^a-zа-яё\s]/g, " ").split(/\s+/).filter(t => WORD_NUMBERS[t] != null);
   if (tokens.length > 0) {
     let total = 0, current = 0;
     for (const tok of tokens) {
@@ -128,12 +144,40 @@ function parsePayday(text, todayStr) {
     return m.addDays(todayStr, add);
   }
 
-  // Day of month: "the 15th", "15th", "the 1st", "on the 5th"
-  const dom = s.match(/\b(?:the\s+|on\s+the\s+)?(\d{1,2})(st|nd|rd|th)?\b/);
+  // Day of month — STRICT. Bare digits ("5") are NOT a date in our flow:
+  // the user is more likely giving a balance. Require explicit ordinal /
+  // date marker so "у меня 5000 рублей" doesn't get parsed as "5th".
+  // English: "the 15th" / "15th" / "on the 1st"
+  // Russian: "15-го" / "15го" / "15 числа" / "пятнадцатого"
+  // Note on \b: JavaScript \b uses \w = [A-Za-z0-9_] by default, so it
+  // does NOT see Cyrillic word boundaries. Russian patterns use the /u
+  // flag + Unicode property escape \p{L} (or explicit non-letter
+  // lookaround) to fire correctly. English patterns keep \b.
+  const dom =
+    s.match(/\b(?:the\s+|on\s+the\s+)(\d{1,2})(?:st|nd|rd|th)?\b/) ||
+    s.match(/\b(\d{1,2})(st|nd|rd|th)\b/) ||
+    s.match(/(?:^|\s|-)(\d{1,2})[-\s]?(?:го|ое|е|ого)(?=\s|$|[^\p{L}])/u) ||
+    s.match(/(?:^|\s)(\d{1,2})\s+числа(?=\s|$|[^\p{L}])/u);
   if (dom) {
     const d = parseInt(dom[1], 10);
     if (d >= 1 && d <= 31) {
       return nextDayOfMonth(d, todayStr);
+    }
+  }
+
+  // Russian ordinal-word days: "пятого" / "пятнадцатого" / "первого".
+  const RU_ORDINAL_DAY = {
+    "первого": 1, "второго": 2, "третьего": 3, "четвертого": 4, "четвёртого": 4,
+    "пятого": 5, "шестого": 6, "седьмого": 7, "восьмого": 8, "девятого": 9,
+    "десятого": 10, "одиннадцатого": 11, "двенадцатого": 12, "тринадцатого": 13,
+    "четырнадцатого": 14, "пятнадцатого": 15, "шестнадцатого": 16,
+    "семнадцатого": 17, "восемнадцатого": 18, "девятнадцатого": 19,
+    "двадцатого": 20, "тридцатого": 30,
+  };
+  for (const word of Object.keys(RU_ORDINAL_DAY)) {
+    // Cyrillic-aware boundaries via lookarounds (\b doesn't work for ru).
+    if (new RegExp("(?:^|[^\\p{L}])" + word + "(?=$|[^\\p{L}])", "u").test(s)) {
+      return nextDayOfMonth(RU_ORDINAL_DAY[word], todayStr);
     }
   }
 
