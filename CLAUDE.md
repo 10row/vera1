@@ -25,8 +25,10 @@ node server/v5/harness/repro.js [--setup] [--balance=N] [--lang=en|ru] "<symptom
 
 ### 2. Goldratt root-cause analysis (in writing)
 Before proposing a fix, answer these in
-`bug-reports/<id>/01-goldratt.md`:
+`bug-reports/<id>/01-goldratt.md`. The order matters — technical
+analysis FIRST, then the goal layer, THEN the fix:
 
+**Technical layer:**
 1. **What MUST be true for this symptom to occur?** — list the
    preconditions. If you can't list them, you don't understand the bug.
 2. **Why does each precondition hold?** — trace each through the layer
@@ -34,13 +36,38 @@ Before proposing a fix, answer these in
 3. **Is there a single root that explains MULTIPLE symptoms?** — yes
    means you've hit the constraint. No means you're still on a
    downstream symptom.
+
+**Goal layer (THE step that prevents symptom-fixes):**
+
+3.5. **What was the user TRYING to do when they triggered the symptom?**
+     Not what the bot did wrong — what the user wanted to ACHIEVE. List
+     all plausible goals (often there are 2-3 different intents behind
+     the same tap/message).
+
+3.6. **Does the candidate fix serve the goal, or just patch the
+     mechanism?** A fix that closes the technical gap but doesn't make
+     the user's actual goal easier is half a fix.
+
+3.7. **If multiple goals, which is most common AND most damaging when
+     missed?** That's the one the fix MUST serve. The others are
+     secondary. (Stress-test concept proved this in
+     `bug-reports/_meta/goal-layer-stress-test.md`: "label the undo
+     button" addresses anxious users but ignores the most-common
+     "dismiss the hero" intent — the real fix decouples hero from
+     undo.)
+
+**Closeout:**
 4. **What assumption is forcing the conflict?** — name the assumption.
    Is it actually true? (Often it isn't.)
 5. **Negative branch — what could the proposed fix break?** — name 1+
    risk and the mitigation.
 
-**Stop rule:** If the proposed fix doesn't also explain at least one
-*other* observed symptom, you may not be at the root. Re-run Q3.
+**Stop rules:**
+- If the proposed fix doesn't also explain at least one *other*
+  observed symptom, you may not be at the root. Re-run Q3.
+- If you can't name the user's goal in 1 sentence, you don't understand
+  what they wanted. Stop. Re-read the transcript. The fix you ship
+  without G1 will likely solve a problem the user didn't have.
 
 ### 3. Variant explosion before shipping
 ```
@@ -100,43 +127,31 @@ without a matching `bug-reports/<id>/` from the last 24h is suspect.
 
 ---
 
-## Vera-specific edges to remember
+## Vera edges + things you've gotten wrong (do not repeat)
 
-- **Onboarding is deterministic, not AI.** `server/v5/onboarding.js`
-  parses balance + payday with English-centric regexes. Russian users
-  hit this; Russian phrasings need explicit support.
-- **v5 intents are sparse.** Only: `setup_account`, `adjust_balance`,
+- **Onboarding is deterministic, not AI** (`server/v5/onboarding.js`).
+  Parsers must handle EN + RU, including Cyrillic word boundaries.
+- **v5 intents are sparse:** `setup_account`, `adjust_balance`,
   `add_bill`, `remove_bill`, `record_spend`, `record_income`,
-  `update_payday`, `undo_last`, `reset`. No `add_envelope`,
-  `add_budget`, `add_goal`. Brain-dumps that mention "save X for Y" or
-  "$X budget for category" have nowhere to land — that's the income/
-  budget data-model gap.
-- **Mini App reads `d.view`, `d.recentTransactions`, `d.heatmap`** —
-  not `d.pic`. The translation layer is in
-  `server/v5/index.js` `v5ToV4View()`.
-- **Brain-dump capture re-routes the message** post-onboarding through
-  `processText` (outside the lock — re-entering would deadlock).
-- **`do_batch` shows ONE combined card** with a single Yes-all button
-  rather than v4's "Step N of M" wizard.
-- **`/debug` returns the AI's raw last response** — use it to debug
-  production without bothering the user.
+  `update_payday`, `undo_last`, `reset`. Brain-dumps mentioning "save
+  X for Y" / "$X budget for cat." have nowhere to land — data-model gap.
+- **Mini App reads `d.view`/`d.recentTransactions`/`d.heatmap`** — not
+  `d.pic`. Translation in `server/v5/index.js` `v5ToV4View()`.
+- **Brain-dump capture re-routes the message** post-onboarding via
+  `processText` OUTSIDE the lock (re-entering deadlocks).
+- **`do_batch` shows ONE combined card** with single Yes-all (not v4's
+  "Step N of M" wizard).
+- **`/debug` returns last 5 raw AI responses** for that user.
+- **Don't patch prompt without reproducing** — every "AI needs better
+  rules" patch has been undone within 24h.
+- **Don't treat data-model gaps as prompt problems** — when AI has
+  nowhere to put a fact, no prompt fix saves you.
+- **Don't ship at "unit tests pass"** — the unit tests are not the user.
+  Variants are.
+- **Don't ask the user to retest** — saying "try it now" = protocol
+  failed. The variant tool tries it for you.
 
 ---
 
-## Things you've gotten wrong before (do not repeat)
-
-- Patching prompt without reproducing — every "AI just needs better
-  rules" patch has been undone within 24h. Reproduce first.
-- Treating the data model as the prompt's problem — when AI has
-  nowhere to put a fact, no prompt fix saves you. Add the field.
-- Shipping before variant explosion — you've shipped at "looks green
-  in unit tests" four times. The unit tests are not the user.
-- Asking the user to retest — every time you say "try it now," you
-  have failed the protocol. The variant tool tries it for you.
-
----
-
-This protocol replaces "I think this fix should work." If you find
-yourself believing a fix without artifacts, stop and run the protocol.
-The 30 seconds of variant runs has saved hours of user back-and-forth
-in this codebase.
+This protocol replaces "I think this fix should work." 30 seconds of
+variant runs has saved hours of user back-and-forth in this codebase.

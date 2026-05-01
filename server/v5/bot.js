@@ -97,13 +97,42 @@ function confirmKeyboard(token, lang) {
   };
 }
 
-function undoKeyboard(eventId, lang) {
-  const label = lang === "ru" ? "Отменить" : "Undo";
+// undoKeyboard — generates the "Undo X" button shown after an applied
+// intent. The label MUST say what it'll undo (else users tap it as a
+// generic "back" button and nuke real work — see persona test 0003.4
+// where Mike, Carol, and Sam all lost confirmed bills via accidental
+// undo). The label is derived from the most-recent applied intent.
+function undoKeyboard(eventId, lang, lastIntent) {
+  const undoWord = lang === "ru" ? "Отменить" : "Undo";
+  let label = undoWord;
+  if (lastIntent && lastIntent.kind) {
+    const desc = describeUndoTarget(lastIntent, lang);
+    if (desc) label = undoWord + ": " + desc;
+  }
+  // Telegram inline-button text caps around 64 chars on phones; keep it tight.
+  if (label.length > 60) label = label.slice(0, 57) + "…";
   return {
     reply_markup: {
       inline_keyboard: [[{ text: label, callback_data: "undo:" + eventId }]],
     },
   };
+}
+
+// describeUndoTarget — short noun-phrase for the undo label. Doesn't
+// include amounts/dates — too long. Just kind + name.
+function describeUndoTarget(intent, lang) {
+  const p = intent.params || {};
+  const ru = lang === "ru";
+  switch (intent.kind) {
+    case "adjust_balance":  return ru ? "коррекция баланса" : "balance change";
+    case "add_bill":        return (ru ? "счёт " : "bill ") + (p.name || "");
+    case "remove_bill":     return (ru ? "удаление " : "remove ") + (p.name || "");
+    case "record_spend":    return (ru ? "трата " : "spend ") + (p.note || "");
+    case "record_income":   return (ru ? "доход " : "income ") + (p.note || "");
+    case "update_payday":   return ru ? "изменение зарплаты" : "payday change";
+    case "reset":           return ru ? "сброс" : "reset";
+    default:                return "";
+  }
 }
 
 // ── INTENT FORMATTING ─────────────────────────────
@@ -580,29 +609,44 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
       }
       if (applied.length > 0) await db.saveState(prisma, u.id, state);
 
-      // Edit the original card to a summary of what landed.
+      // No inline undo button. Goal-Layer iteration: even on the
+      // confirm card, the button gets tapped accidentally by anxious
+      // users (Carol persona, turns 13/37/63/71). Goals #1 (dismiss
+      // hero) and #4 (explore button) drive the accidents — the
+      // BUTTON'S EXISTENCE is the problem. Removing it kills both.
+      // Goal #3 (real mistake) is preserved via the typed /undo
+      // command, which requires intent (no fat-finger).
+      //
+      // Confirm card: ✓ summary, NO buttons. Hero: pure info, NO
+      // buttons. /undo command: explicit recovery for the rare real
+      // mistake case.
       const summaryLines = applied.map(i => "✓ " + describeIntent(i, state));
       const failedLines = failed.map(f => (lang === "ru" ? "✗ " : "✗ ") + describeIntent(f.intent, state) + " — _" + m.escapeMd(f.reason) + "_");
-      const summary = summaryLines.concat(failedLines).join("\n");
-      await safeEdit(ctx, summary || (lang === "ru" ? "Ничего не применили." : "Nothing applied."), Object.assign({ parse_mode: "Markdown" }, clearButtons));
+      let summary = summaryLines.concat(failedLines).join("\n");
 
-      // Reset short-circuit: same flow as before, only when reset was the SOLE applied intent.
-      if (applied.length === 1 && applied[0].kind === "reset") {
+      // Add a soft hint about /undo on the FIRST confirmed action of a
+      // session — educates without nagging. We only add it when the
+      // confirm card is showing a single applied action so the message
+      // stays tight.
+      if (applied.length === 1 && applied[0].kind !== "undo_last" && applied[0].kind !== "reset") {
+        const hint = lang === "ru"
+          ? "\n_(если это ошибка — напиши /undo)_"
+          : "\n_(if this was a mistake, type /undo)_";
+        summary += hint;
+      }
+
+      const isResetOnly = applied.length === 1 && applied[0].kind === "reset";
+      await safeEdit(ctx, summary || (lang === "ru" ? "Ничего не применили." : "Nothing applied."),
+        Object.assign({ parse_mode: "Markdown" }, clearButtons));
+
+      if (isResetOnly) {
         await safeReply(ctx, lang === "ru" ? "Сброшено. Сколько примерно сейчас на счёте?" : "Reset done. What's roughly in your account?");
         return;
       }
       if (applied.length === 0) return;
 
-      // Hero + undo for the most-recent applied event.
-      const eventId = state.events && state.events.length
-        ? state.events[state.events.length - 1].id
-        : null;
-      const opts = { parse_mode: "Markdown" };
-      const lastApplied = applied[applied.length - 1];
-      if (eventId && lastApplied.kind !== "undo_last") {
-        opts.reply_markup = undoKeyboard(eventId, lang).reply_markup;
-      }
-      await safeReply(ctx, heroLineWithInsight(state, lang), opts);
+      // Hero is read-only. Pure status. No buttons.
+      await safeReply(ctx, heroLineWithInsight(state, lang), { parse_mode: "Markdown" });
     } catch (e) {
       console.error("[v5 confirm apply]", e);
       await safeEdit(ctx, "_" + m.escapeMd(e.message) + "_", Object.assign({ parse_mode: "Markdown" }, clearButtons));
