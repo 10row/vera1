@@ -131,6 +131,9 @@ function applyIntent(state, intent) {
       const note = String(p.note || "").trim().slice(0, 120);
       const billKeyP = p.billKey ? m.billKey(p.billKey) : null;
       const isBillPayment = billKeyP && next.bills[billKeyP];
+      // Preserve original-currency info on the transaction so the feed
+      // can show "₫200,000 (≈$8.20)" instead of just $8.20.
+      const isForeign = p.originalCurrency && Number.isFinite(p.originalAmountCents) && p.originalAmountCents > 0;
 
       next.balanceCents -= amt;
       next.transactions.push({
@@ -139,6 +142,8 @@ function applyIntent(state, intent) {
         amountCents: -amt,
         note: note || (isBillPayment ? next.bills[billKeyP].name : ""),
         billKey: isBillPayment ? billKeyP : null,
+        originalAmountCents: isForeign ? Math.round(p.originalAmountCents) : null,
+        originalCurrency: isForeign ? p.originalCurrency.toUpperCase() : null,
         date: todayStr,
       });
 

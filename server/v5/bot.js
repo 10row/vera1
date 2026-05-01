@@ -157,10 +157,20 @@ function describeIntent(intent, state) {
       return lang === "ru"
         ? "Удалить счёт *" + E(p.name) + "*"
         : "Remove bill *" + E(p.name) + "*";
-    case "record_spend":
+    case "record_spend": {
+      // Foreign-currency spend: show both ("₫200,000 ≈ $8.20").
+      const isForeign = p.originalCurrency && Number.isFinite(p.originalAmountCents) && p.originalAmountCents > 0;
+      let amountPhrase;
+      if (isForeign) {
+        const ccy = require("./currency");
+        amountPhrase = ccy.fmt(p.originalAmountCents, p.originalCurrency) + " ≈ " + M(p.amountCents);
+      } else {
+        amountPhrase = M(p.amountCents);
+      }
       return lang === "ru"
-        ? "Расход " + M(p.amountCents) + (p.note ? " · " + E(p.note) : "")
-        : "Spend " + M(p.amountCents) + (p.note ? " · " + E(p.note) : "");
+        ? "Расход " + amountPhrase + (p.note ? " · " + E(p.note) : "")
+        : "Spend " + amountPhrase + (p.note ? " · " + E(p.note) : "");
+    }
     case "record_income":
       return lang === "ru"
         ? "Доход " + M(p.amountCents) + (p.note ? " · " + E(p.note) : "")
@@ -455,7 +465,34 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
       await safeReply(ctx, lang === "ru" ? "Сначала настроим — какой баланс?" : "Set up first — what's your balance?");
       return;
     }
-    await safeReply(ctx, heroLineWithInsight(state, lang), { parse_mode: "Markdown" });
+    // /today now shows hero + upcoming bills (next 14 days). Bills
+    // were getting forgotten — surfacing them on the daily check makes
+    // them present in the daily ritual without adding new concepts.
+    const lines = [heroLineWithInsight(state, lang)];
+    const sym = state.currencySymbol || "$";
+    const today = m.today(state.timezone || "UTC");
+    const upcomingBills = Object.values(state.bills || {})
+      .filter(b => !b.paidThisCycle)
+      .map(b => ({ ...b, daysUntil: m.daysBetween(today, b.dueDate) }))
+      .filter(b => b.daysUntil <= 14)
+      .sort((a, b) => a.daysUntil - b.daysUntil);
+    if (upcomingBills.length > 0) {
+      lines.push("");
+      lines.push(lang === "ru" ? "*Что впереди:*" : "*What's coming up:*");
+      for (const b of upcomingBills) {
+        const dueLine = b.daysUntil < 0
+          ? (lang === "ru" ? "просрочено " + Math.abs(b.daysUntil) + " дн" : "overdue " + Math.abs(b.daysUntil) + "d")
+          : b.daysUntil === 0
+            ? (lang === "ru" ? "сегодня" : "today")
+            : b.daysUntil === 1
+              ? (lang === "ru" ? "завтра" : "tomorrow")
+              : (lang === "ru" ? "через " + b.daysUntil + " дн" : "in " + b.daysUntil + "d");
+        lines.push("  • " + m.escapeMd(b.name) + " — " + m.toMoney(b.amountCents, sym) + " · " + dueLine);
+      }
+      lines.push("");
+      lines.push(lang === "ru" ? "_Когда оплатил, напиши «оплатил аренду» или «paid X»._" : "_When you pay one, just say \"paid rent\" or \"paid the phone bill\" — I'll mark it done._");
+    }
+    await safeReply(ctx, lines.join("\n"), { parse_mode: "Markdown" });
     return;
   }
   if (command === "undo") {
@@ -640,7 +677,14 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
         Object.assign({ parse_mode: "Markdown" }, clearButtons));
 
       if (isResetOnly) {
-        await safeReply(ctx, lang === "ru" ? "Сброшено. Сколько примерно сейчас на счёте?" : "Reset done. What's roughly in your account?");
+        // Welcome message after reset — properly re-introduces the bot
+        // rather than jumping straight to a balance question, which felt
+        // disorienting (user reported feeling lost mid-flow). Two-line
+        // intro then the same balance ask as fresh onboarding.
+        const welcome = lang === "ru"
+          ? "Сброшено ✅\n\nПривет, я *SpendYes* — твой денежный приятель. Я помогу следить за тратами, счетами и тем, сколько у тебя свободного времени до зарплаты.\n\nДавай начнём с начала: сколько примерно сейчас на счёте?"
+          : "Reset ✅\n\nHi, I'm *SpendYes* — your money buddy. I'll help you keep tabs on spending, bills, and how much daily wiggle-room you have until payday.\n\nLet's start from scratch: what's roughly in your account?";
+        await safeReply(ctx, welcome, { parse_mode: "Markdown" });
         return;
       }
       if (applied.length === 0) return;

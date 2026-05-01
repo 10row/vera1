@@ -106,6 +106,26 @@ async function processMessage(state, userMessage, history, options) {
   const proposal = await parseProposal(state, userMessage, history, options);
   const lang = state && state.language === "ru" ? "ru" : "en";
 
+  // ── FOREIGN-CURRENCY CONVERSION ──
+  // AI emits originalAmountCents + originalCurrency for foreign spends
+  // (Vietnam dong, etc.). Convert to base currency BEFORE the engine
+  // sees it so all downstream math / view stays in base currency.
+  // Both values are preserved on the intent for display.
+  const currency = require("./currency");
+  function convertOnce(intent) {
+    if (!intent || !intent.params) return intent;
+    const p = intent.params;
+    if (p.originalCurrency && Number.isFinite(p.originalAmountCents) && p.originalAmountCents > 0) {
+      const base = state.currency || "USD";
+      const converted = currency.convertCents(p.originalAmountCents, p.originalCurrency, base);
+      // Always overwrite amountCents from conversion (AI was told not to set it).
+      p.amountCents = converted;
+    }
+    return intent;
+  }
+  if (proposal.intent) convertOnce(proposal.intent);
+  if (Array.isArray(proposal.intents)) proposal.intents.forEach(convertOnce);
+
   // ── PROMISE-ACTION CHECK ──
   // If AI's text promises an action but no matching intent exists,
   // rewrite to an honest fallback. Better to admit confusion than ship a
