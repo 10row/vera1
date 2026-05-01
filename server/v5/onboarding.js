@@ -224,6 +224,15 @@ function handle(state, text, todayStr) {
         done: false,
       };
     }
+    // Reset escape (also catches users who keep typing "reset" as text).
+    if (/^\s*(reset|restart|start over|начать заново|сброс|сбросить)\s*[!.?]*\s*$/i.test(t)) {
+      return {
+        reply: lang === "ru"
+          ? "Чтобы начать заново — напиши /reset (со слешем)."
+          : "To start over, type /reset (with the slash).",
+        done: false,
+      };
+    }
     // Early skip — user wants out before giving a balance. Setup with
     // balance=0, irregular pay. They can fill it in later with
     // "actually I have X" / "got 5000".
@@ -270,6 +279,27 @@ function handle(state, text, todayStr) {
   }
 
   // PHASE 2: collect payday (or skip).
+  // Goal-Layer fix: explicit recognition of "reset / start over / restart"
+  // mid-onboarding so the user isn't trapped trying to escape. Also
+  // greetings like "hi / hey" — re-show the current question with
+  // context rather than the dry miss-message.
+  const RESET_RE = /^\s*(reset|restart|start over|начать заново|сброс|сбросить)\s*[!.?]*\s*$/i;
+  if (RESET_RE.test(t)) {
+    return {
+      reply: lang === "ru"
+        ? "Чтобы начать заново — напиши /reset (со слешем)."
+        : "To start over, type /reset (with the slash).",
+      done: false,
+    };
+  }
+  if (isGreeting) {
+    // User said "hi" — they're saying hello, not answering. Re-show the
+    // current question with full context.
+    return {
+      reply: copy.gotBalanceAskPayday(lang, draft.balanceCents, sym),
+      done: false,
+    };
+  }
   if (SKIP_RE.test(t)) {
     return {
       intent: {
@@ -341,14 +371,18 @@ const copy = {
       : "Got it — " + fmt + ". 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular.";
   },
   paydayMissOnce(L) {
+    // Goal-Layer fix: include CONTEXT (re-show the question) so the user
+    // doesn't get stuck repeating greetings into a question they can't see.
+    // User reported: "hi / oi / reset / hi" all got the dry skip-nudge
+    // because the original copy didn't say what was being asked.
     return L === "ru"
-      ? "Не понял дату. Попробуй *15-го*, *1 мая* — или *пропустить*, если зарплата нерегулярная."
-      : "Hmm, didn't catch a date. Try *\"the 15th\"*, *\"May 1\"* — or *\"skip\"* if your pay's irregular.";
+      ? "_(в шаге настройки — нужна дата зарплаты)_\nПопробуй *15-го*, *1 мая* — или напиши *пропустить*, если зарплата нерегулярная."
+      : "_(setup step — need your payday)_\nTry *\"the 15th\"*, *\"May 1\"*, or just say *skip* if your pay's irregular.";
   },
   paydayMissTwice(L) {
     return L === "ru"
-      ? "Не парься — скажи *пропустить* и поедем дальше, поправим потом."
-      : "No stress — just say *skip* and we'll move on. You can update it later.";
+      ? "_(всё ещё нужна дата зарплаты — или /reset чтобы начать заново)_\nДата вроде *15-го* или *30 апреля*. Или просто скажи *пропустить*."
+      : "_(still need a payday — or /reset to start over)_\nA date like *\"the 15th\"* or *\"May 1\"*. Or just say *skip*.";
   },
   allSet(L, amt, payday, sym) {
     const fmt = m.toMoney(amt, sym);
