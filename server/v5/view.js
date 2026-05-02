@@ -133,6 +133,18 @@ function heroLine(state, lang) {
       : "🔴 *Over* — short " + m.toMoney(v.deficitCents, sym) + " before payday.";
   }
 
+  // "Left today" piece — only show when the user has actually spent
+  // something today. Otherwise it equals dailyPace and is redundant.
+  // The phrasing answers the post-spend question "did that just put me
+  // over today's budget?" without forcing the user to do mental math.
+  const todayRem = Math.max(0, (v.dailyPaceCents || 0) - (v.todaySpentCents || 0));
+  const showLeftToday = (v.todaySpentCents || 0) > 0 && (v.dailyPaceCents || 0) > 0;
+  const leftTodayPiece = showLeftToday
+    ? (L === "ru"
+        ? m.toMoney(todayRem, sym) + " осталось сегодня · "
+        : m.toMoney(todayRem, sym) + " left today · ")
+    : "";
+
   // For irregular pay: lead with balance, suggest a daily horizon.
   if (irregular) {
     const word = v.status === "tight"
@@ -140,18 +152,18 @@ function heroLine(state, lang) {
       : (L === "ru" ? "*Спокойно*" : "*Calm*");
     const emoji = v.status === "tight" ? "🟡" : "🟢";
     return L === "ru"
-      ? emoji + " " + word + " — " + v.balanceFormatted + " на счёте, " + v.dailyPaceFormatted + "/день на месяц."
-      : emoji + " " + word + " — " + v.balanceFormatted + " on hand, " + v.dailyPaceFormatted + "/day for a month.";
+      ? emoji + " " + word + " — " + leftTodayPiece + v.balanceFormatted + " на счёте, " + v.dailyPaceFormatted + "/день на месяц."
+      : emoji + " " + word + " — " + leftTodayPiece + v.balanceFormatted + " on hand, " + v.dailyPaceFormatted + "/day for a month.";
   }
 
   if (v.status === "tight") {
     return L === "ru"
-      ? "🟡 *Впритык* — " + v.dailyPaceFormatted + "/день, " + v.daysToPayday + " дн до зарплаты."
-      : "🟡 *Tight* — " + v.dailyPaceFormatted + "/day, " + v.daysToPayday + " days to payday.";
+      ? "🟡 *Впритык* — " + leftTodayPiece + v.dailyPaceFormatted + "/день, " + v.daysToPayday + " дн до зарплаты."
+      : "🟡 *Tight* — " + leftTodayPiece + v.dailyPaceFormatted + "/day, " + v.daysToPayday + " days to payday.";
   }
   return L === "ru"
-    ? "🟢 *Спокойно* — " + v.dailyPaceFormatted + "/день, " + v.daysToPayday + " дн до зарплаты."
-    : "🟢 *Calm* — " + v.dailyPaceFormatted + "/day, " + v.daysToPayday + " days to payday.";
+    ? "🟢 *Спокойно* — " + leftTodayPiece + v.dailyPaceFormatted + "/день, " + v.daysToPayday + " дн до зарплаты."
+    : "🟢 *Calm* — " + leftTodayPiece + v.dailyPaceFormatted + "/day, " + v.daysToPayday + " days to payday.";
 }
 
 // heroInsight — optional second line for the hero card. Surfaces DNA-derived
