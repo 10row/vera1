@@ -132,6 +132,8 @@ function createMockChat(opts) {
         deleteMessage: async () => {},
         setMyCommands: async () => {},
         setChatMenuButton: async () => {},
+        unpinAllChatMessages: async () => {},
+        unpinChatMessage: async () => {},
       },
     };
   }

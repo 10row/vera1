@@ -284,15 +284,56 @@ function Hero(props) {
     v.state === "over" ? t("status.over") : v.state === "tight" ? t("status.tight") : t("status.calm")
   );
 
+  // Sub-line shows three quick-reference facts:
+  //   {balance in account} · {$/day pace} · {days to payday}
+  // Replaces the previous two-fact line — surfacing balance here means
+  // the user never has to scan/scroll for "how much do I actually have?"
+  // Short formatted ($2,140 not $2,140.00) keeps the strip dense + calm.
+  var balShort = v.balanceShort || v.balanceFormatted || "";
+  var paceShort = v.dailyPaceShort || v.dailyPaceFormatted || "";
+
   var heroNumber, heroLabel, subContext;
   if (v.state === "over") {
     heroNumber = v.deficitFormatted;
     heroLabel = t("miniapp.hero.overForPeriod");
-    subContext = t("miniapp.hero.afterPayday", { days: v.daysToPayday, pace: v.dailyPaceFormatted });
+    subContext = t("miniapp.hero.subContextOver", { balance: balShort, pace: paceShort });
   } else {
     heroNumber = v.todayRemainingFormatted;
     heroLabel = t("miniapp.hero.freeToday");
-    subContext = t("miniapp.hero.beforePayday", { pace: v.dailyPaceFormatted, days: v.daysToPayday });
+    var key = (v.daysToPayday === 1) ? "miniapp.hero.subContextSingleDay" : "miniapp.hero.subContext";
+    subContext = t(key, { balance: balShort, pace: paceShort, days: v.daysToPayday });
+  }
+
+  // Variance chip — informational ("today vs pace"), passive.
+  // Critical: this does NOT change the headline pace (pace stays frozen
+  // per Model B). It just acknowledges today's running delta so the user
+  // FEELS the win/cost without the goalpost moving.
+  // Hidden when there's no signal: no pace (over state), no spend yet
+  // today, or variance is exactly 0 (rare; not worth the row).
+  var varianceCents = v.varianceCents || 0;
+  var todaySpent = v.todaySpentCents || 0;
+  var paceCents = v.dailyPaceCents || 0;
+  var showVariance = paceCents > 0 && todaySpent > 0 && varianceCents !== 0;
+  var varianceChip = null;
+  if (showVariance) {
+    var isUnder = varianceCents > 0;
+    var chipColor = isUnder ? C.green : C.amber;
+    var chipBg = isUnder ? C.greenSoft : C.amberSoft;
+    var chipText = isUnder
+      ? t("miniapp.hero.under", { amount: v.varianceShort })
+      : t("miniapp.hero.over", { amount: v.varianceShort });
+    varianceChip = h("div", {
+      style: {
+        display: "inline-flex", alignItems: "center", gap: 6,
+        background: chipBg, color: chipColor,
+        fontSize: 11, fontWeight: 600,
+        padding: "5px 11px", borderRadius: 999,
+        marginTop: 12, letterSpacing: "0.02em",
+      },
+    },
+      h("span", { style: { width: 5, height: 5, borderRadius: "50%", background: chipColor } }),
+      chipText
+    );
   }
 
   return h("div", { style: { padding: "32px 20px 22px", textAlign: "center" } },
@@ -305,7 +346,8 @@ function Hero(props) {
       },
     }, heroNumber),
     h("div", { style: { fontSize: 13, color: C.sub, marginTop: 10, letterSpacing: "0.02em" } }, heroLabel),
-    h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, subContext)
+    h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, subContext),
+    varianceChip
   );
 }
 
@@ -315,11 +357,10 @@ function Hero(props) {
 function Heatmap(props) {
   var heatmap = props.heatmap || [];
   var dailyPace = props.dailyPaceCents || 0;
-  var sym = props.sym || "$";
-  var txs = props.txs || [];
-  var nameMap = props.nameMap || {};
-  var openState = useState(null);
-  var open = openState[0], setOpen = openState[1];
+  // Selected day is now controlled by Dashboard so the detail panel
+  // can render as a sibling card BELOW the heatmap (not nested inside).
+  var open = props.selectedDay || null;
+  var onSelectDay = props.onSelectDay || function() {};
   // tapHaptic is now file-scope (top of file).
 
   // Color thresholds: 0 spend = dim grey, <50% pace = green,
@@ -358,7 +399,7 @@ function Heatmap(props) {
         var isOpen = open === d.date;
         return h("div", {
           key: d.date,
-          onClick: function() { tapHaptic(); setOpen(isOpen ? null : d.date); },
+          onClick: function() { onSelectDay(d.date); },
           style: {
             aspectRatio: "1 / 1",
             background: isOpen ? C.text : col.bg,
@@ -372,12 +413,18 @@ function Heatmap(props) {
           },
         }, dayLabel(d.date));
       })
-    ),
-    open ? DayDetail({ date: open, txs: txs, sym: sym, nameMap: nameMap, today: heatmap[heatmap.length - 1] && heatmap[heatmap.length - 1].date }) : null
+    )
+    // Detail card is rendered by Dashboard as a sibling below the
+    // heatmap (not nested) so it gets full-width treatment matching
+    // TodayStrip styling — proper drawer feel, no scroll surprises.
   );
 }
 
-function DayDetail(props) {
+// DayDetailCard — full-width drawer below the heatmap showing the
+// selected day's spends. Styled to match TodayStrip so the visual
+// rhythm is consistent (the user sees TodayStrip → Heatmap → DayDetail
+// as the same family of cards). Animates in with fadeIn.
+function DayDetailCard(props) {
   var dayTxs = (props.txs || []).filter(function(tx) { return tx.date === props.date; });
   var total = dayTxs.reduce(function(a, tx) {
     if (tx.kind === "spend" || tx.kind === "bill_payment") return a + tx.amountCents;
@@ -387,34 +434,47 @@ function DayDetail(props) {
   var dateLabel = props.today ? relativeDay(props.date, props.today) : props.date;
   var isEmpty = dayTxs.length === 0;
   return h("div", {
-    style: { marginTop: 10, padding: "12px 14px", background: C.card, borderRadius: 10, border: "1px solid " + C.border },
+    style: { padding: "14px 16px 0", animation: "fadeIn 200ms ease" },
   },
-    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
-      h("div", { style: { fontSize: 12, fontWeight: 600 } }, dateLabel),
-      // Hide "$0.00 spent" when the day genuinely has nothing — it pretends
-      // there was activity when there wasn't. Just show the friendly empty
-      // state below.
+    h("div", {
+      style: {
+        background: C.card, border: "1px solid " + C.border, borderRadius: 12,
+        padding: "12px 14px",
+      },
+    },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isEmpty ? 0 : 10 } },
+        h("div", null,
+          h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, dateLabel)
+        ),
+        // Hide the "$X spent" chip when the day genuinely has nothing —
+        // it would pretend activity where there wasn't any. Empty state
+        // below conveys the truth.
+        isEmpty
+          ? null
+          : h("div", {
+              style: {
+                fontFamily: "'Lora',serif", fontSize: 16, color: C.text,
+              },
+            }, fmtMoney(total, props.sym))
+      ),
       isEmpty
-        ? null
-        : h("div", { style: { fontSize: 11, color: C.sub } }, t("miniapp.heatmap.spent", { amount: fmtMoney(total, props.sym) }))
-    ),
-    isEmpty
-      ? h("div", { style: { fontSize: 11, color: C.muted, padding: "6px 0", fontStyle: "italic" } }, t("miniapp.heatmap.empty"))
-      : dayTxs.map(function(tx) {
-          var lbl = txLabel(tx, props.nameMap);
-          return h("div", {
-            key: tx.id,
-            style: { display: "flex", justifyContent: "space-between", padding: "7px 0", fontSize: 12, borderTop: "1px solid " + C.border, alignItems: "center" },
-          },
-            h("div", { style: { flex: 1, overflow: "hidden", marginRight: 8 } },
-              h("div", { style: { color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
-              lbl.secondary ? h("div", { style: { color: C.muted, fontSize: 10, marginTop: 1 } }, lbl.secondary) : null
-            ),
-            h("div", { style: { color: tx.kind === "refund" ? C.green : C.text, fontFamily: "'Lora',serif" } },
-              (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), props.sym)
-            )
-          );
-        })
+        ? h("div", { style: { fontSize: 12, color: C.muted, padding: "8px 0 4px", fontStyle: "italic" } }, t("miniapp.heatmap.empty"))
+        : dayTxs.map(function(tx) {
+            var lbl = txLabel(tx, props.nameMap);
+            return h("div", {
+              key: tx.id,
+              style: { display: "flex", justifyContent: "space-between", padding: "9px 0", fontSize: 13, borderTop: "1px solid " + C.border, alignItems: "center" },
+            },
+              h("div", { style: { flex: 1, overflow: "hidden", marginRight: 10 } },
+                h("div", { style: { color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
+                lbl.secondary ? h("div", { style: { color: C.muted, fontSize: 11, marginTop: 2 } }, lbl.secondary) : null
+              ),
+              h("div", { style: { color: tx.kind === "refund" ? C.green : C.text, fontFamily: "'Lora',serif" } },
+                (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), props.sym)
+              )
+            );
+          })
+    )
   );
 }
 
@@ -1291,6 +1351,16 @@ function Dashboard(props) {
   var goals = envs.filter(function(e) { return e.kind === "goal"; });
   var nameMap = buildNameMap(envs);
 
+  // Selected heatmap day — lifted up from Heatmap so the detail panel
+  // can render as a full-width sibling BELOW the heatmap, not nested
+  // inside it. Tap a day → panel slides in below; tap same day → close.
+  var selectedDayState = useState(null);
+  var selectedDay = selectedDayState[0], setSelectedDay = selectedDayState[1];
+  function handleSelectDay(d) {
+    tapHaptic();
+    setSelectedDay(selectedDay === d ? null : d);
+  }
+
   // dueNow appears as part of bills card sort (most urgent first), not a separate section.
   bills.sort(function(a, b) {
     var da = a.daysUntilDue == null ? 9999 : a.daysUntilDue;
@@ -1304,12 +1374,24 @@ function Dashboard(props) {
     return dt.toISOString().slice(0, 10);
   }
 
+  // Reading order (AAA): Hero answers "can I spend?" → TodayStrip
+  // answers "how is right now?" → Heatmap shows the trend → bills/
+  // budgets/goals are actionables → History is the deep rear-view.
+  // TodayStrip used to be below the heatmap; that buried the most
+  // actionable card under historical context.
   return h("div", null,
     h(Hero, { view: v, sid: props.sid }),
     h(FirstTimeCard, null),
-    h(Heatmap, { heatmap: heatmap, dailyPaceCents: v.dailyPaceCents, sym: sym, txs: txs, nameMap: nameMap }),
-    h(AnticipationStrip, { envelopes: bills, sym: sym }),
     h(TodayStrip, { view: v, txs: txs, today: today, nameMap: nameMap }),
+    h(Heatmap, {
+      heatmap: heatmap, dailyPaceCents: v.dailyPaceCents, sym: sym,
+      txs: txs, nameMap: nameMap,
+      selectedDay: selectedDay, onSelectDay: handleSelectDay,
+    }),
+    selectedDay
+      ? h(DayDetailCard, { date: selectedDay, txs: txs, sym: sym, nameMap: nameMap, today: today })
+      : null,
+    h(AnticipationStrip, { envelopes: bills, sym: sym }),
     bills.length > 0 ? h("div", null,
       h(DueBanner, { envelopes: bills, sym: sym }),
       h(SectionHeader, { icon: "📌", title: t("miniapp.bills.label"), count: bills.length }),

@@ -504,6 +504,23 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     const u = await db.resolveUser(prisma, "tg_" + telegramId);
     const state = await db.loadState(prisma, u.id);
     const lang = state.language === "ru" ? "ru" : "en";
+    // One-time cleanup: v4 builds pinned a hero status message via
+    // pinChatMessage. v5 doesn't pin, but the v4 pin lingers in chats
+    // because Telegram never auto-unpins. Unpin everything once on
+    // first /start after upgrade. Best-effort, never blocks the user.
+    if (!state.legacyPinCleared) {
+      try {
+        const chatId = ctx.chat ? ctx.chat.id : (ctx.from && ctx.from.id);
+        if (chatId && ctx.api && typeof ctx.api.unpinAllChatMessages === "function") {
+          await ctx.api.unpinAllChatMessages(chatId);
+        }
+      } catch (e) {
+        // Ignore — pinning permission may be denied; cleanup is non-essential.
+      }
+      state.legacyPinCleared = true;
+      state.pinnedMessageId = null; // wipe the v4 pointer too
+      await db.saveState(prisma, u.id, state);
+    }
     if (!state.setup) {
       await processText(prisma, ctx, telegramId, "/start");
     } else {

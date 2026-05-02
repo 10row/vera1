@@ -106,6 +106,13 @@ function v5ToV4View(state) {
   // Today's remaining = dailyPace - what they've spent today.
   const todayRem = Math.max(0, view.dailyPaceCents - view.todaySpentCents);
 
+  // Variance = today's spend vs today's pace.
+  // Positive = under pace (saved). Negative = over pace.
+  // Used by hero variance chip (informational only — does NOT change pace).
+  const varianceCents = view.dailyPaceCents > 0
+    ? (view.dailyPaceCents - view.todaySpentCents)
+    : 0;
+
   return {
     setup: true,
     state: view.status,
@@ -119,6 +126,7 @@ function v5ToV4View(state) {
 
     balanceCents: view.balanceCents,
     balanceFormatted: view.balanceFormatted,
+    balanceShort: m.toShort(view.balanceCents, sym),
     obligatedCents: view.obligatedCents,
     obligatedFormatted: view.obligatedFormatted,
     disposableCents: view.disposableCents,
@@ -127,6 +135,7 @@ function v5ToV4View(state) {
     deficitFormatted: view.deficitFormatted,
     dailyPaceCents: view.dailyPaceCents,
     dailyPaceFormatted: view.dailyPaceFormatted,
+    dailyPaceShort: m.toShort(view.dailyPaceCents, sym),
 
     todaySpentCents: view.todaySpentCents,
     todaySpentFormatted: view.todaySpentFormatted,
@@ -134,6 +143,10 @@ function v5ToV4View(state) {
     weekSpentFormatted: view.weekSpentFormatted,
     todayRemainingCents: todayRem,
     todayRemainingFormatted: m.toMoney(todayRem, sym),
+
+    // Hero variance chip — under/over today's pace.
+    varianceCents,
+    varianceShort: m.toShort(Math.abs(varianceCents), sym),
 
     envelopes,
     dueNow: view.dueNow.map(d => ({ key: d.key, name: d.name, amountFormatted: d.amountFormatted, dueDate: d.dueDate, daysUntilDue: d.daysUntilDue })),

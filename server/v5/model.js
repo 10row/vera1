@@ -152,6 +152,11 @@ function createFreshState() {
     // every in-flight confirm became "That confirm has expired"). Each
     // entry: { token, intents: [...], expires: ts }.
     pendingTokens: [],
+    // One-time cleanup flag — old v4 builds pinned a status message
+    // via ctx.api.pinChatMessage. v5 doesn't pin, but Telegram never
+    // auto-unpins, so the stale v4 pin lingers in chats forever.
+    // First /start after upgrade unpins everything once and sets this.
+    legacyPinCleared: true,
     // Daily pace is FROZEN per day per the user's mental model:
     //   "spending eats today's bucket, not the month."
     // Recomputed at: cycle events (setup/adjust/update_payday/bill changes)
