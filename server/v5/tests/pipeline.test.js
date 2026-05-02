@@ -162,3 +162,83 @@ test("[pipeline] virgin + 10 random inputs → never produces a setup_account in
   }
   assertEq(s.setup, false);
 });
+
+// ── SILENT-LIE DETECTION (regression for the cat-undo bug) ──
+// User reported: "I didn't really buy it" → bot said "Undoing it now" → nothing happened.
+// The AI returned mode:"talk" with an action verb but no intent. Pipeline must catch this.
+
+const { detectSilentLie } = require("../pipeline");
+
+test("[silent-lie] talk mode 'Undoing it now' with no intent → fallback", () => {
+  const out = detectSilentLie({ mode: "talk", message: "Undoing it now." }, "en");
+  assertTrue(out !== null, "should detect the silent lie");
+  assertTrue(/didn't actually|couldn't pin/i.test(out), "should be honest fallback");
+});
+
+test("[silent-lie] talk mode 'I'll undo' with no intent → fallback", () => {
+  const out = detectSilentLie({ mode: "talk", message: "I'll undo that for you." }, "en");
+  assertTrue(out !== null);
+});
+
+test("[silent-lie] do mode with undo_last intent + 'Undoing it' → consistent (no fallback)", () => {
+  const out = detectSilentLie({
+    mode: "do",
+    message: "Undoing it now.",
+    intent: { kind: "undo_last", params: {} },
+  }, "en");
+  assertEq(out, null);
+});
+
+test("[silent-lie] talk mode 'adjusting your balance' with no intent → fallback", () => {
+  const out = detectSilentLie({ mode: "talk", message: "Adjusting your balance to $500." }, "en");
+  assertTrue(out !== null);
+});
+
+test("[silent-lie] talk mode 'logging that' with no intent → fallback", () => {
+  const out = detectSilentLie({ mode: "talk", message: "Logging that for you." }, "en");
+  assertTrue(out !== null);
+});
+
+test("[silent-lie] talk mode 'removing that bill' with no intent → fallback", () => {
+  const out = detectSilentLie({ mode: "talk", message: "Removing that for you." }, "en");
+  assertTrue(out !== null);
+});
+
+// CRITICAL: false-positive checks. These should NOT fire — they're legit conversational.
+test("[silent-lie-fp] 'I'll add support for that feature' (meta) → no fallback", () => {
+  const out = detectSilentLie({ mode: "talk", message: "I'll add support for that feature later." }, "en");
+  assertEq(out, null);
+});
+
+test("[silent-lie-fp] 'You'd be saving 30 a week' (calculation) → no fallback", () => {
+  const out = detectSilentLie({ mode: "talk", message: "You'd be saving 30 a week if you cut coffee." }, "en");
+  assertEq(out, null);
+});
+
+test("[silent-lie-fp] 'How much did you spend on that?' (question) → no fallback", () => {
+  const out = detectSilentLie({ mode: "talk", message: "How much did you spend on that?" }, "en");
+  assertEq(out, null);
+});
+
+test("[silent-lie-fp] 'Got it, $50 logged' (post-confirm ack — different verb form) → no fallback", () => {
+  const out = detectSilentLie({
+    mode: "do",
+    message: "Got it, $50 logged.",
+    intent: { kind: "record_spend", params: { amountCents: 5000 } },
+  }, "en");
+  assertEq(out, null);
+});
+
+test("[silent-lie] Russian: 'Отменяю это' with no intent → fallback", () => {
+  const out = detectSilentLie({ mode: "talk", message: "Отменяю это сейчас." }, "ru");
+  assertTrue(out !== null);
+});
+
+test("[silent-lie] full pipeline: talk mode undo lie → user sees fallback, not bot's lie", async () => {
+  const s = fullySetUp();
+  const r = await processMessage(s, "I didn't really buy it", [], {
+    _aiCall: stub({ mode: "talk", message: "Undoing it now for you." }),
+  });
+  assertEq(r.kind, "talk");
+  assertTrue(/didn't actually|couldn't pin/i.test(r.message), "user should see honest fallback, not the AI's lie");
+});

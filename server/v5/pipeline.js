@@ -23,45 +23,56 @@ const onboarding = require("./onboarding");
 // to an honest "I'm not sure what to do — be more specific?" rather than
 // shipping a lie.
 //
-// We're conservative: only catch UNAMBIGUOUS action verbs that should be
-// paired with intents. False positives here would suppress legitimate
-// chatty replies ("you'd be fine" is a simulation answer, not a promise).
+// Action-verb patterns. Each fires ON ANY MODE (do / do_batch / talk).
+// The patterns are TIGHT: first-person + present-progressive or future,
+// followed by a money-action OBJECT pronoun (it / that / the X / your X).
+// "I'll add support for that feature" → won't trip (no it/that/balance/spend/etc.).
+// "Undoing it"                         → trips (it = previous action).
+// "Adjusting your balance"             → trips (your balance).
+//
+// The cost of a false positive: an honest "couldn't pin down" reply.
+// The cost of a false negative: bot lies. False positives MUCH preferable.
 const ACTION_VERBS = {
-  // matchers → kind they require
-  // Each entry: [regex, expected intent kinds (any of)]
   en: [
-    [/\b(i'?ll|i will|i'?m|let me|going to)\s+(add|adding)\b/i, ["add_bill", "do_batch_add_bill"]],
-    [/\b(i'?ll|i will|i'?m)\s+(log|logging|record|recording)\b/i, ["record_spend", "record_income"]],
-    [/\b(i'?ll|i will|i'?m)\s+(adjust|adjusting|set|setting|chang|chang|updat)/i, ["adjust_balance", "update_payday"]],
-    [/\b(i'?ll|i will|i'?m)\s+(remov|delet)/i, ["remove_bill"]],
-    [/\b(undoing|reverting|i'?ll undo)/i, ["undo_last"]],
+    // Undo phrasings — most common silent-lie surface (user reported case).
+    [/\b(undoing|reverting|reversing)\s+(it|that|the\s+\w+|your\s+\w+|last)\b/i, ["undo_last"]],
+    [/\bi(?:'ll| will| am going to)\s+(undo|revert|reverse)\b/i, ["undo_last"]],
+    // Adjust / set balance / update payday.
+    [/\b(adjusting|setting|updating|changing)\s+(your\s+)?(balance|payday)/i, ["adjust_balance", "update_payday"]],
+    [/\bi(?:'ll| will| am going to)\s+(adjust|update|set|change)\s+(your\s+)?(balance|payday)/i, ["adjust_balance", "update_payday"]],
+    // Log spend / income.
+    [/\b(logging|recording)\s+(it|that|the\s+\w+|your\s+\w+|\$|that spend|that income)/i, ["record_spend", "record_income"]],
+    [/\bi(?:'ll| will| am going to)\s+(log|record)\s+(it|that|the\s+\w+|your\s+\w+|\$)/i, ["record_spend", "record_income"]],
+    // Add bill / remove bill — only when followed by a bill-context object.
+    [/\b(adding|saving)\s+(the|your)?\s*(bill|rent|subscription)/i, ["add_bill"]],
+    [/\bi(?:'ll| will| am going to)\s+add\s+(the|your)?\s*(bill|rent|subscription)/i, ["add_bill"]],
+    [/\b(removing|deleting)\s+(it|that|the\s+\w+|your\s+\w+)\b/i, ["remove_bill", "undo_last"]],
+    [/\bi(?:'ll| will| am going to)\s+(remove|delete)\s+(it|that|the\s+\w+|your\s+\w+)\b/i, ["remove_bill", "undo_last"]],
+    // Generic "marking as paid" — must have record_spend with billKey.
+    [/\b(marking|paying)\s+(it|that|the\s+\w+|your\s+\w+)\s*(as\s+)?(paid)?/i, ["record_spend"]],
   ],
   ru: [
-    [/\b(добавл|добавляю|записываю)/i, ["add_bill", "record_spend", "record_income"]],
-    [/\b(исправл|поправл|меняю|корректирую)/i, ["adjust_balance", "update_payday"]],
-    [/\b(удаля|убираю)/i, ["remove_bill"]],
-    [/\b(отменяю|откатыв)/i, ["undo_last"]],
+    // Cyrillic note: JS \b uses [A-Za-z0-9_] for word boundaries — does NOT
+    // recognize Cyrillic. Use start-of-string or non-letter via lookarounds.
+    [/(?:^|[^\p{L}])(отменяю|откатываю|возвращаю)\s+(это|то|последн)/iu, ["undo_last"]],
+    [/(?:^|[^\p{L}])(исправляю|меняю|обновляю|корректирую)\s+(баланс|зарплату)/iu, ["adjust_balance", "update_payday"]],
+    [/(?:^|[^\p{L}])(записываю|логирую|добавляю)\s+(это|то|трату|доход)/iu, ["record_spend", "record_income"]],
+    [/(?:^|[^\p{L}])(удаляю|убираю)\s+(это|то|счёт|счет)/iu, ["remove_bill", "undo_last"]],
   ],
 };
 
 // Returns null if consistent. Returns rewritten honest reply if AI
 // promised an action it didn't emit.
 //
-// IMPORTANT — when this fires:
-//   - Mode `do` or `do_batch`: AI emitted intents, but its TEXT promised
-//     an action that isn't covered by any of those intents.
+// FIRES ON ALL MODES (do / do_batch / talk). The user-reported bug
+// (\"undoing it now\" in talk mode + no undo_last intent) was slipping
+// through because the previous version short-circuited talk mode.
+// Tight verb patterns above keep false positives low.
 //
-// When it does NOT fire (deliberately):
-//   - Mode `talk`: pure conversation; "I'll add support for that
-//     feature" is meta, not a money-action promise.
-//   - Mode `ask_simulate`: read-only by design.
-//
-// Tightened after persona test (Mike) — the looser version was firing
-// on legit conversational replies and producing repeated "couldn't pin
-// down" errors. False-positive cost was higher than false-negative.
+// ask_simulate stays exempt — that mode is read-only by contract.
 function detectSilentLie(proposal, lang) {
   if (!proposal || !proposal.message) return null;
-  if (proposal.mode !== "do" && proposal.mode !== "do_batch") return null;
+  if (proposal.mode === "ask_simulate") return null;
 
   const text = proposal.message;
   const verbs = ACTION_VERBS[lang === "ru" ? "ru" : "en"] || ACTION_VERBS.en;
@@ -71,21 +82,19 @@ function detectSilentLie(proposal, lang) {
   if (Array.isArray(proposal.intents)) {
     for (const i of proposal.intents) if (i && i.kind) proposedKinds.add(i.kind);
   }
-  // If there are no intents at all, this isn't a do/do_batch state per
-  // contract — guard regardless.
-  if (proposedKinds.size === 0) return null;
 
   for (const [re, expectedKinds] of verbs) {
     if (!re.test(text)) continue;
     const ok = expectedKinds.some(k => proposedKinds.has(k));
     if (!ok) {
       return lang === "ru"
-        ? "_(хм, я сказал что сделаю, но не получилось. Попробуй переформулировать или уточнить — например указать сумму и дату.)_"
-        : "_(I said I'd do it but couldn't pin down the exact action. Try again with the specific amount/date — e.g. \"adjust balance to 5000\" or \"log 25 on coffee\".)_";
+        ? "_(хм — я сказал, что сделаю, но не сделал. Попробуй ещё раз более явно — например \"отмени последнее\" или \"измени баланс на 5000\".)_"
+        : "_(I said I'd do it but didn't actually do it — bad. Try again more explicitly — e.g. \"undo last\" or \"adjust balance to 5000\".)_";
     }
   }
   return null;
 }
+
 
 async function processMessage(state, userMessage, history, options) {
   // ── PHASE 1: deterministic onboarding while !setup ──
@@ -199,4 +208,4 @@ async function processMessage(state, userMessage, history, options) {
   };
 }
 
-module.exports = { processMessage };
+module.exports = { processMessage, detectSilentLie };
