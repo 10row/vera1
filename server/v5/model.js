@@ -147,6 +147,11 @@ function createFreshState() {
     transactions: [],   // { id, ts, kind, amountCents, note, billKey?, date }
     events: [],         // audit log: { id, ts, intent, prevBalance, newBalance, undid? }
     onboardingDraft: null, // { balanceCents? } during the deterministic flow
+    // Pending confirm tokens. Persisted with state so they survive
+    // Railway redeploys (previously in-memory Map → restarted = wiped =
+    // every in-flight confirm became "That confirm has expired"). Each
+    // entry: { token, intents: [...], expires: ts }.
+    pendingTokens: [],
     // Daily pace is FROZEN per day per the user's mental model:
     //   "spending eats today's bucket, not the month."
     // Recomputed at: cycle events (setup/adjust/update_payday/bill changes)

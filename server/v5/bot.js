@@ -55,32 +55,48 @@ const bot = BOT_TOKEN ? new Bot(BOT_TOKEN) : null;
 const openai = new OpenAI();
 
 // ── PENDING CONFIRMATIONS ─────────────────────────
-// In-memory map of token → { intent, userId, expires }. 30-min TTL.
+// PERSISTED to state.pendingTokens — survives Railway redeploys.
+// (Previous in-memory Map was wiped on every restart, causing
+// "That confirm has expired" within seconds of any deploy. AAA fix.)
+//
+// Each entry: { token, intents: [...], expires: ts }.
+// The state save happens in the caller's existing lock+save flow.
 const PENDING_TTL_MS = 30 * 60 * 1000;
-const pending = new Map();
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of pending) if (v.expires < now) pending.delete(k);
-}, 60_000);
+const PENDING_MAX = 20; // cap to prevent runaway accumulation per user
 
 function makeToken() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-// setPending accepts a single intent OR an array of intents (brain-dump).
-// Stored as `intents: []` either way; consumer applies them in sequence.
-function setPending(intentOrArray, userId) {
-  const token = makeToken();
+// setPending mutates state.pendingTokens. Caller saves state.
+// Accepts a single intent OR array of intents (brain-dump).
+function setPending(state, intentOrArray) {
   const intents = Array.isArray(intentOrArray) ? intentOrArray : [intentOrArray];
-  pending.set(token, { intents, userId, expires: Date.now() + PENDING_TTL_MS });
+  const token = makeToken();
+  if (!Array.isArray(state.pendingTokens)) state.pendingTokens = [];
+  // Sweep expired before pushing.
+  const now = Date.now();
+  state.pendingTokens = state.pendingTokens.filter(p => p && p.expires > now);
+  state.pendingTokens.push({ token, intents, expires: now + PENDING_TTL_MS });
+  if (state.pendingTokens.length > PENDING_MAX) {
+    state.pendingTokens = state.pendingTokens.slice(-PENDING_MAX);
+  }
   return token;
 }
 
-function takePending(token) {
-  const e = pending.get(token);
-  if (!e) return null;
-  pending.delete(token);
-  return e;
+// takePending pops the entry from state.pendingTokens (mutates state).
+// Returns the entry or null. Caller saves state.
+function takePending(state, token) {
+  if (!Array.isArray(state.pendingTokens) || state.pendingTokens.length === 0) return null;
+  const idx = state.pendingTokens.findIndex(p => p && p.token === token);
+  if (idx === -1) return null;
+  const entry = state.pendingTokens[idx];
+  if (entry.expires < Date.now()) {
+    state.pendingTokens.splice(idx, 1);
+    return null;
+  }
+  state.pendingTokens.splice(idx, 1);
+  return entry;
 }
 
 // ── CONFIRM CARD ──────────────────────────────────
@@ -391,7 +407,8 @@ async function processText(prisma, ctx, telegramId, text, options) {
         kind: "record_spend",
         params: { amountCents: result.amountCents, note: "" },
       };
-      const token = setPending(logIntent, u.id);
+      const token = setPending(state, logIntent);
+      await db.saveState(prisma, u.id, state);
       // Decision flow buttons — the LLM judge flagged "No" as ambiguous
       // (reject the spend? reject the calculation?). "Skip" is unambiguous.
       const yesLabel = lang === "ru" ? "Записать" : "Log it";
@@ -415,7 +432,8 @@ async function processText(prisma, ctx, telegramId, text, options) {
         await safeReply(ctx, "_" + m.escapeMd(result.verdict.reason) + "_", { parse_mode: "Markdown" });
         return;
       }
-      const token = setPending(result.intent, u.id);
+      const token = setPending(state, result.intent);
+      await db.saveState(prisma, u.id, state);
       const card = describeIntent(result.intent, state);
       const intro = result.message ? result.message + "\n\n" : "";
       await safeReply(ctx, intro + card, {
@@ -438,7 +456,8 @@ async function processText(prisma, ctx, telegramId, text, options) {
       }
       // One combined card listing each valid action with a single Yes-all.
       const intents = okItems.map(i => i.intent);
-      const token = setPending(intents, u.id);
+      const token = setPending(state, intents);
+      await db.saveState(prisma, u.id, state);
       const intro = lang === "ru" ? "*Хочу добавить:*" : "*I'll add:*";
       const numbered = intents.map((i, idx) => "  " + (idx + 1) + ". " + describeIntent(i, state));
       const skippedLines = failItems.length
@@ -557,7 +576,8 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     const u = await db.resolveUser(prisma, "tg_" + telegramId);
     const state = await db.loadState(prisma, u.id);
     const lang = state.language === "ru" ? "ru" : "en";
-    const token = setPending({ kind: "reset", params: {} }, u.id);
+    const token = setPending(state, { kind: "reset", params: {} });
+    await db.saveState(prisma, u.id, state);
     const text = lang === "ru"
       ? "*Это удалит все данные.* Точно?"
       : "*This will wipe everything.* Are you sure?";
@@ -634,9 +654,11 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
   // char of the token, takePending always returned null, every Cancel tap
   // hit the "expired" path. Use the exact prefix length.
   const token = data.slice(isYes ? 4 : 3);
-  const entry = takePending(token);
   const u = await db.resolveUser(prisma, "tg_" + telegramId);
   let state = await db.loadState(prisma, u.id);
+  // takePending now reads from state.pendingTokens (persisted across deploys).
+  // Removes the entry from state — caller saves below.
+  const entry = takePending(state, token);
   const lang = state.language === "ru" ? "ru" : "en";
 
   // Critical: every safeEdit on a confirm card MUST clear the inline
@@ -645,10 +667,13 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
   // requires reply_markup to be passed explicitly to clear.
   const clearButtons = { reply_markup: { inline_keyboard: [] } };
 
-  if (!entry || entry.userId !== u.id) {
+  if (!entry) {
     await safeEdit(ctx, lang === "ru" ? "Кнопка устарела." : "That confirm has expired.", clearButtons);
     return;
   }
+  // Save state (entry was removed). UserId check no longer needed —
+  // tokens live on the user's own state, can only be popped by them.
+  await db.saveState(prisma, u.id, state);
   if (!isYes) {
     // Brief, friendly skip. Don't echo the intent details ("Cancelled —
     // Spend $200 · jacket") because for decision/afford flow the user
@@ -857,12 +882,10 @@ function attach(prisma) {
         return;
       }
 
-      // FIX: setPending must store the PRISMA user id (u.id), NOT the
-      // Telegram id (ctx.from.id). The callback handler resolves the
-      // prisma user and compares entry.userId to it. Storing telegram id
-      // here meant immediate "That confirm has expired" on Yes tap
-      // (user reported: pressed Yes right away → expired).
-      const token = setPending(r.intent, u.id);
+      // setPending now writes to state.pendingTokens (persisted) so the
+      // confirm card survives Railway redeploys. Save state immediately.
+      const token = setPending(state, r.intent);
+      await db.saveState(prisma, u.id, state);
       const card = describeIntent(r.intent, state);
       const fromPhoto = lang === "ru" ? "📸 *Из чека:*" : "📸 *From receipt:*";
       await safeReply(ctx, fromPhoto + "\n" + card, {
