@@ -383,3 +383,186 @@ test("[delete:property] 200 random sequences preserve balance integrity", () => 
     }
   }
 });
+
+// ── CYCLE INTEGRITY: bill_payment dueDate restoration ───────────
+// Regression suite for the silent-drift bug class:
+//   - Pay a recurring bill → dueDate advances forward
+//   - Delete or undo that payment → dueDate MUST restore to original
+//
+// Pre-fix bug: only paidThisCycle was reverted; dueDate stayed in the
+// future. Bill silently slipped to "next cycle", engine reservation
+// dropped the bill amount, frozen pace stayed stale, $X went missing
+// from the user's mental ledger.
+
+function setupWithPayday(balance, paydayDaysOut) {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  return applyIntent(s, {
+    kind: "setup_account",
+    params: {
+      balanceCents: balance,
+      payday: m.addDays(today, paydayDaysOut),
+      payFrequency: "monthly",
+    },
+  }).state;
+}
+
+test("[engine] delete bill_payment restores bill dueDate (was silent next-cycle drift)", () => {
+  let s = setupWithPayday(500000, 23);
+  const today = m.today("UTC");
+  const billDue = m.addDays(today, 5);
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 140000, dueDate: billDue, recurrence: "monthly" },
+  }).state;
+  const billKeyVal = m.billKey("Rent");
+
+  // Pay the bill — this advances dueDate one month forward.
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 140000, billKey: "Rent" },
+  }).state;
+  assertTrue(s.bills[billKeyVal].dueDate > billDue, "after pay, dueDate must be advanced");
+  assertEq(s.bills[billKeyVal].paidThisCycle, false, "recurring → reset paidThisCycle for new cycle");
+
+  // Find and delete the payment transaction.
+  const paymentTx = s.transactions.find(t => t.kind === "bill_payment");
+  assertTrue(!!paymentTx, "payment tx should exist");
+  s = applyIntent(s, {
+    kind: "delete_transaction",
+    params: { id: paymentTx.id },
+  }).state;
+
+  // dueDate must be restored to its pre-payment value.
+  assertEq(s.bills[billKeyVal].dueDate, billDue, "delete must restore dueDate (regression: it used to stay advanced)");
+  assertEq(s.bills[billKeyVal].paidThisCycle, false, "and paidThisCycle should match pre-payment");
+  assertEq(s.balanceCents, 500000, "balance fully restored");
+});
+
+test("[engine] undo bill_payment restores bill dueDate (same regression class)", () => {
+  let s = setupWithPayday(500000, 23);
+  const today = m.today("UTC");
+  const billDue = m.addDays(today, 5);
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 140000, dueDate: billDue, recurrence: "monthly" },
+  }).state;
+  const billKeyVal = m.billKey("Rent");
+
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 140000, billKey: "Rent" },
+  }).state;
+  const advancedDate = s.bills[billKeyVal].dueDate;
+  assertTrue(advancedDate > billDue, "dueDate advanced after pay");
+
+  // Undo the payment.
+  s = applyIntent(s, { kind: "undo_last", params: {} }).state;
+
+  assertEq(s.bills[billKeyVal].dueDate, billDue, "undo must restore dueDate");
+  assertEq(s.bills[billKeyVal].paidThisCycle, false, "paidThisCycle restored");
+  assertEq(s.balanceCents, 500000, "balance restored");
+});
+
+test("[engine] delete bill_payment refreshes pace (not stale)", () => {
+  // Setup: $5,000 balance, payday 23 days out, $1,400 rent due in 5 days.
+  // Expected pace before payment: ($5,000 - $1,400) / 23 = $156.52
+  let s = setupWithPayday(500000, 23);
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 140000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
+  }).state;
+
+  const paceAfterAdd = s.dailyPaceCents;
+  assertTrue(paceAfterAdd > 0, "pace computed after add_bill");
+
+  // Pay the bill. Per Model B, pace stays frozen on record_spend.
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 140000, billKey: "Rent" },
+  }).state;
+  assertEq(s.dailyPaceCents, paceAfterAdd, "pace stays frozen on record_spend (Model B)");
+
+  // Delete the payment. Pace MUST refresh — bill flips back to this-cycle,
+  // balance restored. Stale pace would silently mis-reserve.
+  const paymentTx = s.transactions.find(t => t.kind === "bill_payment");
+  s = applyIntent(s, { kind: "delete_transaction", params: { id: paymentTx.id } }).state;
+  assertEq(s.dailyPaceCents, paceAfterAdd, "after delete, pace must match the original (bill is fully back in cycle)");
+  assertEq(s.dailyPaceComputedDate, today, "pace was just refreshed today");
+});
+
+test("[engine] undo bill_payment refreshes pace", () => {
+  let s = setupWithPayday(500000, 23);
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 140000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
+  }).state;
+  const paceAfterAdd = s.dailyPaceCents;
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 140000, billKey: "Rent" },
+  }).state;
+  s = applyIntent(s, { kind: "undo_last", params: {} }).state;
+  assertEq(s.dailyPaceCents, paceAfterAdd, "after undo, pace must match pre-payment baseline");
+  assertEq(s.dailyPaceComputedDate, today, "pace freshly refreshed");
+});
+
+test("[engine] paying a recurring bill EARLY advances dueDate by one cycle (was no-op bug)", () => {
+  // Pre-fix bug: advancePayday() only fast-forwarded past today, so
+  // paying a bill before its due date left dueDate unchanged. Bill
+  // was still in this cycle's obligation math AND balance had
+  // already been deducted — engine double-reserved silently.
+  let s = setupWithPayday(500000, 23);
+  const today = m.today("UTC");
+  const billDue = m.addDays(today, 5); // due in 5 days, recurring monthly
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 140000, dueDate: billDue, recurrence: "monthly" },
+  }).state;
+
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 140000, billKey: "Rent" },
+  }).state;
+
+  const b = s.bills[m.billKey("Rent")];
+  // dueDate must have moved forward by exactly one month.
+  assertTrue(b.dueDate > billDue, "dueDate must advance even when paid early");
+  // Roughly 28-31 days later (calendar-aware).
+  const daysAdvanced = m.daysBetween(billDue, b.dueDate);
+  assertTrue(daysAdvanced >= 28 && daysAdvanced <= 31, "advanced by one calendar month, got " + daysAdvanced);
+  assertEq(b.paidThisCycle, false, "new cycle starts unpaid at the new dueDate");
+});
+
+test("[engine] addBillCycle handles month-end clamping (Jan 31 → Feb 28)", () => {
+  assertEq(m.addBillCycle("2026-01-31", "monthly"), "2026-02-28", "Jan 31 clamps to Feb 28 in non-leap year");
+  assertEq(m.addBillCycle("2024-01-31", "monthly"), "2024-02-29", "Jan 31 → Feb 29 in leap year");
+  assertEq(m.addBillCycle("2026-12-15", "monthly"), "2027-01-15", "month rollover into next year");
+  assertEq(m.addBillCycle("2026-05-15", "weekly"), "2026-05-22", "weekly = +7 days");
+  assertEq(m.addBillCycle("2026-05-15", "biweekly"), "2026-05-29", "biweekly = +14 days");
+});
+
+test("[engine] backward-compat: delete tx without prevDueDate snapshot still works", () => {
+  // Simulate a tx created BEFORE the prevDueDate snapshot existed.
+  let s = setupWithPayday(500000, 23);
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 140000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
+  }).state;
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 140000, billKey: "Rent" },
+  }).state;
+  // Strip the snapshot fields to simulate legacy data.
+  const paymentTx = s.transactions.find(t => t.kind === "bill_payment");
+  delete paymentTx.prevDueDate;
+  delete paymentTx.prevPaidThisCycle;
+
+  // Delete should NOT throw and should still revert paidThisCycle.
+  s = applyIntent(s, { kind: "delete_transaction", params: { id: paymentTx.id } }).state;
+  assertEq(s.bills[m.billKey("Rent")].paidThisCycle, false, "legacy fallback: paidThisCycle reset");
+  assertEq(s.balanceCents, 500000, "balance reverted");
+});

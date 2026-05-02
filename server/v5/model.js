@@ -99,6 +99,34 @@ function advancePayday(payday, freq, todayStr) {
   return cur;
 }
 
+// Advance a BILL's dueDate by exactly one cycle period. Unlike
+// advancePayday (which fast-forwards past today and is correct for
+// paychecks), this always moves forward by ONE cycle regardless of
+// whether the bill was paid early, on time, or late.
+//
+// Why this exists: if a user pays rent 3 days BEFORE the due date,
+// advancePayday would be a no-op (dueDate is already in the future),
+// leaving the bill still in this cycle's obligation math. The
+// engine would silently double-reserve — balance went down by rent
+// AND obligated still includes rent. Pace would crater for no reason.
+//
+// Monthly is calendar-aware (same DOM next month, clamping for short
+// months). Weekly/biweekly add fixed days.
+function addBillCycle(dueDate, recurrence) {
+  if (!dueDate) return null;
+  if (recurrence === "weekly") return addDays(dueDate, 7);
+  if (recurrence === "biweekly") return addDays(dueDate, 14);
+  // monthly (default): same DOM next month, clamp for short months.
+  const y = +dueDate.slice(0, 4);
+  const mo = +dueDate.slice(5, 7) - 1;
+  const dom = +dueDate.slice(8, 10);
+  // Move to the 1st of the next month, then clamp DOM to that month's length.
+  const dt = new Date(Date.UTC(y, mo + 1, 1));
+  const lastDay = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
+  dt.setUTCDate(Math.min(dom, lastDay));
+  return dt.toISOString().slice(0, 10);
+}
+
 // ── DOMAIN ────────────────────────────────────────
 const RECURRENCES = ["once", "weekly", "biweekly", "monthly"];
 const PAY_FREQS = ["weekly", "biweekly", "monthly", "irregular"];
@@ -169,7 +197,7 @@ function createFreshState() {
 
 module.exports = {
   toCents, toMoney, toShort,
-  today, daysBetween, daysUntil, addDays, normalizeDate, advancePayday,
+  today, daysBetween, daysUntil, addDays, normalizeDate, advancePayday, addBillCycle,
   RECURRENCES, PAY_FREQS, INTENT_KINDS,
   billKey, uid, escapeMd,
   createFreshState,

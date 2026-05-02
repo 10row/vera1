@@ -212,12 +212,29 @@ function applyIntent(state, intent) {
       }
 
       next.balanceCents -= amt;
+
+      // Snapshot pre-payment bill state BEFORE we mutate it. Without
+      // this, delete_transaction / undo_last cannot restore the bill
+      // cleanly — the original dueDate is lost when advancePayday
+      // moves it forward, and a half-restored bill (paidThisCycle=
+      // false but dueDate=next-month) silently drifts to "next cycle"
+      // in the engine's obligation math, blowing a hole in pace.
+      const prevBill = isBillPayment ? {
+        dueDate: next.bills[billKeyP].dueDate,
+        paidThisCycle: !!next.bills[billKeyP].paidThisCycle,
+      } : null;
+
       next.transactions.push({
         id: m.uid(), ts: Date.now(),
         kind: isBillPayment ? "bill_payment" : "spend",
         amountCents: -amt,
         note: note || (isBillPayment ? next.bills[billKeyP].name : ""),
         billKey: isBillPayment ? billKeyP : null,
+        // prevDueDate / prevPaidThisCycle live ON the transaction so
+        // delete_transaction can restore the bill exactly. Both null
+        // for non-bill spends.
+        prevDueDate: prevBill ? prevBill.dueDate : null,
+        prevPaidThisCycle: prevBill ? prevBill.paidThisCycle : null,
         originalAmount: isForeign ? Number(p.originalAmount) : null,
         originalCurrency: isForeign ? p.originalCurrency.toUpperCase() : null,
         // Graph fields (all optional, null when absent — backward-compatible).
@@ -225,17 +242,38 @@ function applyIntent(state, intent) {
         date: todayStr,
       });
 
-      // Mark bill as paid this cycle, advance dueDate.
+      // Mark bill as paid this cycle, advance dueDate by one cycle.
+      //
+      // CRITICAL FIX: prior code used advancePayday(), which only
+      // fast-forwards past TODAY. If a user paid a recurring bill
+      // EARLY (dueDate still in the future), advancePayday was a
+      // no-op — dueDate stayed unchanged, paidThisCycle flipped to
+      // false, and the bill was STILL in obligation math. Engine
+      // double-reserved: balance went down by the payment, AND the
+      // bill amount was still obligated. Pace dropped silently for
+      // no reason.
+      //
+      // Now: addBillCycle ALWAYS advances by exactly one period
+      // (monthly/biweekly/weekly), regardless of whether early/on-
+      // time/late. paidThisCycle is then false at the new dueDate.
       if (isBillPayment) {
         const b = next.bills[billKeyP];
-        b.paidThisCycle = true;
-        if (b.recurrence !== "once") {
-          b.dueDate = m.advancePayday(b.dueDate, b.recurrence === "monthly" ? "monthly" : b.recurrence, todayStr);
-          b.paidThisCycle = false; // new cycle starts at next due date
+        if (b.recurrence === "once") {
+          b.paidThisCycle = true;
+        } else {
+          b.dueDate = m.addBillCycle(b.dueDate, b.recurrence);
+          b.paidThisCycle = false;
         }
       }
 
-      const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents });
+      // Also snapshot prevBill on the EVENT for undo_last (which reads
+      // events, not transactions). Belt-and-suspenders: same data on
+      // both, since undo and delete reach for different sources.
+      const ev = makeEvent(intent, prevBalance, {
+        newBalance: next.balanceCents,
+        prevBill,
+        billKey: isBillPayment ? billKeyP : null,
+      });
       next.events.push(ev);
       return { state: next, event: ev };
     }
@@ -313,20 +351,40 @@ function applyIntent(state, intent) {
       // for income; correction is delta (signed). Reversing = subtract.
       next.balanceCents -= tx.amountCents;
 
-      // For bill payments, snapshot bill state then revert paidThisCycle.
-      // dueDate restoration: we don't snapshot the pre-payment date (would
-      // need to add to the original tx). Accept that paidThisCycle = false
-      // is the meaningful revert; user can re-pay if needed and the date
-      // will re-advance.
+      // For bill payments, restore the bill's dueDate AND paidThisCycle
+      // from the snapshot on the original transaction.
+      //
+      // CRITICAL FIX (was a bug): prior code only reset paidThisCycle
+      // and accepted that dueDate stayed advanced. That left the bill
+      // in a silent "next cycle" state (paidThisCycle=false but
+      // dueDate>payday), so the engine's obligation math no longer
+      // counted it. Pace would over-estimate "free per day" by the
+      // bill amount → user's reservation invisibly evaporated.
+      //
+      // Backward-compat: txs created before the prevDueDate snapshot
+      // existed have null prevDueDate/prevPaidThisCycle. For those we
+      // fall back to the old behavior (just reset paidThisCycle) so
+      // historic deletes still apply cleanly.
       let billRevert = null;
       if (tx.kind === "bill_payment" && tx.billKey && next.bills[tx.billKey]) {
         const b = next.bills[tx.billKey];
-        billRevert = { key: tx.billKey, paidThisCycle: !!b.paidThisCycle };
-        b.paidThisCycle = false;
+        billRevert = {
+          key: tx.billKey,
+          paidThisCycle: !!b.paidThisCycle,
+          dueDate: b.dueDate,
+        };
+        b.paidThisCycle = (tx.prevPaidThisCycle != null) ? !!tx.prevPaidThisCycle : false;
+        if (tx.prevDueDate) b.dueDate = tx.prevDueDate;
       }
 
       // Mark deleted (journaling — never destroy data).
       tx.deletedAt = Date.now();
+
+      // CYCLE EVENT: deleting a bill_payment changes obligation
+      // (bill flips back to this-cycle when dueDate restores). Even
+      // for non-bill spends, balance changes — refresh so pace stays
+      // consistent with state instead of waiting for day-rollover.
+      refreshPace(next, todayStr);
 
       const ev = makeEvent(intent, prevBalance, {
         newBalance: next.balanceCents,
@@ -362,13 +420,28 @@ function applyIntent(state, intent) {
         case "record_income":
           next.balanceCents = target.prevBalance;
           if (next.transactions.length > 0) next.transactions.pop();
-          // If this was a bill payment that advanced a bill, restore the bill.
-          // (We stored the prior bill snapshot in event.prevBill if present.
-          // For simplicity in v5, we just reset paidThisCycle on the bill if the
-          // intent referenced one. Date won't be perfectly restored — accept it.)
+          // If this was a bill payment that advanced a bill, restore the
+          // bill EXACTLY (both paidThisCycle AND dueDate) from the
+          // snapshot we now persist on the event.
+          //
+          // CRITICAL FIX: prior code only reset paidThisCycle and left
+          // dueDate stuck at the advanced value. Same bug as
+          // delete_transaction had — bill silently slipped to next
+          // cycle and engine reservation lost the bill amount.
+          //
+          // Backward-compat: events from before prevBill existed have
+          // no snapshot. We fall back to the old "just reset
+          // paidThisCycle" behavior so historic undos still work.
           if (target.intent.params && target.intent.params.billKey) {
             const k = m.billKey(target.intent.params.billKey);
-            if (next.bills[k]) next.bills[k].paidThisCycle = false;
+            if (next.bills[k]) {
+              if (target.prevBill && target.prevBill.dueDate) {
+                next.bills[k].dueDate = target.prevBill.dueDate;
+                next.bills[k].paidThisCycle = !!target.prevBill.paidThisCycle;
+              } else {
+                next.bills[k].paidThisCycle = false;
+              }
+            }
           }
           break;
         case "add_bill": {
@@ -406,6 +479,13 @@ function applyIntent(state, intent) {
       }
       // Mark the original event as undone.
       next.events[idx].undone = true;
+
+      // CYCLE EVENT: undoing changes balance and (for bill events)
+      // obligation. Refresh pace so it stays consistent with the
+      // post-undo state, otherwise frozen pace can carry stale
+      // assumptions about bills/balance until day rollover.
+      refreshPace(next, todayStr);
+
       const ev = makeEvent(intent, prevBalance, {
         newBalance: next.balanceCents,
         undid: { eventId: target.id, intent: target.intent },
