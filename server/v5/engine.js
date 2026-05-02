@@ -21,6 +21,36 @@ function makeEvent(intent, prevBalance, extra) {
   }, extra || {});
 }
 
+// Compute the canonical daily pace from current state. Identical formula
+// to view.compute() — duplicated here to keep engine pure (no view import,
+// no require cycle). Returns the integer cents per day.
+function computePaceFor(state, todayStr) {
+  if (!state || !state.setup) return 0;
+  const balance = state.balanceCents || 0;
+  const payday = state.payday;
+  const daysToPayday = Math.max(0, m.daysBetween(todayStr, payday));
+  let obligated = 0;
+  for (const k of Object.keys(state.bills || {})) {
+    const b = state.bills[k];
+    if (!b || b.paidThisCycle) continue;
+    if (m.daysBetween(b.dueDate, payday) >= 0) obligated += b.amountCents || 0;
+  }
+  const disposable = Math.max(0, balance - obligated);
+  return daysToPayday > 0 ? Math.floor(disposable / daysToPayday) : disposable;
+}
+
+// Refresh the FROZEN daily pace. Called on cycle events (setup, adjust,
+// update_payday, bill add/remove) AND at the top of every applyIntent
+// when the date has changed since the stored pace (day-rollover).
+//
+// IMPORTANT: this does NOT fire from inside record_spend. Spending
+// reduces balance but pace stays at today's stored value — that's the
+// whole point of the rolling-pace fix.
+function refreshPace(state, todayStr) {
+  state.dailyPaceCents = computePaceFor(state, todayStr);
+  state.dailyPaceComputedDate = todayStr;
+}
+
 function applyIntent(state, intent) {
   if (!intent || typeof intent.kind !== "string") {
     throw new Error("applyIntent: invalid intent");
@@ -37,6 +67,14 @@ function applyIntent(state, intent) {
 
   const todayStr = m.today(next.timezone || "UTC");
   const p = intent.params || {};
+
+  // ── DAY-ROLLOVER PACE REFRESH ──
+  // First mutation of a new day → recompute pace once, then leave it
+  // alone for the rest of the day. Spending within the day eats
+  // todayLeft (= pace - todaySpent) but never the pace itself.
+  if (next.setup && next.dailyPaceComputedDate !== todayStr) {
+    refreshPace(next, todayStr);
+  }
 
   switch (intent.kind) {
     // ── SETUP ──────────────────────────────────────
@@ -67,6 +105,9 @@ function applyIntent(state, intent) {
         date: todayStr,
       });
 
+      // CYCLE EVENT: lock pace from the new baseline.
+      refreshPace(next, todayStr);
+
       const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents });
       next.events.push(ev);
       return { state: next, event: ev };
@@ -85,6 +126,8 @@ function applyIntent(state, intent) {
         note: p.note || "balance correction",
         date: todayStr,
       });
+      // CYCLE EVENT: balance correction = re-baseline.
+      refreshPace(next, todayStr);
       const ev = makeEvent(intent, prevBalance, { newBalance: newBal, delta });
       next.events.push(ev);
       return { state: next, event: ev };
@@ -107,6 +150,8 @@ function applyIntent(state, intent) {
         paidThisCycle: false,
         createdAt: Date.now(),
       };
+      // CYCLE EVENT: a new bill changes "obligated" → re-baseline pace.
+      refreshPace(next, todayStr);
       const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents, billKey: key });
       next.events.push(ev);
       return { state: next, event: ev };
@@ -118,6 +163,8 @@ function applyIntent(state, intent) {
       if (!next.bills[key]) throw new Error("No such bill: " + (p.name || p.key));
       const removed = next.bills[key];
       delete next.bills[key];
+      // CYCLE EVENT: removing a bill changes "obligated" → re-baseline.
+      refreshPace(next, todayStr);
       const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents, removed });
       next.events.push(ev);
       return { state: next, event: ev };
@@ -174,8 +221,15 @@ function applyIntent(state, intent) {
         date: todayStr,
       });
       // If user got their paycheck, advance payday automatically.
+      const prevPaydayForCycle = next.payday;
       if (next.payday && next.payFrequency && next.payFrequency !== "irregular") {
         next.payday = m.advancePayday(next.payday, next.payFrequency, todayStr);
+      }
+      // CYCLE EVENT: if payday advanced (paycheck arrived), re-baseline pace.
+      // Otherwise income mid-cycle leaves pace alone (next day rollover picks
+      // up the new balance naturally).
+      if (next.payday !== prevPaydayForCycle) {
+        refreshPace(next, todayStr);
       }
       const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents });
       next.events.push(ev);
@@ -195,6 +249,8 @@ function applyIntent(state, intent) {
       if (p.payFrequency && m.PAY_FREQS.includes(p.payFrequency)) {
         next.payFrequency = p.payFrequency;
       }
+      // CYCLE EVENT: payday or frequency change → re-baseline.
+      refreshPace(next, todayStr);
       const ev = makeEvent(intent, prevBalance, {
         newBalance: next.balanceCents,
         prevPayday, prevFreq,

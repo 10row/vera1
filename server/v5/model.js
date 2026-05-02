@@ -146,6 +146,13 @@ function createFreshState() {
     transactions: [],   // { id, ts, kind, amountCents, note, billKey?, date }
     events: [],         // audit log: { id, ts, intent, prevBalance, newBalance, undid? }
     onboardingDraft: null, // { balanceCents? } during the deterministic flow
+    // Daily pace is FROZEN per day per the user's mental model:
+    //   "spending eats today's bucket, not the month."
+    // Recomputed at: cycle events (setup/adjust/update_payday/bill changes)
+    // and at the first state event of a new day (day-rollover).
+    // record_spend does NOT recompute — that's the entire point.
+    dailyPaceCents: 0,
+    dailyPaceComputedDate: null,
   };
 }
 

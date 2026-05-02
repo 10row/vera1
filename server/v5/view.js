@@ -48,7 +48,19 @@ function compute(state) {
 
   const disposable = Math.max(0, balance - obligated);
   const deficit = Math.max(0, obligated - balance);
-  const dailyPace = daysToPayday > 0 ? Math.floor(disposable / daysToPayday) : disposable;
+  // Daily pace per user's mental model: FROZEN within the day. Recomputes
+  // only on cycle events + at first event of a new day. State stores
+  // `dailyPaceCents` and `dailyPaceComputedDate`; engine writes both.
+  // View reads if current; falls back to fresh-compute if stale (e.g.
+  // user opened the app on a new day before any intent was applied).
+  // The fresh value is NOT persisted here — engine.applyIntent persists
+  // on the next mutation. View stays pure.
+  let dailyPace;
+  if (state.dailyPaceComputedDate === todayStr && Number.isFinite(state.dailyPaceCents)) {
+    dailyPace = state.dailyPaceCents;
+  } else {
+    dailyPace = daysToPayday > 0 ? Math.floor(disposable / daysToPayday) : disposable;
+  }
 
   // Today / this week spend
   let todaySpent = 0, weekSpent = 0;
