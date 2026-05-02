@@ -158,12 +158,15 @@ function describeIntent(intent, state) {
         ? "Удалить счёт *" + E(p.name) + "*"
         : "Remove bill *" + E(p.name) + "*";
     case "record_spend": {
-      // Foreign-currency spend: show both ("₫200,000 ≈ $8.20").
-      const isForeign = p.originalCurrency && Number.isFinite(p.originalAmountCents) && p.originalAmountCents > 0;
+      // Foreign-currency spend: show both ("₫200,000 ≈ $8.00").
+      const isForeign = p.originalCurrency
+        && Number.isFinite(p.originalAmount)
+        && p.originalAmount > 0;
       let amountPhrase;
       if (isForeign) {
         const ccy = require("./currency");
-        amountPhrase = ccy.fmt(p.originalAmountCents, p.originalCurrency) + " ≈ " + M(p.amountCents);
+        const fromSubunits = ccy.spokenToSubunits(p.originalAmount, p.originalCurrency);
+        amountPhrase = ccy.fmt(fromSubunits, p.originalCurrency) + " ≈ " + M(p.amountCents);
       } else {
         amountPhrase = M(p.amountCents);
       }

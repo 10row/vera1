@@ -107,19 +107,35 @@ async function processMessage(state, userMessage, history, options) {
   const lang = state && state.language === "ru" ? "ru" : "en";
 
   // ── FOREIGN-CURRENCY CONVERSION ──
-  // AI emits originalAmountCents + originalCurrency for foreign spends
-  // (Vietnam dong, etc.). Convert to base currency BEFORE the engine
-  // sees it so all downstream math / view stays in base currency.
-  // Both values are preserved on the intent for display.
+  // AI emits originalAmount (natural number) + originalCurrency for
+  // foreign spends. We convert to base-currency subunits BEFORE the
+  // engine sees it. Pipeline stores BOTH on the intent so display can
+  // show "₫200,000 ≈ $8".
+  //
+  // Backward-compat: if AI still sends the older `originalAmountCents`
+  // (some prompts cached?), interpret it as the spoken number / 100
+  // for currencies with 2 decimals. Best effort.
   const currency = require("./currency");
   function convertOnce(intent) {
     if (!intent || !intent.params) return intent;
     const p = intent.params;
-    if (p.originalCurrency && Number.isFinite(p.originalAmountCents) && p.originalAmountCents > 0) {
+    let originalAmount = p.originalAmount;
+    // Backward-compat for older AI outputs that used originalAmountCents.
+    if (originalAmount == null && Number.isFinite(p.originalAmountCents) && p.originalAmountCents > 0) {
+      const dec = currency.decimalsFor(p.originalCurrency);
+      // For 2-decimal currencies, "Cents" = subunits / 100 = whole-unit.
+      // For 0-decimal (VND/JPY), the AI was confused — treat the value as whole units.
+      originalAmount = dec === 2 ? p.originalAmountCents / 100 : p.originalAmountCents;
+      // Normalize: remove the legacy field, use new one.
+      p.originalAmount = originalAmount;
+      delete p.originalAmountCents;
+    }
+    if (p.originalCurrency && Number.isFinite(originalAmount) && originalAmount > 0) {
       const base = state.currency || "USD";
-      const converted = currency.convertCents(p.originalAmountCents, p.originalCurrency, base);
-      // Always overwrite amountCents from conversion (AI was told not to set it).
-      p.amountCents = converted;
+      const fromSubunits = currency.spokenToSubunits(originalAmount, p.originalCurrency);
+      const toSubunits = currency.convertSubunits(fromSubunits, p.originalCurrency, base);
+      // amountCents in our codebase = base-currency subunits (cents for USD).
+      p.amountCents = toSubunits;
     }
     return intent;
   }
