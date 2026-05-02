@@ -352,15 +352,21 @@ function DayDetail(props) {
     return a;
   }, 0);
   var dateLabel = props.today ? relativeDay(props.date, props.today) : props.date;
+  var isEmpty = dayTxs.length === 0;
   return h("div", {
     style: { marginTop: 10, padding: "12px 14px", background: C.card, borderRadius: 10, border: "1px solid " + C.border },
   },
     h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
       h("div", { style: { fontSize: 12, fontWeight: 600 } }, dateLabel),
-      h("div", { style: { fontSize: 11, color: C.sub } }, t("miniapp.heatmap.spent", { amount: fmtMoney(total, props.sym) }))
+      // Hide "$0.00 spent" when the day genuinely has nothing — it pretends
+      // there was activity when there wasn't. Just show the friendly empty
+      // state below.
+      isEmpty
+        ? null
+        : h("div", { style: { fontSize: 11, color: C.sub } }, t("miniapp.heatmap.spent", { amount: fmtMoney(total, props.sym) }))
     ),
-    dayTxs.length === 0
-      ? h("div", { style: { fontSize: 11, color: C.muted, padding: "6px 0" } }, t("miniapp.heatmap.empty"))
+    isEmpty
+      ? h("div", { style: { fontSize: 11, color: C.muted, padding: "6px 0", fontStyle: "italic" } }, t("miniapp.heatmap.empty"))
       : dayTxs.map(function(tx) {
           var lbl = txLabel(tx, props.nameMap);
           return h("div", {
