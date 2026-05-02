@@ -151,14 +151,19 @@ function buildHeatmap(state) {
   const today = m.today(tz);
   const out = [];
   // Walk back 29 days (so we get 30 cells ending today).
+  // Two bug fixes:
+  //   1. The kind value is "spend" (set by engine record_spend), NOT
+  //      "record_spend". Old check used the wrong string so the heatmap
+  //      never showed any data — long-standing bug.
+  //   2. Skip soft-deleted txs (deletedAt set) — same reason as view.
   for (let offset = 29; offset >= 0; offset--) {
     const date = m.addDays(today, -offset);
     let cents = 0;
     for (const t of state.transactions || []) {
-      // Only count discretionary (record_spend) — bills logged via
-      // record_bill are obligations, not "spend" in the heatmap.
-      if (t.kind !== "record_spend") continue;
-      if (t.date === date) cents += t.amountCents || 0;
+      if (t.deletedAt) continue;
+      // Discretionary spend only — exclude bill payments (obligations).
+      if (t.kind !== "spend") continue;
+      if (t.date === date) cents += Math.abs(t.amountCents || 0);
     }
     out.push({ date, spentCents: cents });
   }

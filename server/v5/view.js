@@ -62,10 +62,16 @@ function compute(state) {
     dailyPace = daysToPayday > 0 ? Math.floor(disposable / daysToPayday) : disposable;
   }
 
-  // Today / this week spend
+  // Today / this week spend. CRITICAL: skip soft-deleted transactions —
+  // delete_transaction marks tx.deletedAt and reverses balance, but the
+  // tx stays in the array (journaling). If we don't filter here, deleted
+  // spends keep counting against today's spent → user deletes a $50 cat,
+  // hero still says "$50 spent today," looks like delete didn't work.
+  // (User-reported bug.)
   let todaySpent = 0, weekSpent = 0;
   const weekAgo = m.addDays(todayStr, -7);
   for (const tx of (state.transactions || [])) {
+    if (tx.deletedAt) continue;
     if (tx.kind === "spend" || tx.kind === "bill_payment") {
       if (tx.date === todayStr) todaySpent += -tx.amountCents;
       if (tx.date >= weekAgo) weekSpent += -tx.amountCents;

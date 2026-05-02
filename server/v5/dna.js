@@ -82,8 +82,11 @@ function compute(state) {
 
   const todayStr = m.today(state.timezone || "UTC");
   const sym = state.currencySymbol || "$";
-  const txs = (state.transactions || []).filter(tx => tx.kind === "spend" || tx.kind === "bill_payment");
-  const incomes = (state.transactions || []).filter(tx => tx.kind === "income");
+  // Filter soft-deleted txs everywhere — delete_transaction marks
+  // deletedAt; without this filter, deleted txs poison every aggregation
+  // (categories, leaks, trends, milestones).
+  const txs = (state.transactions || []).filter(tx => !tx.deletedAt && (tx.kind === "spend" || tx.kind === "bill_payment"));
+  const incomes = (state.transactions || []).filter(tx => !tx.deletedAt && tx.kind === "income");
 
   // ── BILL NODES ──
   const billNodes = Object.values(state.bills || {}).map(b => ({

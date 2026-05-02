@@ -398,10 +398,18 @@ async function parseProposal(state, userMessage, history, options) {
     // Empty intents → fall through to talk.
   }
 
-  // Anything else → talk.
+  // Anything else → talk. The fallback when AI returned an empty
+  // message used to be literal "…" which felt broken (user reported:
+  // bot replying just "…" multiple times in a row). Now: a friendly
+  // honest fallback that's clear it didn't understand and invites a
+  // retry.
+  const ru = state.language === "ru";
+  const fallback = ru
+    ? "Хм, не понял. Скажи иначе — например \"потратил 25 на кофе\" или \"удали кошку\"."
+    : "Hmm, didn't catch that. Try again — e.g. \"spent 25 on coffee\" or \"delete the cat\".";
   return {
     mode: "talk",
-    message: message || "…",
+    message: message && message.trim() && message.trim() !== "…" ? message : fallback,
     warnings: [],
   };
 }

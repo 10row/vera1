@@ -48,3 +48,46 @@ test("[view] simulateSpend doesn't mutate source state", () => {
   simulateSpend(s, 10000);
   assertEq(JSON.stringify(s), before);
 });
+
+// ── DELETED TXS DON'T POISON AGGREGATIONS (cat-was-deleted-but-still-counted bug) ──
+test("[view] deleted spend is excluded from todaySpent / weekSpent", () => {
+  const m = require("../model");
+  const { applyIntent } = require("../engine");
+  const { compute } = require("../view");
+
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-12-31", payFrequency: "monthly" } }).state;
+
+  // Two spends today.
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 5000, note: "cat" } }).state;
+  const catId = s.transactions[s.transactions.length - 1].id;
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 200, note: "taxi" } }).state;
+
+  let v = compute(s);
+  assertEq(v.todaySpentCents, 5200, "before delete: $52 spent today");
+
+  // Delete the cat.
+  s = applyIntent(s, { kind: "delete_transaction", params: { id: catId } }).state;
+
+  v = compute(s);
+  assertEq(v.todaySpentCents, 200, "after delete: only the taxi remains, $2 spent");
+});
+
+test("[view] deleted bill_payment also excluded from spend totals", () => {
+  const m = require("../model");
+  const { applyIntent } = require("../engine");
+  const { compute } = require("../view");
+
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-12-31", payFrequency: "monthly" } }).state;
+  s = applyIntent(s, { kind: "add_bill", params: { name: "Rent", amountCents: 140000, dueDate: "2025-12-01", recurrence: "monthly" } }).state;
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 140000, note: "rent payment", billKey: "rent" } }).state;
+  const billPayId = s.transactions[s.transactions.length - 1].id;
+
+  let v = compute(s);
+  assertEq(v.todaySpentCents, 140000);
+
+  s = applyIntent(s, { kind: "delete_transaction", params: { id: billPayId } }).state;
+  v = compute(s);
+  assertEq(v.todaySpentCents, 0, "after delete of bill_payment, today's spend resets");
+});
