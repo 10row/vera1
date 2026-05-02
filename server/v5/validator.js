@@ -99,6 +99,17 @@ function validateIntent(state, intent, todayStr) {
       return ok();
     }
 
+    case "delete_transaction": {
+      if (!state.setup) return reject("Set up first.");
+      const id = String((p.id) || "").trim();
+      if (!id) return reject("Need a transaction id to delete.");
+      const tx = (state.transactions || []).find(t => t.id === id);
+      if (!tx) return reject("Couldn't find that transaction.");
+      if (tx.deletedAt) return reject("That one's already deleted.");
+      if (tx.kind === "setup") return reject("Can't delete the starting balance — use /reset for a fresh start.");
+      return ok();
+    }
+
     case "reset":
       return ok();
 

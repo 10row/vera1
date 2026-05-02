@@ -34,6 +34,27 @@ function buildSystemPrompt(state) {
     bills: v.bills.map(b => ({ name: b.name, amount: b.amountFormatted, due: b.dueDate, paid: b.paidThisCycle })),
   };
 
+  // Recent transactions (last 15, non-deleted) — needed for delete_transaction
+  // intent matching. AI sees id + key fields and can pick the right one when
+  // user says "didn't get the cat" / "delete the lighthouse coffee".
+  const sym = state.currencySymbol || "$";
+  const recentTxs = (state.transactions || [])
+    .filter(t => !t.deletedAt && t.kind !== "setup")
+    .slice(-15)
+    .map(t => {
+      const isForeign = t.originalCurrency && Number.isFinite(t.originalAmount) && t.originalAmount > 0;
+      return {
+        id: t.id,
+        kind: t.kind,
+        amount: m.toMoney(Math.abs(t.amountCents), sym),
+        original: isForeign ? t.originalAmount + " " + t.originalCurrency : null,
+        note: t.note || null,
+        vendor: t.vendor || null,
+        category: t.category || null,
+        date: t.date,
+      };
+    });
+
   return [
     "You are SpendYes — a warm, slightly cheeky money buddy on Telegram.",
     "Your job: extract ONE intent (action) per user message, OR reply conversationally.",
@@ -86,6 +107,7 @@ function buildSystemPrompt(state) {
     "- Log a spend (record_spend) or income event (record_income)",
     "- Change payday or payday frequency (update_payday)",
     "- Undo the last action (undo_last)",
+    "- Delete a SPECIFIC past transaction by id (delete_transaction) — used when user identifies which one ('didn't get the cat', 'remove the lighthouse coffee')",
     "- Reset everything (reset)",
     "",
     "OUT-OF-SCOPE today (admit honestly, don't pretend):",
@@ -93,7 +115,7 @@ function buildSystemPrompt(state) {
     "- Transfers between accounts (no account model)",
     "- Month-over-month trends (DNA only goes back ~30d)",
     "- Recurring spend reminders (only bills are recurring)",
-    "- Editing or deleting a specific past transaction (only undo_last is supported)",
+    "- Editing the AMOUNT of a past transaction (only delete-and-relog is supported for now)",
     "When user asks for any of these, DO NOT promise it. Say what you CAN do that's closest, and ask if they want that.",
     "7. USE THE DNA SUMMARY — DNA reflects the user's real money shape (categories, trends, leaks, post-bills runway). Be ASSERTIVE with it. After every spend log or status check, add ONE short insight from DNA when present. The bot's job is to be a money buddy who notices things, not a mute calculator.",
     "   PRIORITY ORDER for which insight to surface:",
@@ -153,7 +175,24 @@ function buildSystemPrompt(state) {
     "                       \"500 руб кофе\"           → { kind:\"record_spend\", params:{ amountCents:0, originalAmount:500,    originalCurrency:\"RUB\", note:\"кофе\" } }",
     '  record_income   — { amountCents:N, note:"paycheck" }',
     '  update_payday   — { payday:"YYYY-MM-DD", payFrequency:"monthly" }',
-    '  undo_last       — {}',
+    '  undo_last       — { kind:"undo_last", params:{} }     // reverses the MOST RECENT action only',
+    '  delete_transaction — { kind:"delete_transaction", params:{ id:"<txId>" } }',
+    "                       Use this when the user identifies a SPECIFIC past transaction (not necessarily the last one).",
+    "                       Trigger phrases (any of these → delete_transaction, NOT undo_last):",
+    "                         \"didn't really get X\" / \"didn't get X\" / \"didn't actually X\"",
+    "                         \"delete X\" / \"remove X\" / \"get rid of X\"",
+    "                         \"the X was a mistake\" / \"X was wrong\"",
+    "                         \"fix the X\" — when X is a clearly past transaction (not the most recent action),",
+    "                       The id comes from RECENT_TRANSACTIONS below — match by note/vendor/amount/date.",
+    "                       If MULTIPLE transactions match (e.g. 5 lighthouse coffees), pick the most recent one OR",
+    "                         reply in talk mode asking which: \"Which Lighthouse — Tuesday's $25 or yesterday's $5?\"",
+    "                       Examples:",
+    "                         User: \"didn't get the cat\"  + RECENT shows tx_abc kind=spend note=\"cat\" amount=$50",
+    "                           → { kind:\"delete_transaction\", params:{ id:\"tx_abc\" } }",
+    "                         User: \"remove the juice\" + RECENT shows tx_xyz note=\"another juice at Voi\"",
+    "                           → { kind:\"delete_transaction\", params:{ id:\"tx_xyz\" } }",
+    "                         User: \"undo\" / \"undo last\" → STILL use undo_last (most recent action).",
+    "                         User: \"the lighthouse coffee was $30 not $25\" → not yet supported. Ask user to delete and re-log.",
     '  reset           — {}                                 // wipe everything (RARE)',
     "",
     "INTENT CHOICE GUIDE:",
@@ -205,6 +244,9 @@ function buildSystemPrompt(state) {
     "",
     "STATE:",
     JSON.stringify(snap, null, 2),
+    "",
+    "RECENT_TRANSACTIONS (most recent last). Use these IDs for delete_transaction:",
+    JSON.stringify(recentTxs, null, 2),
     "",
     // ── USER DNA ──
     // Goldratt-style compact picture of the user's money shape: spend

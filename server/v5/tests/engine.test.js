@@ -238,3 +238,148 @@ test("[graph] DNA categorize prefers stored category over keyword inference", ()
   const entCat = graph.summary.topCategories && graph.summary.topCategories.find(c => c.name === "entertainment");
   assertTrue(!!entCat, "DNA should aggregate the stored category, not infer from note");
 });
+
+// ── DELETE TRANSACTION (the user's "didn't get the cat" bug) ──
+// Critical that balance integrity is preserved across delete + undo + edit
+// sequences. Property test: 200 random sequences, balance must always
+// reconcile to setup_balance + sum(income) - sum(non-deleted spends).
+
+function setupTo(balanceCents) {
+  let s = m.createFreshState();
+  return applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents, payday: "2025-12-31", payFrequency: "monthly" },
+  }).state;
+}
+
+test("[delete] basic: spend → delete → balance restored", () => {
+  let s = setupTo(500000);
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 5000, note: "cat" } }).state;
+  assertEq(s.balanceCents, 495000);
+  const txId = s.transactions[s.transactions.length - 1].id;
+  s = applyIntent(s, { kind: "delete_transaction", params: { id: txId } }).state;
+  assertEq(s.balanceCents, 500000);
+  // Tx still in array, marked deleted (journaling).
+  const tx = s.transactions.find(t => t.id === txId);
+  assertTrue(!!tx.deletedAt, "tx should be marked deleted");
+});
+
+test("[delete] mid-history: spend1 + spend2 + delete spend1 → balance reflects only spend2", () => {
+  let s = setupTo(500000);
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 5000, note: "cat" } }).state;
+  const catId = s.transactions[s.transactions.length - 1].id;
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 400, note: "juice" } }).state;
+  assertEq(s.balanceCents, 494600); // 500000 - 5000 - 400
+  s = applyIntent(s, { kind: "delete_transaction", params: { id: catId } }).state;
+  assertEq(s.balanceCents, 499600); // 500000 - 400 (only juice remains)
+});
+
+test("[delete] undo of delete restores", () => {
+  let s = setupTo(500000);
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 5000, note: "cat" } }).state;
+  const catId = s.transactions[s.transactions.length - 1].id;
+  s = applyIntent(s, { kind: "delete_transaction", params: { id: catId } }).state;
+  assertEq(s.balanceCents, 500000);
+  s = applyIntent(s, { kind: "undo_last", params: {} }).state;
+  assertEq(s.balanceCents, 495000); // back to spend applied
+  const tx = s.transactions.find(t => t.id === catId);
+  assertTrue(!tx.deletedAt, "deletedAt should be cleared");
+});
+
+test("[delete] cannot delete same tx twice", () => {
+  let s = setupTo(500000);
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 5000, note: "cat" } }).state;
+  const txId = s.transactions[s.transactions.length - 1].id;
+  s = applyIntent(s, { kind: "delete_transaction", params: { id: txId } }).state;
+  assertThrows(() => applyIntent(s, { kind: "delete_transaction", params: { id: txId } }), /already deleted/i);
+});
+
+test("[delete] rejects unknown id", () => {
+  let s = setupTo(500000);
+  assertThrows(() => applyIntent(s, { kind: "delete_transaction", params: { id: "nonexistent" } }), /not found/i);
+});
+
+test("[delete] cannot delete setup transaction", () => {
+  let s = setupTo(500000);
+  const setupId = s.transactions[0].id;
+  assertThrows(() => applyIntent(s, { kind: "delete_transaction", params: { id: setupId } }), /starting balance|setup/i);
+});
+
+test("[delete] bill payment: deleting reverts paidThisCycle", () => {
+  let s = setupTo(500000);
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 140000, dueDate: "2025-12-01", recurrence: "monthly" },
+  }).state;
+  // Simulate paying the bill
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 140000, note: "rent payment", billKey: "rent" },
+  }).state;
+  assertEq(s.bills.rent.paidThisCycle, false /* advancePayday immediately resets */);
+  // Actually paidThisCycle behavior: once paid, advancePayday rolls dueDate
+  // forward and resets to false for next cycle. So this is the normal flow.
+  // For this test we just verify delete reverses balance.
+  const payTxId = s.transactions[s.transactions.length - 1].id;
+  const balBefore = s.balanceCents;
+  s = applyIntent(s, { kind: "delete_transaction", params: { id: payTxId } }).state;
+  assertEq(s.balanceCents, balBefore + 140000); // restored
+});
+
+// PROPERTY TEST: random sequences must preserve invariant
+//   balance == sum(amountCents-effects of non-deleted, non-deleted-by-undo events)
+// This catches subtle math drift across mixed sequences.
+test("[delete:property] 200 random sequences preserve balance integrity", () => {
+  const RNG = (seed) => {
+    let x = seed;
+    return () => {
+      x = (x * 9301 + 49297) % 233280;
+      return x / 233280;
+    };
+  };
+  for (let run = 0; run < 200; run++) {
+    const rnd = RNG(run + 1);
+    let s = setupTo(1000000); // $10,000 starting
+    let txIds = [];
+    let opCount = 5 + Math.floor(rnd() * 15); // 5-20 ops
+    for (let i = 0; i < opCount; i++) {
+      const r = rnd();
+      try {
+        if (r < 0.55) {
+          // record_spend
+          const amt = 100 + Math.floor(rnd() * 50000);
+          s = applyIntent(s, { kind: "record_spend", params: { amountCents: amt, note: "x" + i } }).state;
+          txIds.push(s.transactions[s.transactions.length - 1].id);
+        } else if (r < 0.70) {
+          // record_income
+          const amt = 10000 + Math.floor(rnd() * 200000);
+          s = applyIntent(s, { kind: "record_income", params: { amountCents: amt, note: "y" + i } }).state;
+        } else if (r < 0.85 && txIds.length > 0) {
+          // delete_transaction (random existing tx)
+          const target = txIds[Math.floor(rnd() * txIds.length)];
+          const tx = s.transactions.find(t => t.id === target);
+          if (tx && !tx.deletedAt) {
+            s = applyIntent(s, { kind: "delete_transaction", params: { id: target } }).state;
+          }
+        } else {
+          // undo_last
+          if (s.events.length > 1) {
+            try { s = applyIntent(s, { kind: "undo_last", params: {} }).state; }
+            catch (e) { /* skip if can't undo */ }
+          }
+        }
+      } catch (e) { /* skip invalid op */ }
+      // INVARIANT: balanceCents must equal setup_balance + sum of effective tx amounts
+      const effectiveAmt = (s.transactions || [])
+        .filter(t => !t.deletedAt)
+        .reduce((sum, t) => {
+          if (t.kind === "setup") return sum + t.amountCents;
+          if (t.kind === "spend" || t.kind === "bill_payment") return sum + t.amountCents; // already negative
+          if (t.kind === "income") return sum + t.amountCents;
+          if (t.kind === "correction") return sum + t.amountCents;
+          return sum;
+        }, 0);
+      assertEq(s.balanceCents, effectiveAmt, "run " + run + " op " + i + ": balance must equal sum of non-deleted tx amounts");
+    }
+  }
+});

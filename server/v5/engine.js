@@ -290,6 +290,53 @@ function applyIntent(state, intent) {
       return { state: next, event: ev };
     }
 
+    // ── DELETE TRANSACTION (by id) ─────────────────
+    // For "I didn't really get the cat" style requests where the user
+    // wants to remove a SPECIFIC past transaction, not the most recent
+    // (which is what undo_last would do).
+    //
+    // Journaling design: the original tx stays in transactions[] with
+    // a `deletedAt` timestamp (history preserved). Balance and bill
+    // state are reversed via a delete_transaction event that captures
+    // pre-delete snapshots so undo can restore everything cleanly.
+    case "delete_transaction": {
+      if (!next.setup) throw new Error("Set up first.");
+      const txId = String(p.id || "").trim();
+      if (!txId) throw new Error("Need a transaction id");
+      const tx = next.transactions.find(t => t.id === txId);
+      if (!tx) throw new Error("Transaction not found");
+      if (tx.deletedAt) throw new Error("Already deleted");
+      if (tx.kind === "setup") throw new Error("Cannot delete the starting balance");
+
+      // Reverse balance impact based on tx kind.
+      // amountCents convention: negative for spend/bill_payment, positive
+      // for income; correction is delta (signed). Reversing = subtract.
+      next.balanceCents -= tx.amountCents;
+
+      // For bill payments, snapshot bill state then revert paidThisCycle.
+      // dueDate restoration: we don't snapshot the pre-payment date (would
+      // need to add to the original tx). Accept that paidThisCycle = false
+      // is the meaningful revert; user can re-pay if needed and the date
+      // will re-advance.
+      let billRevert = null;
+      if (tx.kind === "bill_payment" && tx.billKey && next.bills[tx.billKey]) {
+        const b = next.bills[tx.billKey];
+        billRevert = { key: tx.billKey, paidThisCycle: !!b.paidThisCycle };
+        b.paidThisCycle = false;
+      }
+
+      // Mark deleted (journaling — never destroy data).
+      tx.deletedAt = Date.now();
+
+      const ev = makeEvent(intent, prevBalance, {
+        newBalance: next.balanceCents,
+        deletedTxId: txId,
+        billRevert,
+      });
+      next.events.push(ev);
+      return { state: next, event: ev };
+    }
+
     // ── UNDO / RESET ───────────────────────────────
     case "undo_last": {
       if (!next.events || next.events.length === 0) throw new Error("Nothing to undo");
@@ -340,6 +387,20 @@ function applyIntent(state, intent) {
           if (target.prevPayday !== undefined) next.payday = target.prevPayday;
           if (target.prevFreq !== undefined) next.payFrequency = target.prevFreq;
           break;
+        case "delete_transaction": {
+          // Undo of a delete = restore the deleted transaction.
+          // Balance restores via prevBalance assignment below (we set it
+          // explicitly here for safety even though the default does it).
+          next.balanceCents = target.prevBalance;
+          if (target.deletedTxId) {
+            const tx = next.transactions.find(t => t.id === target.deletedTxId);
+            if (tx) delete tx.deletedAt;
+          }
+          if (target.billRevert && target.billRevert.key && next.bills[target.billRevert.key]) {
+            next.bills[target.billRevert.key].paidThisCycle = !!target.billRevert.paidThisCycle;
+          }
+          break;
+        }
         default:
           throw new Error("Can't undo " + target.intent.kind);
       }

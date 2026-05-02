@@ -193,6 +193,29 @@ function describeIntent(intent, state) {
         : "Payday → " + (p.payday || "?") + (p.payFrequency ? " (" + p.payFrequency + ")" : "");
     case "undo_last":
       return lang === "ru" ? "Отменить последнее действие" : "Undo last action";
+    case "delete_transaction": {
+      // Confirm card MUST show distinguishing details so user can spot
+      // wrong-target before tapping Yes. Pull the target tx from state
+      // and render its salient fields.
+      const id = String(p.id || "").trim();
+      const tx = (state.transactions || []).find(t => t.id === id);
+      if (!tx) {
+        return lang === "ru" ? "Удалить трату — не найдено" : "Delete transaction — not found";
+      }
+      const ccy = require("./currency");
+      const isForeign = tx.originalCurrency && Number.isFinite(tx.originalAmount) && tx.originalAmount > 0;
+      const amtPhrase = isForeign
+        ? ccy.fmt(ccy.spokenToSubunits(tx.originalAmount, tx.originalCurrency), tx.originalCurrency) + " ≈ " + M(Math.abs(tx.amountCents))
+        : M(Math.abs(tx.amountCents));
+      const labelParts = [];
+      if (tx.vendor) labelParts.push(E(tx.vendor));
+      if (tx.note && tx.note !== tx.vendor) labelParts.push(E(tx.note));
+      const label = labelParts.length > 0 ? " · " + labelParts.join(" — ") : "";
+      const dateStr = tx.date ? " · " + tx.date : "";
+      return lang === "ru"
+        ? "Удалить: " + amtPhrase + label + dateStr
+        : "Delete: " + amtPhrase + label + dateStr;
+    }
     case "reset":
       return lang === "ru" ? "Полный сброс — все данные удалятся" : "Full reset — wipes all data";
     default:
@@ -669,7 +692,28 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
       // Confirm card: ✓ summary, NO buttons. Hero: pure info, NO
       // buttons. /undo command: explicit recovery for the rare real
       // mistake case.
-      const summaryLines = applied.map(i => "✓ " + describeIntent(i, state));
+      // Build summary lines. For undo_last specifically: instead of the
+      // generic "Undo last action" describeIntent, dig into the event
+      // log to show WHAT was actually undone — "Undid: Spend $50 · cat".
+      // (User reported: "Actually I didn't get the cat" → bot said
+      // "Undo last action" but had silently undone the JUICE, not the
+      // cat. The user couldn't tell.)
+      const summaryLines = applied.map(i => {
+        if (i.kind === "undo_last") {
+          const lastEvent = state.events && state.events.length ? state.events[state.events.length - 1] : null;
+          if (lastEvent && lastEvent.intent && lastEvent.intent.kind === "undo_last" && lastEvent.undid && lastEvent.undid.intent) {
+            const undoneDesc = describeIntent(lastEvent.undid.intent, state);
+            return "✓ " + (lang === "ru" ? "Отменено: " : "Undid: ") + undoneDesc;
+          }
+        }
+        if (i.kind === "delete_transaction") {
+          // describeIntent looks up the tx by id and renders its details.
+          // Same lookup works post-apply because the tx is still in the
+          // array (just marked deletedAt).
+          return "✓ " + (lang === "ru" ? "Удалено: " : "Deleted: ") + describeIntent(i, state).replace(/^Delete: |^Удалить: /, "");
+        }
+        return "✓ " + describeIntent(i, state);
+      });
       const failedLines = failed.map(f => (lang === "ru" ? "✗ " : "✗ ") + describeIntent(f.intent, state) + " — _" + m.escapeMd(f.reason) + "_");
       let summary = summaryLines.concat(failedLines).join("\n");
 
