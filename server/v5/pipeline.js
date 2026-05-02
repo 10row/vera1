@@ -46,8 +46,8 @@ const ACTION_VERBS = {
     // Add bill / remove bill — only when followed by a bill-context object.
     [/\b(adding|saving)\s+(the|your)?\s*(bill|rent|subscription)/i, ["add_bill"]],
     [/\bi(?:'ll| will| am going to)\s+add\s+(the|your)?\s*(bill|rent|subscription)/i, ["add_bill"]],
-    [/\b(removing|deleting)\s+(it|that|the\s+\w+|your\s+\w+)\b/i, ["remove_bill", "undo_last"]],
-    [/\bi(?:'ll| will| am going to)\s+(remove|delete)\s+(it|that|the\s+\w+|your\s+\w+)\b/i, ["remove_bill", "undo_last"]],
+    [/\b(removing|deleting)\s+(it|that|the\s+\w+|your\s+\w+)\b/i, ["remove_bill", "undo_last", "delete_transaction"]],
+    [/\bi(?:'ll| will| am going to)\s+(remove|delete)\s+(it|that|the\s+\w+|your\s+\w+)\b/i, ["remove_bill", "undo_last", "delete_transaction"]],
     // Generic "marking as paid" — must have record_spend with billKey.
     [/\b(marking|paying)\s+(it|that|the\s+\w+|your\s+\w+)\s*(as\s+)?(paid)?/i, ["record_spend"]],
   ],
@@ -57,7 +57,7 @@ const ACTION_VERBS = {
     [/(?:^|[^\p{L}])(отменяю|откатываю|возвращаю)\s+(это|то|последн)/iu, ["undo_last"]],
     [/(?:^|[^\p{L}])(исправляю|меняю|обновляю|корректирую)\s+(баланс|зарплату)/iu, ["adjust_balance", "update_payday"]],
     [/(?:^|[^\p{L}])(записываю|логирую|добавляю)\s+(это|то|трату|доход)/iu, ["record_spend", "record_income"]],
-    [/(?:^|[^\p{L}])(удаляю|убираю)\s+(это|то|счёт|счет)/iu, ["remove_bill", "undo_last"]],
+    [/(?:^|[^\p{L}])(удаляю|убираю)\s+(это|то|счёт|счет)/iu, ["remove_bill", "undo_last", "delete_transaction"]],
   ],
 };
 

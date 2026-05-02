@@ -105,15 +105,16 @@ const PAY_FREQS = ["weekly", "biweekly", "monthly", "irregular"];
 
 // All intents we accept. Tight set.
 const INTENT_KINDS = [
-  "setup_account",   // first-run only (engine still rejects on already-setup)
-  "adjust_balance",  // correct balance after a mistake
-  "add_bill",        // recurring obligation: rent, phone, etc
+  "setup_account",       // first-run only (engine still rejects on already-setup)
+  "adjust_balance",      // correct balance after a mistake
+  "add_bill",            // recurring obligation: rent, phone, etc
   "remove_bill",
-  "record_spend",    // money out
-  "record_income",   // money in (paycheck, refund)
-  "undo_last",       // pop last event
-  "reset",           // wipe everything (confirm-gated)
-  "update_payday",   // change payday/frequency
+  "record_spend",        // money out
+  "record_income",       // money in (paycheck, refund)
+  "undo_last",           // pop last event
+  "delete_transaction",  // remove a SPECIFIC past tx by id (not just last)
+  "reset",               // wipe everything (confirm-gated)
+  "update_payday",       // change payday/frequency
 ];
 
 function billKey(name) {

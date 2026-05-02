@@ -313,3 +313,125 @@ test("[params-lift] AI batch with mixed shapes → all normalized", async () => 
   assertEq(r.items[1].intent.params.originalAmount, 30000);
   assertTrue(r.items[1].intent.params.amountCents > 0);
 });
+
+// ── DELETE_TRANSACTION AMBIGUITY HANDLING ──
+// User reported concern: "if i say undo taxi and there are 5 taxis,
+// how does the bot know which?" Tests below verify that the pipeline
+// + engine handle the AI's various behaviors correctly.
+
+test("[delete-amb] AI returns valid id from recent → applies cleanly", async () => {
+  let s = fullySetUp();
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 5000, note: "cat" } }).state;
+  const catId = s.transactions[s.transactions.length - 1].id;
+  const r = await processMessage(s, "didn't get the cat", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Removing the cat purchase.",
+      intent: { kind: "delete_transaction", params: { id: catId } },
+    }),
+  });
+  assertEq(r.kind, "do");
+  assertEq(r.intent.kind, "delete_transaction");
+  assertEq(r.intent.params.id, catId);
+  assertTrue(r.verdict.ok, "valid delete should pass validation");
+});
+
+test("[delete-amb] AI hallucinates id (not in state) → validator rejects with friendly msg", async () => {
+  let s = fullySetUp();
+  const r = await processMessage(s, "delete the cat", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Deleting the cat.",
+      intent: { kind: "delete_transaction", params: { id: "tx_doesnotexist" } },
+    }),
+  });
+  assertEq(r.kind, "do");
+  assertEq(r.verdict.ok, false);
+  assertTrue(/find/i.test(r.verdict.reason), "should say couldn't find the tx");
+});
+
+test("[delete-amb] AI in talk mode asking 'which one' → user sees clarification, no silent action", async () => {
+  let s = fullySetUp();
+  // Three taxi spends, all real.
+  for (let i = 0; i < 3; i++) {
+    s = applyIntent(s, { kind: "record_spend", params: { amountCents: 1000 + i * 100, note: "taxi", vendor: "Taxi" } }).state;
+  }
+  const r = await processMessage(s, "undo taxi", [], {
+    _aiCall: stub({
+      mode: "talk",
+      message: "You have 3 taxi entries — which one?\n  1. $10 May 1\n  2. $11 May 1\n  3. $12 May 1",
+    }),
+  });
+  assertEq(r.kind, "talk");
+  assertTrue(/which|3 taxi/i.test(r.message), "user should see the disambiguation prompt");
+});
+
+test("[delete-amb] AI says 'I don't see that' for out-of-context tx → no silent lie", async () => {
+  let s = fullySetUp();
+  const r = await processMessage(s, "delete the dinner from last month", [], {
+    _aiCall: stub({
+      mode: "talk",
+      message: "I don't see that in your recent transactions. Got a date or amount?",
+    }),
+  });
+  assertEq(r.kind, "talk");
+  // Silent-lie check should NOT fire — no action verb in talk mode.
+  // (The message says "I don't see" which is honest, not a promise.)
+  assertTrue(!/I said I'd do it/.test(r.message), "honest reply should not be rewritten by silent-lie check");
+});
+
+test("[delete-amb] valid id with graph-field tx passes validation", async () => {
+  // Verifies the pipeline path for a tx that has all the rich graph
+  // fields. (Confirm-card formatting via bot.describeIntent is
+  // production-exercised; not unit-tested here to avoid loading the
+  // bot module which requires OPENAI_API_KEY at startup.)
+  let s = fullySetUp();
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 5000, note: "cat", vendor: "PetStore", category: "personal" },
+  }).state;
+  const txId = s.transactions[s.transactions.length - 1].id;
+  const r = await processMessage(s, "delete that cat", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Removing that cat purchase.",
+      intent: { kind: "delete_transaction", params: { id: txId } },
+    }),
+  });
+  assertEq(r.kind, "do");
+  assertEq(r.verdict.ok, true);
+});
+
+test("[delete-amb] AI emits silent-lie 'I'll delete it' with no intent → caught", async () => {
+  let s = fullySetUp();
+  const r = await processMessage(s, "delete that cat", [], {
+    _aiCall: stub({
+      mode: "talk",
+      message: "I'll delete that for you.",
+    }),
+  });
+  assertEq(r.kind, "talk");
+  // The silent-lie check should rewrite this to honest fallback.
+  assertTrue(/didn't actually|couldn't pin|I said I'd/i.test(r.message), "silent-lie 'I'll delete' should be caught");
+});
+
+test("[delete-amb] full chain: AI valid → pipeline → engine applies + balance correct", async () => {
+  let s = fullySetUp();
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 5000, note: "cat" } }).state;
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 400, note: "juice" } }).state;
+  assertEq(s.balanceCents, 494600);
+  const catTx = s.transactions.find(t => t.note === "cat");
+
+  const r = await processMessage(s, "didn't get the cat", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Removing the cat purchase.",
+      intent: { kind: "delete_transaction", params: { id: catTx.id } },
+    }),
+  });
+  assertEq(r.kind, "do");
+  assertEq(r.verdict.ok, true);
+  // Apply via engine to verify final state
+  const r2 = applyIntent(s, r.intent);
+  assertEq(r2.state.balanceCents, 499600); // juice still applied, cat removed
+});
