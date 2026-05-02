@@ -242,3 +242,74 @@ test("[silent-lie] full pipeline: talk mode undo lie → user sees fallback, not
   assertEq(r.kind, "talk");
   assertTrue(/didn't actually|couldn't pin/i.test(r.message), "user should see honest fallback, not the AI's lie");
 });
+
+// ── PARAMS-WRAPPER ROBUSTNESS (regression for the 30000 VND taxi bug) ──
+// User reported: "I just got taxi back to hotel was 30,000 vnd" → "Need a
+// valid amount." /debug showed AI emitted fields at top-level instead of
+// inside params:{}. parseProposal must lift them automatically.
+
+test("[params-lift] AI emits fields at top-level → pipeline lifts them", async () => {
+  const s = fullySetUp();
+  // Replicate the EXACT shape user saw in /debug — no params wrapper.
+  const r = await processMessage(s, "30,000 vnd taxi", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Logging your spend.",
+      intent: {
+        kind: "record_spend",
+        amountCents: 0,
+        originalAmount: 30000,
+        originalCurrency: "VND",
+        note: "taxi",
+      },
+    }),
+  });
+  assertEq(r.kind, "do");
+  assertTrue(r.intent !== undefined, "should have an intent");
+  assertEq(r.intent.kind, "record_spend");
+  // The fields should now be inside params.
+  assertEq(r.intent.params.originalAmount, 30000);
+  assertEq(r.intent.params.originalCurrency, "VND");
+  assertEq(r.intent.params.note, "taxi");
+  // Pipeline conversion ran: amountCents now reflects USD-converted VND.
+  assertTrue(r.intent.params.amountCents > 0, "conversion should have filled amountCents");
+});
+
+test("[params-lift] AI emits proper params wrapper → pipeline preserves it", async () => {
+  const s = fullySetUp();
+  const r = await processMessage(s, "spent 25 on coffee", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Logging.",
+      intent: {
+        kind: "record_spend",
+        params: { amountCents: 2500, note: "coffee" },
+      },
+    }),
+  });
+  assertEq(r.kind, "do");
+  assertEq(r.intent.params.amountCents, 2500);
+  assertEq(r.intent.params.note, "coffee");
+});
+
+test("[params-lift] AI batch with mixed shapes → all normalized", async () => {
+  const s = fullySetUp();
+  const r = await processMessage(s, "rent 1400 + 30000 vnd taxi", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Two things.",
+      intents: [
+        // properly wrapped
+        { kind: "add_bill", params: { name: "Rent", amountCents: 140000, dueDate: "2025-06-01", recurrence: "monthly" } },
+        // wrapper-less (the bug)
+        { kind: "record_spend", amountCents: 0, originalAmount: 30000, originalCurrency: "VND", note: "taxi" },
+      ],
+    }),
+  });
+  assertEq(r.kind, "do_batch");
+  assertEq(r.items.length, 2);
+  // Both should have params accessible.
+  assertEq(r.items[0].intent.params.name, "Rent");
+  assertEq(r.items[1].intent.params.originalAmount, 30000);
+  assertTrue(r.items[1].intent.params.amountCents > 0);
+});

@@ -87,19 +87,20 @@ function buildSystemPrompt(state) {
     '  adjust_balance  — { newBalanceCents:N }              // "actually I have $X now" / balance correction',
     '  add_bill        — { name:"Rent", amountCents:N, dueDate:"YYYY-MM-DD", recurrence:"monthly"|"weekly"|"biweekly"|"once" }',
     '  remove_bill     — { name:"Rent" }',
-    '  record_spend    — { amountCents:N, note:"coffee", billKey?:"rent", originalAmount?:N, originalCurrency?:"VND" }',
+    '  record_spend    — { kind:"record_spend", params:{ amountCents:N, note:"coffee", billKey?:"rent", originalAmount?:N, originalCurrency?:"VND" } }',
+    "                    ★ ALL FIELDS GO INSIDE params. ALWAYS wrap in params:{...}. NEVER put fields at the top level of the intent.",
     "                    FOREIGN currency rules (CRITICAL — easy to get wrong):",
     "                    • originalAmount = the SPOKEN NUMBER as a natural decimal. \"200,000 VND\" → 200000. \"€40.50\" → 40.50. \"$8.00\" → 8.00.",
     "                      DO NOT multiply by 100. DO NOT think about \"cents\" — pipeline handles all currency math.",
-    "                    • originalCurrency = ISO code (USD, EUR, GBP, RUB, JPY, VND, AUD, CAD, INR, CNY, CHF, SEK, NOK, PLN, THB, IDR, MYR, SGD, HKD, KRW, TRY, MXN, BRL, ZAR).",
+    "                    • originalCurrency = ISO code (USD, EUR, GBP, RUB, JPY, VND, AUD, CAD, INR, CNY, CHF, SEK, NOK, PLN, THB, IDR, MYR, SGD, HKD, KRW, TRY, MXN, BRL, ZAR). Lowercase ok (\"vnd\" → \"VND\").",
     "                    • Set amountCents to 0 (pipeline auto-fills from originalAmount).",
-    "                    • Verbose user message? Extract the amount + currency anyway. \"I bought coffee and a snack from cafe X for 200,000 VND\" → { amountCents:0, originalAmount:200000, originalCurrency:\"VND\", note:\"coffee + snack at cafe X\" }.",
-    "                    • Examples:",
-    "                       \"200000 dong\"   → originalAmount:200000, originalCurrency:\"VND\"",
-    "                       \"40 euros\"      → originalAmount:40,     originalCurrency:\"EUR\"",
-    "                       \"€40.50 lunch\" → originalAmount:40.50,  originalCurrency:\"EUR\", note:\"lunch\"",
-    "                       \"¥1500 ramen\"  → originalAmount:1500,   originalCurrency:\"JPY\", note:\"ramen\"",
-    "                       \"500 руб кофе\" → originalAmount:500,    originalCurrency:\"RUB\", note:\"кофе\"",
+    "                    • Examples — ALL include the params wrapper:",
+    "                       \"30000 vnd taxi\"          → { kind:\"record_spend\", params:{ amountCents:0, originalAmount:30000,  originalCurrency:\"VND\", note:\"taxi\" } }",
+    "                       \"200000 dong coffee\"      → { kind:\"record_spend\", params:{ amountCents:0, originalAmount:200000, originalCurrency:\"VND\", note:\"coffee\" } }",
+    "                       \"40 euros lunch\"          → { kind:\"record_spend\", params:{ amountCents:0, originalAmount:40,     originalCurrency:\"EUR\", note:\"lunch\" } }",
+    "                       \"€40.50 lunch\"           → { kind:\"record_spend\", params:{ amountCents:0, originalAmount:40.50,  originalCurrency:\"EUR\", note:\"lunch\" } }",
+    "                       \"¥1500 ramen\"            → { kind:\"record_spend\", params:{ amountCents:0, originalAmount:1500,   originalCurrency:\"JPY\", note:\"ramen\" } }",
+    "                       \"500 руб кофе\"           → { kind:\"record_spend\", params:{ amountCents:0, originalAmount:500,    originalCurrency:\"RUB\", note:\"кофе\" } }",
     '  record_income   — { amountCents:N, note:"paycheck" }',
     '  update_payday   — { payday:"YYYY-MM-DD", payFrequency:"monthly" }',
     '  undo_last       — {}',
@@ -167,6 +168,29 @@ function buildSystemPrompt(state) {
   ].filter(Boolean).join("\n");
 }
 
+// normalizeIntent — accept either { kind, params: {...} } or { kind, ...flat fields }
+// and always return the canonical { kind, params: {...} } shape. Lifts top-level
+// fields (everything except `kind`) into params if `params` is missing.
+//
+// Without this, AI flubs that drop the params wrapper would silently fail
+// validation ("invalid amount" / "invalid date") because intent.params.X is
+// undefined. The user reported exactly this on a 30,000 VND taxi spend.
+function normalizeIntent(raw) {
+  if (!raw || typeof raw !== "object" || typeof raw.kind !== "string") {
+    return { kind: "", params: {} };
+  }
+  if (raw.params && typeof raw.params === "object" && !Array.isArray(raw.params)) {
+    return { kind: raw.kind, params: raw.params };
+  }
+  // No params object — lift all non-`kind` fields into params.
+  const params = {};
+  for (const key of Object.keys(raw)) {
+    if (key === "kind") continue;
+    params[key] = raw[key];
+  }
+  return { kind: raw.kind, params };
+}
+
 async function defaultAiCall(messages) {
   const OpenAI = require("openai");
   const openai = new OpenAI();
@@ -230,13 +254,18 @@ async function parseProposal(state, userMessage, history, options) {
 
   // do: 1+ intents. Multi-intent brain-dumps come back as `intents: [...]`,
   // single intents as `intent: {...}`. Normalize both into an array.
+  //
+  // DEFENSIVE LIFT: gpt-4o-mini sometimes drops the `params:{...}` wrapper
+  // and puts fields at the top level (regression bug from foreign-currency
+  // examples that didn't show the wrapper). normalizeIntent() handles both
+  // shapes — if `params` is missing, we lift the non-`kind` fields into
+  // params automatically. Belt + suspenders alongside the prompt fix.
   if (parsed.mode === "do") {
     let intents = [];
     if (Array.isArray(parsed.intents)) {
-      intents = parsed.intents.filter(i => i && typeof i.kind === "string")
-        .map(i => ({ kind: i.kind, params: i.params || {} }));
+      intents = parsed.intents.filter(i => i && typeof i.kind === "string").map(normalizeIntent);
     } else if (parsed.intent && typeof parsed.intent.kind === "string") {
-      intents = [{ kind: parsed.intent.kind, params: parsed.intent.params || {} }];
+      intents = [normalizeIntent(parsed.intent)];
     }
     // Cap at 5 — defensive against runaway batches.
     if (intents.length > 5) intents = intents.slice(0, 5);
