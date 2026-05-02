@@ -857,7 +857,12 @@ function attach(prisma) {
         return;
       }
 
-      const token = setPending(r.intent, ctx.from.id);
+      // FIX: setPending must store the PRISMA user id (u.id), NOT the
+      // Telegram id (ctx.from.id). The callback handler resolves the
+      // prisma user and compares entry.userId to it. Storing telegram id
+      // here meant immediate "That confirm has expired" on Yes tap
+      // (user reported: pressed Yes right away → expired).
+      const token = setPending(r.intent, u.id);
       const card = describeIntent(r.intent, state);
       const fromPhoto = lang === "ru" ? "📸 *Из чека:*" : "📸 *From receipt:*";
       await safeReply(ctx, fromPhoto + "\n" + card, {

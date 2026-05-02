@@ -16,6 +16,18 @@ var useMemo = React.useMemo;
 
 var API_BASE = "";
 
+// Subtle haptic feedback on Telegram clients that support it. Hoisted
+// to file scope so EVERY component can call it (TodayTxList,
+// TxDetailModal, Heatmap, PayBill, etc.). Previous nested definitions
+// would cause a ReferenceError → blank-screen crash when a sibling
+// component called it on tap.
+function tapHaptic() {
+  try {
+    var hf = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback;
+    if (hf && hf.impactOccurred) hf.impactOccurred("light");
+  } catch (e) { /* ignore */ }
+}
+
 // ── i18n ─────────────────────────────────────────────────────
 // Mini App locale layer. Strings are fetched once per session from
 // /api/v4/locale?lang=X (X comes from view.language). English is the
@@ -308,14 +320,7 @@ function Heatmap(props) {
   var nameMap = props.nameMap || {};
   var openState = useState(null);
   var open = openState[0], setOpen = openState[1];
-
-  // Subtle haptic feedback on Telegram clients that support it.
-  function tapHaptic() {
-    try {
-      var hf = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback;
-      if (hf && hf.impactOccurred) hf.impactOccurred("light");
-    } catch (e) { /* ignore */ }
-  }
+  // tapHaptic is now file-scope (top of file).
 
   // Color thresholds: 0 spend = dim grey, <50% pace = green,
   // 50-100% pace = green-medium, 100-150% = amber, >150% = red
@@ -891,13 +896,7 @@ function BillCard(props) {
   var busy = busyState[0], setBusy = busyState[1];
   var errState = useState(null);
   var err = errState[0], setErr = errState[1];
-
-  function tapHaptic() {
-    try {
-      var hf = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback;
-      if (hf && hf.impactOccurred) hf.impactOccurred("light");
-    } catch (_) {}
-  }
+  // tapHaptic is now file-scope (top of file).
 
   function markPaid() {
     if (!sid || busy) return;
