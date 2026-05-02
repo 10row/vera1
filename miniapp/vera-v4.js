@@ -486,33 +486,67 @@ function TodayStrip(props) {
             padding: "16px 14px", textAlign: "center", fontSize: 12, color: C.muted,
           },
         }, t("miniapp.today.empty"))
-      : h("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 12, overflow: "hidden" } },
-          todayTxs.map(function(tx, i) {
-            var lbl = txLabel(tx, nameMap);
-            return h("div", {
-              key: tx.id,
-              style: {
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                padding: "11px 14px", borderTop: i === 0 ? "none" : "1px solid " + C.border,
-              },
-            },
-              h("div", { style: { flex: 1, overflow: "hidden" } },
-                h("div", { style: { fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
-                h("div", { style: { fontSize: 10, color: C.muted, marginTop: 2, display: "flex", gap: 6 } },
-                  lbl.secondary ? h("span", null, lbl.secondary) : null,
-                  lbl.secondary && tx.ts ? h("span", { style: { color: C.muted } }, "·") : null,
-                  tx.ts ? h("span", null, relativeTime(tx.ts)) : null
-                )
-              ),
-              h("div", {
-                style: {
-                  fontFamily: "'Lora',serif", fontSize: 14,
-                  color: tx.kind === "refund" ? C.green : C.text, marginLeft: 8,
-                },
-              }, (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), sym))
-            );
-          })
-        )
+      : h(TodayTxList, { txs: todayTxs, sym: sym, nameMap: nameMap })
+  );
+}
+
+// Cap-and-expand list. Real-world AAA UX requirement: heavy spending
+// days were pushing the heatmap and bills off-screen because every
+// transaction added a fixed-height row. Now: show the most-recent 3,
+// rest collapsed under a "+N more" tap to expand. Heatmap stays
+// visible. User-reported polish item.
+var TODAY_DEFAULT_VISIBLE = 3;
+function TodayTxList(props) {
+  var expandedState = useState(false);
+  var expanded = expandedState[0], setExpanded = expandedState[1];
+  var txs = props.txs || [];
+  var sym = props.sym;
+  var nameMap = props.nameMap;
+  var visibleTxs = expanded ? txs : txs.slice(0, TODAY_DEFAULT_VISIBLE);
+  var hidden = txs.length - visibleTxs.length;
+
+  return h("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 12, overflow: "hidden" } },
+    visibleTxs.map(function(tx, i) {
+      var lbl = txLabel(tx, nameMap);
+      return h("div", {
+        key: tx.id,
+        style: {
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          padding: "11px 14px", borderTop: i === 0 ? "none" : "1px solid " + C.border,
+        },
+      },
+        h("div", { style: { flex: 1, overflow: "hidden" } },
+          h("div", { style: { fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
+          h("div", { style: { fontSize: 10, color: C.muted, marginTop: 2, display: "flex", gap: 6 } },
+            lbl.secondary ? h("span", null, lbl.secondary) : null,
+            lbl.secondary && tx.ts ? h("span", { style: { color: C.muted } }, "·") : null,
+            tx.ts ? h("span", null, relativeTime(tx.ts)) : null
+          )
+        ),
+        h("div", {
+          style: {
+            fontFamily: "'Lora',serif", fontSize: 14,
+            color: tx.kind === "refund" ? C.green : C.text, marginLeft: 8,
+          },
+        }, (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), sym))
+      );
+    }),
+    // "+N more" / "show fewer" toggle row — keeps heatmap visible on
+    // heavy days (Goal-Layer fix: at-a-glance preserved, full list
+    // optional).
+    txs.length > TODAY_DEFAULT_VISIBLE
+      ? h("div", {
+          onClick: function() { tapHaptic && tapHaptic(); setExpanded(!expanded); },
+          style: {
+            padding: "10px 14px", borderTop: "1px solid " + C.border,
+            fontSize: 12, color: C.sub, textAlign: "center", cursor: "pointer",
+            background: "rgba(255,255,255,0.02)",
+            fontFamily: "'Inter',sans-serif", letterSpacing: "0.02em",
+          },
+        }, expanded
+          ? "▴ show fewer"
+          : "+" + hidden + " more · tap to expand")
+      : null
   );
 }
 
