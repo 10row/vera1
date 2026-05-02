@@ -380,6 +380,10 @@ function DayDetail(props) {
 }
 
 // ── TODAY STRIP ──────────────────────────────────────────────
+// AAA design (bug-reports/0004-today-strip-AAA): the most important
+// question is "am I on track?" — answered with a progress bar + two
+// numbers + status color. Then the transactions list is "what did I
+// spend on today?" for retrospect.
 function TodayStrip(props) {
   var v = props.view;
   var sym = v.currencySymbol || "$";
@@ -389,11 +393,85 @@ function TodayStrip(props) {
     return tx.kind === "spend" || tx.kind === "refund" || tx.kind === "bill_payment";
   });
 
+  // Math comes from the view (already computed server-side in
+  // v5ToV4View): dailyPaceCents = "today's budget"; todaySpentCents =
+  // discretionary spend logged today; todayRemainingCents = max(0, pace - spent).
+  var paceCents = Math.max(0, v.dailyPaceCents || 0);
+  var spentCents = Math.max(0, v.todaySpentCents || 0);
+  var remainingCents = Math.max(0, paceCents - spentCents);
+  var pctSpent = paceCents > 0 ? Math.min(100, (spentCents / paceCents) * 100) : 0;
+
+  // Color tier: green if >50% pace remains, amber 20-50%, red <20% or over.
+  // Edge: paceCents=0 (over status from hero) → always red.
+  var statusColor;
+  if (paceCents <= 0) statusColor = C.red;
+  else if (pctSpent < 50) statusColor = C.green;
+  else if (pctSpent < 80) statusColor = C.amber;
+  else statusColor = C.red;
+
+  // Friendly date label like "Mon, May 1".
+  var dateLabel = (function() {
+    try {
+      var d = new Date(props.today + "T12:00:00Z");
+      return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    } catch { return props.today || ""; }
+  })();
+
   return h("div", { style: { padding: "20px 16px 0" } },
-    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 } },
+    // ── HEADER: label + date ──
+    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 } },
       h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, t("miniapp.today.label")),
-      h("div", { style: { fontSize: 11, color: C.sub } },
-        t("miniapp.today.spent", { amount: v.todaySpentFormatted }))
+      h("div", { style: { fontSize: 11, color: C.muted } }, dateLabel)
+    ),
+    // ── AAA SUMMARY CARD: spent / left / bar ──
+    h("div", {
+      style: {
+        background: C.card, border: "1px solid " + C.border, borderRadius: 12,
+        padding: "12px 14px", marginBottom: 10,
+      },
+    },
+      h("div", {
+        style: {
+          display: "flex", justifyContent: "space-between", alignItems: "baseline",
+          marginBottom: 8, fontFamily: "'Lora',serif",
+        },
+      },
+        h("div", null,
+          h("span", { style: { color: C.muted, fontSize: 11, fontWeight: 500, fontFamily: "'Inter',sans-serif", letterSpacing: "0.04em", textTransform: "uppercase" } }, "Spent"),
+          h("div", { style: { fontSize: 18, color: C.text, marginTop: 2 } }, fmtMoney(spentCents, sym))
+        ),
+        h("div", { style: { textAlign: "right" } },
+          h("span", { style: { color: C.muted, fontSize: 11, fontWeight: 500, fontFamily: "'Inter',sans-serif", letterSpacing: "0.04em", textTransform: "uppercase" } },
+            paceCents <= 0 ? "Over" : "Left today"),
+          h("div", { style: { fontSize: 18, color: statusColor, marginTop: 2 } },
+            paceCents <= 0 ? "—" : fmtMoney(remainingCents, sym))
+        )
+      ),
+      // Bar
+      h("div", {
+        style: {
+          width: "100%", height: 6, background: C.border, borderRadius: 3, overflow: "hidden",
+        },
+      },
+        h("div", {
+          style: {
+            width: pctSpent + "%", height: "100%", background: statusColor,
+            transition: "width 200ms ease",
+          },
+        })
+      ),
+      // Sub-label: "$120/day pace" or "no pace today" when over
+      h("div", {
+        style: {
+          fontSize: 10, color: C.muted, marginTop: 6, display: "flex", justifyContent: "space-between",
+          fontFamily: "'Inter',sans-serif", letterSpacing: "0.02em",
+        },
+      },
+        h("span", null, paceCents <= 0
+          ? "no pace today — bills exceed balance"
+          : Math.round(pctSpent) + "% of " + fmtMoney(paceCents, sym) + "/day"),
+        h("span", null, "")
+      )
     ),
     todayTxs.length === 0
       ? h("div", {
