@@ -182,6 +182,35 @@ function applyIntent(state, intent) {
       // can show "₫200,000 ≈ $8.00" instead of just $8.00.
       const isForeign = p.originalCurrency && Number.isFinite(p.originalAmount) && p.originalAmount > 0;
 
+      // ── GRAPH-FLAVORED FIELDS (option B from the design discussion) ──
+      // Each spend can carry: vendor (entity name like "Lighthouse"),
+      // category (one of a known list), tags[] (free-form), context
+      // (e.g. "vietnam trip"). All optional. The graph is COMPUTED at
+      // query time by DNA aggregating across these fields. No separate
+      // node storage — this stays backward-compatible and low-risk.
+      //
+      // Sanitization: trim, length-cap, lowercase the canonical keys.
+      // Display preserves user-spoken casing where it matters (vendor,
+      // context). Categories normalize to a fixed list.
+      const VALID_CATEGORIES = new Set([
+        "coffee","groceries","restaurant","delivery","transport","subscription",
+        "clothing","health","alcohol","personal","home","entertainment","travel","other",
+      ]);
+      const sanStr = (s, max) => {
+        if (s == null) return null;
+        const t = String(s).trim().slice(0, max);
+        return t.length > 0 ? t : null;
+      };
+      const vendor = sanStr(p.vendor, 60);
+      const rawCat = sanStr(p.category, 30);
+      const category = rawCat && VALID_CATEGORIES.has(rawCat.toLowerCase()) ? rawCat.toLowerCase() : null;
+      const context = sanStr(p.context, 60);
+      let tags = null;
+      if (Array.isArray(p.tags)) {
+        tags = p.tags.map(t => sanStr(t, 30)).filter(Boolean).slice(0, 5);
+        if (tags.length === 0) tags = null;
+      }
+
       next.balanceCents -= amt;
       next.transactions.push({
         id: m.uid(), ts: Date.now(),
@@ -191,6 +220,8 @@ function applyIntent(state, intent) {
         billKey: isBillPayment ? billKeyP : null,
         originalAmount: isForeign ? Number(p.originalAmount) : null,
         originalCurrency: isForeign ? p.originalCurrency.toUpperCase() : null,
+        // Graph fields (all optional, null when absent — backward-compatible).
+        vendor, category, context, tags,
         date: todayStr,
       });
 

@@ -170,9 +170,18 @@ function describeIntent(intent, state) {
       } else {
         amountPhrase = M(p.amountCents);
       }
+      // Title prefers vendor (the entity) over raw note. Falls back to
+      // note if no vendor. Both lowercase OK in note ("coffee at lighthouse")
+      // — vendor capitalizes the entity.
+      const titleParts = [];
+      if (p.vendor) titleParts.push(E(p.vendor));
+      if (p.note && p.note !== p.vendor) titleParts.push(E(p.note));
+      const title = titleParts.length > 0 ? " · " + titleParts.join(" — ") : "";
+      // Category as a small badge after the title.
+      const catBadge = p.category && p.category !== "other" ? " #" + p.category : "";
       return lang === "ru"
-        ? "Расход " + amountPhrase + (p.note ? " · " + E(p.note) : "")
-        : "Spend " + amountPhrase + (p.note ? " · " + E(p.note) : "");
+        ? "Расход " + amountPhrase + title + catBadge
+        : "Spend " + amountPhrase + title + catBadge;
     }
     case "record_income":
       return lang === "ru"

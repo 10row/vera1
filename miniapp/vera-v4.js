@@ -126,6 +126,34 @@ function buildNameMap(envelopes) {
 function txLabel(tx, nameMap) {
   var note = (tx.note || "").trim();
   var envName = tx.envelopeKey && nameMap ? (nameMap[tx.envelopeKey] || null) : null;
+  // Graph fields (optional, may be absent on older transactions).
+  var vendor = (tx.vendor || "").trim();
+  var category = (tx.category || "").trim();
+
+  // Title rules — vendor (entity) takes precedence over raw note for cleanliness.
+  // The note still appears as secondary so the user's original phrasing is
+  // preserved. Category renders as a tiny tag.
+  // Examples:
+  //   { vendor:"Lighthouse", note:"coffee at Lighthouse", category:"coffee" }
+  //     → primary: "Lighthouse"   secondary: "coffee · #coffee"
+  //   { vendor:"Taxi", note:"taxi back to hotel", category:"transport" }
+  //     → primary: "Taxi"  secondary: "back to hotel · #transport"
+  //   { note:"5 coffee" } (no graph fields — older tx)
+  //     → primary: "5 coffee"  secondary: null
+  if (vendor) {
+    // Strip the vendor name from the note if present, so we don't repeat it.
+    var residual = note;
+    if (vendor && residual && residual.toLowerCase().indexOf(vendor.toLowerCase()) !== -1) {
+      residual = residual.replace(new RegExp("\\b" + vendor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "ig"), "").replace(/\s+at\s*$|^\s*at\s+|\s{2,}/gi, " ").trim();
+    }
+    var sec = "";
+    if (residual && residual !== note) sec = residual;
+    if (category && category !== "other") sec = (sec ? sec + " · " : "") + "#" + category;
+    return { primary: vendor, secondary: sec || null };
+  }
+  if (note && category && category !== "other") {
+    return { primary: note, secondary: "#" + category };
+  }
   if (note && envName) return { primary: note, secondary: envName };
   if (note) return { primary: note, secondary: null };
   if (envName) return { primary: envName, secondary: null };

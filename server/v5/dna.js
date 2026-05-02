@@ -50,7 +50,22 @@ const CATEGORY_KEYWORDS = [
   ["other",      []],
 ];
 
-function categorize(note) {
+// Categorize a transaction. Prefers the AI-stored `category` field
+// (graph layer); falls back to keyword inference on the note for older
+// transactions or when AI didn't extract.
+function categorize(noteOrTx) {
+  // Backward-compat: callers historically passed a note string. Now also
+  // accepts a transaction object { note, category }.
+  if (noteOrTx && typeof noteOrTx === "object") {
+    if (noteOrTx.category && typeof noteOrTx.category === "string") {
+      return noteOrTx.category.toLowerCase();
+    }
+    return categorizeNote(noteOrTx.note);
+  }
+  return categorizeNote(noteOrTx);
+}
+
+function categorizeNote(note) {
   if (!note) return "other";
   const n = String(note).toLowerCase();
   for (const [name, keywords] of CATEGORY_KEYWORDS) {
@@ -92,7 +107,7 @@ function compute(state) {
   for (const tx of txs) {
     // Skip bill payments — those are tracked by bill nodes.
     if (tx.kind === "bill_payment") continue;
-    const cat = categorize(tx.note);
+    const cat = categorize(tx); // prefers tx.category, falls back to note keyword
     if (!byCategory[cat]) byCategory[cat] = {
       total: 0, count: 0,
       total7: 0, total30: 0, total90: 0,
@@ -224,7 +239,7 @@ function compute(state) {
     if (node.name === "other") continue;
     const c = byCategory[node.name];
     // Count this category's 7d transactions explicitly.
-    const last7Count = txs.filter(t => t.date >= day7 && categorize(t.note) === node.name).length;
+    const last7Count = txs.filter(t => t.date >= day7 && categorize(t) === node.name).length;
     if (last7Count >= 5) {
       milestones.push({
         name: node.name,

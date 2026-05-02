@@ -147,3 +147,94 @@ test("[engine] missing intent throws", () => {
   const s = setup();
   assertThrows(() => applyIntent(s, null), /invalid intent/);
 });
+
+// ── GRAPH FIELDS (option B from the design discussion) ──
+// Each spend can carry vendor/category/tags/context. All optional.
+// Backward-compat: older transactions without these fields must still
+// work. Field validation: category must be from the fixed list.
+
+test("[graph] record_spend stores vendor when provided", () => {
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
+  const r = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 2500, note: "coffee at Lighthouse", vendor: "Lighthouse", category: "coffee" },
+  });
+  const tx = r.state.transactions[r.state.transactions.length - 1];
+  assertEq(tx.vendor, "Lighthouse");
+  assertEq(tx.category, "coffee");
+  assertEq(tx.note, "coffee at Lighthouse");
+});
+
+test("[graph] record_spend with no graph fields still works (backward-compat)", () => {
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
+  const r = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 2500, note: "coffee" },
+  });
+  const tx = r.state.transactions[r.state.transactions.length - 1];
+  assertEq(tx.vendor, null);
+  assertEq(tx.category, null);
+  assertEq(tx.tags, null);
+  assertEq(tx.context, null);
+  assertEq(tx.note, "coffee");
+});
+
+test("[graph] invalid category gets sanitized to null (no junk in db)", () => {
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
+  const r = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 1000, note: "x", category: "definitelynotacategory" },
+  });
+  const tx = r.state.transactions[r.state.transactions.length - 1];
+  assertEq(tx.category, null);
+});
+
+test("[graph] tags array sanitized to <= 5 short strings", () => {
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
+  const r = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 1000, note: "x", tags: ["work", "trip", "vietnam", "client", "team", "extra"] },
+  });
+  const tx = r.state.transactions[r.state.transactions.length - 1];
+  assertEq(tx.tags.length, 5);
+  assertEq(tx.tags[0], "work");
+});
+
+test("[graph] foreign currency + graph fields: both preserved correctly", () => {
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
+  const r = applyIntent(s, {
+    kind: "record_spend",
+    params: {
+      amountCents: 1200, note: "taxi back to hotel",
+      originalAmount: 30000, originalCurrency: "VND",
+      vendor: "Taxi", category: "transport",
+    },
+  });
+  const tx = r.state.transactions[r.state.transactions.length - 1];
+  assertEq(tx.originalAmount, 30000);
+  assertEq(tx.originalCurrency, "VND");
+  assertEq(tx.vendor, "Taxi");
+  assertEq(tx.category, "transport");
+});
+
+test("[graph] DNA categorize prefers stored category over keyword inference", () => {
+  const { compute } = require("../dna");
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
+  // Stored category="alcohol" but note is just "30 at the bar" — keyword
+  // inference would also say alcohol due to "bar". Use a note where they
+  // diverge: note="random expense", stored category="entertainment".
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 5000, note: "random expense", category: "entertainment" },
+  }).state;
+  const graph = compute(s);
+  // Find the entertainment node — should exist because we stored that category.
+  const entCat = graph.summary.topCategories && graph.summary.topCategories.find(c => c.name === "entertainment");
+  assertTrue(!!entCat, "DNA should aggregate the stored category, not infer from note");
+});
