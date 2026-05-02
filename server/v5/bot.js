@@ -546,7 +546,7 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
           ? describeIntent(r.event.undid.intent, state)
           : "";
         const head = lang === "ru" ? "Отменено" : "Undone";
-        await safeReply(ctx, head + (what ? ": " + what : "") + "\n" + heroLineWithInsight(r.state, lang), { parse_mode: "Markdown" });
+        await safeReply(ctx, head + (what ? ": " + what : "") + "\n" + heroLine(r.state, lang), { parse_mode: "Markdown" });
       } catch (e) {
         await safeReply(ctx, "_" + m.escapeMd(e.message) + "_", { parse_mode: "Markdown" });
       }
@@ -620,7 +620,7 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
         const r = applyIntent(state, { kind: "undo_last", params: {} });
         await db.saveState(prisma, u.id, r.state);
         await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
-        await safeReply(ctx, (lang === "ru" ? "Отменено.\n" : "Undone.\n") + heroLineWithInsight(r.state, lang), { parse_mode: "Markdown" });
+        await safeReply(ctx, (lang === "ru" ? "Отменено.\n" : "Undone.\n") + heroLine(r.state, lang), { parse_mode: "Markdown" });
       } catch (e) {
         await safeReply(ctx, "_" + m.escapeMd(e.message) + "_", { parse_mode: "Markdown" });
       }
@@ -745,8 +745,10 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
       }
       if (applied.length === 0) return;
 
-      // Hero is read-only. Pure status. No buttons.
-      await safeReply(ctx, heroLineWithInsight(state, lang), { parse_mode: "Markdown" });
+      // Hero post-confirm: facts only. The auto-pushed insight after
+      // every spend was noise — moved to pull-only (/today + AI question
+      // replies) per user feedback. AAA brand register: quiet by default.
+      await safeReply(ctx, heroLine(state, lang), { parse_mode: "Markdown" });
     } catch (e) {
       console.error("[v5 confirm apply]", e);
       await safeEdit(ctx, "_" + m.escapeMd(e.message) + "_", Object.assign({ parse_mode: "Markdown" }, clearButtons));
@@ -772,6 +774,25 @@ function attach(prisma) {
       await processText(prisma, ctx, ctx.from.id, text);
     } catch (e) {
       console.error("[v5 text]", e);
+    }
+  });
+
+  // Photo / receipt handler — explicit honest "not yet" rather than
+  // silent ignore (current behavior was: bot received photo, did nothing,
+  // user assumed it was processing). User-reported. Receipt OCR is real
+  // future work (vision API + vendor extraction); for now we acknowledge
+  // and ask for a typed/voice version.
+  bot.on(["message:photo", "message:document"], async (ctx) => {
+    try {
+      const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+      const state = await db.loadState(prisma, u.id);
+      const lang = state.language === "ru" ? "ru" : "en";
+      await safeReply(ctx, lang === "ru"
+        ? "_Я пока не читаю чеки — напиши или надиктуй: «потратил 200 на ужин»._"
+        : "_I can't read receipts yet — just type or voice-note it: \"spent 200 on dinner\"._",
+        { parse_mode: "Markdown" });
+    } catch (e) {
+      console.error("[v5 photo]", e);
     }
   });
 

@@ -134,48 +134,41 @@ function heroLine(state, lang) {
   const sym = state.currencySymbol || "$";
   const irregular = state.payFrequency === "irregular";
 
+  // Brand-tier hero: dot color carries status, the rest is facts. No
+  // anthropomorphic words ("Calm" / "Tight"). Linear / Wise / Mercury
+  // tier — quiet by default, sharp when asked.
   if (v.status === "over") {
     if (irregular) {
       return L === "ru"
-        ? "🔴 Перерасход — не хватает " + m.toMoney(v.deficitCents, sym) + " на счетах."
-        : "🔴 *Over* — short " + m.toMoney(v.deficitCents, sym) + " on bills.";
+        ? "🔴 Не хватает " + m.toMoney(v.deficitCents, sym) + " на счета"
+        : "🔴 Short " + m.toMoney(v.deficitCents, sym) + " on bills";
     }
     return L === "ru"
-      ? "🔴 Перерасход — не хватает " + m.toMoney(v.deficitCents, sym) + " до зарплаты."
-      : "🔴 *Over* — short " + m.toMoney(v.deficitCents, sym) + " before payday.";
+      ? "🔴 Не хватает " + m.toMoney(v.deficitCents, sym) + " до зарплаты"
+      : "🔴 Short " + m.toMoney(v.deficitCents, sym) + " before payday";
   }
 
-  // "Left today" piece — only show when the user has actually spent
-  // something today. Otherwise it equals dailyPace and is redundant.
-  // The phrasing answers the post-spend question "did that just put me
-  // over today's budget?" without forcing the user to do mental math.
+  // "Left today" piece — only when there's been a spend today.
   const todayRem = Math.max(0, (v.dailyPaceCents || 0) - (v.todaySpentCents || 0));
   const showLeftToday = (v.todaySpentCents || 0) > 0 && (v.dailyPaceCents || 0) > 0;
   const leftTodayPiece = showLeftToday
     ? (L === "ru"
-        ? m.toMoney(todayRem, sym) + " осталось сегодня · "
+        ? m.toMoney(todayRem, sym) + " на сегодня · "
         : m.toMoney(todayRem, sym) + " left today · ")
     : "";
 
-  // For irregular pay: lead with balance, suggest a daily horizon.
+  // Yellow dot conveys "tight" — no word needed.
+  const dot = v.status === "tight" ? "🟡" : "🟢";
+
   if (irregular) {
-    const word = v.status === "tight"
-      ? (L === "ru" ? "*Впритык*" : "*Tight*")
-      : (L === "ru" ? "*Спокойно*" : "*Calm*");
-    const emoji = v.status === "tight" ? "🟡" : "🟢";
     return L === "ru"
-      ? emoji + " " + word + " — " + leftTodayPiece + v.balanceFormatted + " на счёте, " + v.dailyPaceFormatted + "/день на месяц."
-      : emoji + " " + word + " — " + leftTodayPiece + v.balanceFormatted + " on hand, " + v.dailyPaceFormatted + "/day for a month.";
+      ? dot + " " + leftTodayPiece + v.balanceFormatted + " · " + v.dailyPaceFormatted + "/день"
+      : dot + " " + leftTodayPiece + v.balanceFormatted + " · " + v.dailyPaceFormatted + "/day";
   }
 
-  if (v.status === "tight") {
-    return L === "ru"
-      ? "🟡 *Впритык* — " + leftTodayPiece + v.dailyPaceFormatted + "/день, " + v.daysToPayday + " дн до зарплаты."
-      : "🟡 *Tight* — " + leftTodayPiece + v.dailyPaceFormatted + "/day, " + v.daysToPayday + " days to payday.";
-  }
   return L === "ru"
-    ? "🟢 *Спокойно* — " + leftTodayPiece + v.dailyPaceFormatted + "/день, " + v.daysToPayday + " дн до зарплаты."
-    : "🟢 *Calm* — " + leftTodayPiece + v.dailyPaceFormatted + "/day, " + v.daysToPayday + " days to payday.";
+    ? dot + " " + leftTodayPiece + v.dailyPaceFormatted + "/день · " + v.daysToPayday + " дн"
+    : dot + " " + leftTodayPiece + v.dailyPaceFormatted + "/day · " + v.daysToPayday + " days";
 }
 
 // heroInsight — optional second line for the hero card. Surfaces DNA-derived
