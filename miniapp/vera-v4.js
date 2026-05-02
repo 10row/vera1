@@ -927,12 +927,19 @@ function DueBanner(props) {
 
 // ── ENVELOPE SECTIONS (Bills / Budgets / Goals) ─────────────
 function SectionHeader(props) {
-  return h("div", {
-    style: { display: "flex", alignItems: "center", padding: "20px 16px 8px", gap: 8 },
-  },
-    h("div", { style: { fontSize: 16 } }, props.icon),
-    h("div", { style: { fontSize: 12, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, props.title),
-    props.count != null ? h("div", { style: { fontSize: 12, color: C.muted } }, "· " + props.count) : null
+  // Subtitle (optional) sits as a second row in muted text — used by
+  // the bills section to show "$X set aside · $Y next cycle" so the
+  // engine's bill-reservation math stops being invisible. Keeps the
+  // tight existing visual rhythm: title row + thin context row.
+  return h("div", { style: { padding: "20px 16px 8px" } },
+    h("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+      h("div", { style: { fontSize: 16 } }, props.icon),
+      h("div", { style: { fontSize: 12, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, props.title),
+      props.count != null ? h("div", { style: { fontSize: 12, color: C.muted } }, "· " + props.count) : null
+    ),
+    props.subtitle
+      ? h("div", { style: { fontSize: 11, color: C.muted, marginTop: 5, letterSpacing: "0.01em" } }, props.subtitle)
+      : null
   );
 }
 
@@ -1000,9 +1007,20 @@ function BillCard(props) {
             style: { fontSize: 9, color: C.green, marginLeft: 6, padding: "1px 6px", borderRadius: 999, background: C.greenSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" },
           }, t("miniapp.newBadge")) : null
         ),
-        h("div", { style: { fontSize: 11, color: col, marginTop: 3 } },
-          label,
-          e.recurrence && e.recurrence !== "once" ? h("span", { style: { color: C.muted } }, " · " + e.recurrence) : null
+        h("div", { style: { fontSize: 11, color: col, marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" } },
+          h("span", null, label),
+          e.recurrence && e.recurrence !== "once" ? h("span", { style: { color: C.muted } }, "· " + e.recurrence) : null,
+          // "next cycle" chip — quiet pill marking bills due AFTER payday.
+          // The next paycheck handles them, so they're NOT in this cycle's
+          // engine reservation. Helps user understand why the daily pace
+          // doesn't reserve for them yet.
+          e.cycleStatus === "next" && !e.paidThisCycle ? h("span", {
+            style: {
+              fontSize: 9, color: C.muted, padding: "2px 7px", borderRadius: 999,
+              background: C.cardHi, fontWeight: 500, textTransform: "uppercase",
+              letterSpacing: "0.04em", whiteSpace: "nowrap",
+            },
+          }, t("miniapp.bills.nextCycle")) : null
         )
       ),
       h("div", { style: { fontFamily: "'Lora',serif", fontSize: 16 } }, e.amountFormatted)
@@ -1394,7 +1412,26 @@ function Dashboard(props) {
     h(AnticipationStrip, { envelopes: bills, sym: sym }),
     bills.length > 0 ? h("div", null,
       h(DueBanner, { envelopes: bills, sym: sym }),
-      h(SectionHeader, { icon: "📌", title: t("miniapp.bills.label"), count: bills.length }),
+      h(SectionHeader, {
+        icon: "📌",
+        title: t("miniapp.bills.label"),
+        count: bills.length,
+        // Bills subtitle exposes the engine's bill-reservation math:
+        //   "$1,496 set aside · $104 next cycle"
+        // Three branches:
+        //   - both: "$X set aside · $Y next cycle"
+        //   - only this-cycle: "$X set aside"
+        //   - only next-cycle: "$Y next cycle"
+        //   - none: no subtitle (paid-this-cycle bills only)
+        subtitle: (function() {
+          var thisAmt = v.billsThisCycleCents || 0;
+          var nextAmt = v.billsNextCycleCents || 0;
+          if (thisAmt > 0 && nextAmt > 0) return t("miniapp.bills.protectedAndNext", { amount: v.billsThisCycleShort, next: v.billsNextCycleShort });
+          if (thisAmt > 0) return t("miniapp.bills.protected", { amount: v.billsThisCycleShort });
+          if (nextAmt > 0) return t("miniapp.bills.allNextCycle", { amount: v.billsNextCycleShort });
+          return null;
+        })(),
+      }),
       h("div", { style: { padding: "0 16px" } },
         bills.map(function(e) { return h(BillCard, { key: e.key, env: e, sym: sym, sid: props.sid, onPaid: props.onViewUpdate }); }))
     ) : null,

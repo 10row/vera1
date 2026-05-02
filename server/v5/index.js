@@ -87,21 +87,44 @@ function v5ToV4View(state) {
   if (!view.setup) return { setup: false, language: state.language || "en", currency: state.currency || "USD", currencySymbol: sym };
 
   // Map v5 bills → v4 envelopes shape (kind: "bill").
-  const envelopes = Object.values(state.bills || {}).map(b => ({
-    key: m.billKey(b.name),
-    name: b.name,
-    kind: "bill",
-    amountCents: b.amountCents,
-    amountFormatted: m.toMoney(b.amountCents, sym),
-    spentCents: 0,
-    spentFormatted: m.toMoney(0, sym),
-    dueDate: b.dueDate,
-    daysUntilDue: m.daysBetween(todayStr, b.dueDate),
-    recurrence: b.recurrence,
-    paidThisCycle: !!b.paidThisCycle,
-    isDue: m.daysBetween(todayStr, b.dueDate) <= 1 && !b.paidThisCycle,
-    createdAt: b.createdAt,
-  }));
+  // cycleStatus: "this" if dueDate is on/before payday (engine reserves
+  // money for it now), "next" if dueDate is past payday (the next
+  // paycheck will cover it). Surfacing this lets the Mini App show a
+  // quiet "next cycle" chip on bill cards — closes the visibility gap
+  // where the engine's reservation math was implicit.
+  const envelopes = Object.values(state.bills || {}).map(b => {
+    const beforePayday = state.payday ? m.daysBetween(b.dueDate, state.payday) >= 0 : true;
+    const cycleStatus = (b.paidThisCycle || beforePayday) ? "this" : "next";
+    return {
+      key: m.billKey(b.name),
+      name: b.name,
+      kind: "bill",
+      amountCents: b.amountCents,
+      amountFormatted: m.toMoney(b.amountCents, sym),
+      spentCents: 0,
+      spentFormatted: m.toMoney(0, sym),
+      dueDate: b.dueDate,
+      daysUntilDue: m.daysBetween(todayStr, b.dueDate),
+      recurrence: b.recurrence,
+      paidThisCycle: !!b.paidThisCycle,
+      isDue: m.daysBetween(todayStr, b.dueDate) <= 1 && !b.paidThisCycle,
+      cycleStatus,
+      createdAt: b.createdAt,
+    };
+  });
+
+  // Bills totals by cycle — drives the bills section subtitle so the
+  // user can SEE what's reserved vs what slips to next cycle. Before
+  // this, the engine's bill reservation math was invisible (user saw
+  // "$166/day for 23 days" but couldn't tell that bills were already
+  // carved out, nor which bills were even in this cycle's math).
+  let billsThisCycleCents = 0;
+  let billsNextCycleCents = 0;
+  for (const e of envelopes) {
+    if (e.paidThisCycle) continue;
+    if (e.cycleStatus === "this") billsThisCycleCents += e.amountCents || 0;
+    else billsNextCycleCents += e.amountCents || 0;
+  }
 
   // Today's remaining = dailyPace - what they've spent today.
   const todayRem = Math.max(0, view.dailyPaceCents - view.todaySpentCents);
@@ -147,6 +170,12 @@ function v5ToV4View(state) {
     // Hero variance chip — under/over today's pace.
     varianceCents,
     varianceShort: m.toShort(Math.abs(varianceCents), sym),
+
+    // Bills protected vs next-cycle (visibility into engine math).
+    billsThisCycleCents,
+    billsThisCycleShort: m.toShort(billsThisCycleCents, sym),
+    billsNextCycleCents,
+    billsNextCycleShort: m.toShort(billsNextCycleCents, sym),
 
     envelopes,
     dueNow: view.dueNow.map(d => ({ key: d.key, name: d.name, amountFormatted: d.amountFormatted, dueDate: d.dueDate, daysUntilDue: d.daysUntilDue })),
