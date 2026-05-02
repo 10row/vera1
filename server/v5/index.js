@@ -165,10 +165,13 @@ function buildHeatmap(state) {
   return out;
 }
 
-// recentTransactionsForApp — last 50 spends/incomes formatted for the feed.
+// recentTransactionsForApp — last 50 spends/incomes formatted for the
+// feed. Skips soft-deleted (journaling), exposes ALL graph fields so
+// the Mini App detail modal can show vendor/category/tags/context/
+// foreign-currency without re-fetching.
 function recentTransactionsForApp(state) {
   const txs = state.transactions || [];
-  return txs.slice(-50).reverse().map(t => ({
+  return txs.filter(t => !t.deletedAt).slice(-50).reverse().map(t => ({
     id: t.id,
     kind: t.kind,
     amountCents: t.amountCents,
@@ -176,6 +179,14 @@ function recentTransactionsForApp(state) {
     envelopeKey: t.billKey || null,
     date: t.date,
     ts: t.ts,
+    // Graph fields (any may be null for older or AI-omitted txs).
+    vendor: t.vendor || null,
+    category: t.category || null,
+    tags: t.tags || null,
+    context: t.context || null,
+    // Foreign-currency display fields.
+    originalAmount: t.originalAmount || null,
+    originalCurrency: t.originalCurrency || null,
   }));
 }
 

@@ -777,22 +777,118 @@ function attach(prisma) {
     }
   });
 
-  // Photo / receipt handler — explicit honest "not yet" rather than
-  // silent ignore (current behavior was: bot received photo, did nothing,
-  // user assumed it was processing). User-reported. Receipt OCR is real
-  // future work (vision API + vendor extraction); for now we acknowledge
-  // and ask for a typed/voice version.
-  bot.on(["message:photo", "message:document"], async (ctx) => {
+  // Photo / receipt handler — sends to vision-capable LLM, gets a
+  // structured record_spend intent, shows confirm card. Same safety
+  // pattern as voice / text: AI proposes, user confirms.
+  bot.on("message:photo", async (ctx) => {
+    let statusMsg = null;
+    try {
+      const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
+      const state = await db.loadState(prisma, u.id);
+      const lang = state.language === "ru" ? "ru" : "en";
+
+      if (!state.setup) {
+        await safeReply(ctx, lang === "ru"
+          ? "_Сначала настроим — напиши примерный баланс._"
+          : "_Set up first — tell me your rough balance._",
+          { parse_mode: "Markdown" });
+        return;
+      }
+      if (!process.env.OPENAI_API_KEY) {
+        await safeReply(ctx, lang === "ru"
+          ? "_Не могу прочитать чек — нужен OpenAI ключ._"
+          : "_Can't read receipts — vision API not configured._",
+          { parse_mode: "Markdown" });
+        return;
+      }
+
+      // Show "scanning…" so the user knows it's working (vision call
+      // takes a few seconds).
+      try {
+        statusMsg = await ctx.reply(lang === "ru" ? "📸 _Читаю чек…_" : "📸 _Reading receipt…_", { parse_mode: "Markdown" });
+      } catch {}
+      try { ctx.replyWithChatAction("typing"); } catch {}
+
+      // Pick the best photo size (highest resolution Telegram offers).
+      const photos = ctx.message && ctx.message.photo;
+      if (!photos || !photos.length) return;
+      const largest = photos[photos.length - 1];
+      const file = await ctx.api.getFile(largest.file_id);
+      const url = "https://api.telegram.org/file/bot" + BOT_TOKEN + "/" + file.file_path;
+      const ctrl = new AbortController();
+      const tt = setTimeout(() => ctrl.abort(), 15000);
+      const resp = await fetch(url, { signal: ctrl.signal });
+      const buf = Buffer.from(await resp.arrayBuffer());
+      clearTimeout(tt);
+
+      const vision = require("./ai-vision");
+      const r = await vision.extractFromReceipt(buf, Object.assign({}, state, { id: ctx.from.id }));
+
+      // Clear the "scanning…" message.
+      if (statusMsg) {
+        try { await ctx.api.deleteMessage(ctx.chat.id, statusMsg.message_id); } catch {}
+        statusMsg = null;
+      }
+
+      if (!r.ok) {
+        await safeReply(ctx, "_" + m.escapeMd(r.reason || "Couldn't read that.") + "_",
+          { parse_mode: "Markdown" });
+        return;
+      }
+
+      // Run the same conversion as the text path — pipeline normalizes
+      // foreign currency. Reuse processMessage's path? Simpler: feed
+      // the intent through validate + setPending directly.
+      const todayStr = m.today(state.timezone || "UTC");
+
+      // Currency conversion (same logic as pipeline.convertOnce).
+      const currency = require("./currency");
+      const p = r.intent.params || {};
+      if (p.originalCurrency && Number.isFinite(p.originalAmount) && p.originalAmount > 0) {
+        const base = state.currency || "USD";
+        const fromSubunits = currency.spokenToSubunits(p.originalAmount, p.originalCurrency);
+        const toSubunits = currency.convertSubunits(fromSubunits, p.originalCurrency, base);
+        p.amountCents = toSubunits;
+      }
+
+      const v = require("./validator").validateIntent(state, r.intent, todayStr);
+      if (!v.ok) {
+        await safeReply(ctx, "_" + m.escapeMd(v.reason) + "_", { parse_mode: "Markdown" });
+        return;
+      }
+
+      const token = setPending(r.intent, ctx.from.id);
+      const card = describeIntent(r.intent, state);
+      const fromPhoto = lang === "ru" ? "📸 *Из чека:*" : "📸 *From receipt:*";
+      await safeReply(ctx, fromPhoto + "\n" + card, {
+        parse_mode: "Markdown",
+        ...confirmKeyboard(token, lang),
+      });
+    } catch (e) {
+      console.error("[v5 photo]", e);
+      if (statusMsg) {
+        try { await ctx.api.deleteMessage(ctx.chat.id, statusMsg.message_id); } catch {}
+      }
+      try {
+        const lang2 = (await db.loadState(prisma, (await db.resolveUser(prisma, "tg_" + ctx.from.id)).id)).language === "ru" ? "ru" : "en";
+        await safeReply(ctx, "_" + (lang2 === "ru" ? "Не удалось обработать фото." : "Couldn't process the photo.") + "_", { parse_mode: "Markdown" });
+      } catch {}
+    }
+  });
+
+  // Documents (PDF, doc) — bank statements maybe one day. For now,
+  // honest no.
+  bot.on("message:document", async (ctx) => {
     try {
       const u = await db.resolveUser(prisma, "tg_" + ctx.from.id);
       const state = await db.loadState(prisma, u.id);
       const lang = state.language === "ru" ? "ru" : "en";
       await safeReply(ctx, lang === "ru"
-        ? "_Я пока не читаю чеки — напиши или надиктуй: «потратил 200 на ужин»._"
-        : "_I can't read receipts yet — just type or voice-note it: \"spent 200 on dinner\"._",
+        ? "_Документы пока не читаю — отправь фото чека или напиши._"
+        : "_I can't read docs yet — send a photo of the receipt or just type it._",
         { parse_mode: "Markdown" });
     } catch (e) {
-      console.error("[v5 photo]", e);
+      console.error("[v5 document]", e);
     }
   });
 

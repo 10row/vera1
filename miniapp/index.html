@@ -18,6 +18,11 @@
     html, body { height: 100%; background: #0F0F0F; color: #E8E4DF; overflow-x: hidden; }
     body { -webkit-tap-highlight-color: transparent; }
     #root { min-height: 100%; }
+    /* Modal animations — used by TxDetailModal. Defined here so they're
+       always available (component-level <style> only renders during the
+       skeleton loader). */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   </style>
 </head>
 <body>

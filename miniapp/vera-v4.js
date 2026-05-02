@@ -527,55 +527,223 @@ var TODAY_DEFAULT_VISIBLE = 3;
 function TodayTxList(props) {
   var expandedState = useState(false);
   var expanded = expandedState[0], setExpanded = expandedState[1];
+  // Read-only detail modal: tap a row → see all the rich info. Edit/delete
+  // is via chat ("delete the lighthouse coffee"), not in-app — keeps the
+  // Mini App calm and the AI as the single edit channel.
+  var openTxState = useState(null);
+  var openTx = openTxState[0], setOpenTx = openTxState[1];
+
   var txs = props.txs || [];
   var sym = props.sym;
   var nameMap = props.nameMap;
   var visibleTxs = expanded ? txs : txs.slice(0, TODAY_DEFAULT_VISIBLE);
   var hidden = txs.length - visibleTxs.length;
 
-  return h("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 12, overflow: "hidden" } },
-    visibleTxs.map(function(tx, i) {
-      var lbl = txLabel(tx, nameMap);
-      return h("div", {
-        key: tx.id,
+  return h("div", null,
+    h("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 12, overflow: "hidden" } },
+      visibleTxs.map(function(tx, i) {
+        var lbl = txLabel(tx, nameMap);
+        return h("div", {
+          key: tx.id,
+          onClick: function() { tapHaptic && tapHaptic(); setOpenTx(tx); },
+          style: {
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "11px 14px", borderTop: i === 0 ? "none" : "1px solid " + C.border,
+            cursor: "pointer",
+            transition: "background 100ms ease",
+          },
+          onMouseDown: function(e) { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; },
+          onMouseUp: function(e) { e.currentTarget.style.background = "transparent"; },
+          onMouseLeave: function(e) { e.currentTarget.style.background = "transparent"; },
+          onTouchStart: function(e) { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; },
+          onTouchEnd: function(e) { e.currentTarget.style.background = "transparent"; },
+        },
+          h("div", { style: { flex: 1, overflow: "hidden" } },
+            h("div", { style: { fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
+            h("div", { style: { fontSize: 10, color: C.muted, marginTop: 2, display: "flex", gap: 6 } },
+              lbl.secondary ? h("span", null, lbl.secondary) : null,
+              lbl.secondary && tx.ts ? h("span", { style: { color: C.muted } }, "·") : null,
+              tx.ts ? h("span", null, relativeTime(tx.ts)) : null
+            )
+          ),
+          h("div", {
+            style: {
+              fontFamily: "'Lora',serif", fontSize: 14,
+              color: tx.kind === "refund" ? C.green : C.text, marginLeft: 8,
+            },
+          }, (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), sym))
+        );
+      }),
+      // "+N more" / "show fewer" toggle row — keeps heatmap visible on
+      // heavy days (Goal-Layer fix: at-a-glance preserved, full list
+      // optional).
+      txs.length > TODAY_DEFAULT_VISIBLE
+        ? h("div", {
+            onClick: function() { tapHaptic && tapHaptic(); setExpanded(!expanded); },
+            style: {
+              padding: "10px 14px", borderTop: "1px solid " + C.border,
+              fontSize: 12, color: C.sub, textAlign: "center", cursor: "pointer",
+              background: "rgba(255,255,255,0.02)",
+              fontFamily: "'Inter',sans-serif", letterSpacing: "0.02em",
+            },
+          }, expanded
+            ? "▴ show fewer"
+            : "+" + hidden + " more · tap to expand")
+        : null
+    ),
+    openTx ? h(TxDetailModal, { tx: openTx, sym: sym, onClose: function() { setOpenTx(null); } }) : null
+  );
+}
+
+// ── TX DETAIL MODAL ──────────────────────────────────────────
+// Tap on any transaction → slide-up sheet with all the rich info.
+// Read-only by design: edits / deletes happen via chat with the bot
+// ("delete the lighthouse coffee"). One channel, one mental model.
+// Closes on backdrop tap, X button, or ESC.
+function TxDetailModal(props) {
+  var tx = props.tx;
+  var sym = props.sym;
+  var onClose = props.onClose;
+
+  // Close on Escape key.
+  useEffect(function() {
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return function() { document.removeEventListener("keydown", onKey); };
+  }, []);
+
+  var isForeign = tx.originalCurrency && tx.originalAmount && tx.originalAmount > 0;
+  var bigAmount = (tx.kind === "refund" || tx.kind === "income" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), sym);
+  var foreignLine = isForeign
+    ? fmtForeignAmount(tx.originalAmount, tx.originalCurrency)
+    : null;
+
+  // Row helper: label on the left, value on the right.
+  function row(label, value, opts) {
+    if (value == null || value === "") return null;
+    var color = (opts && opts.muted) ? C.muted : C.text;
+    return h("div", {
+      style: {
+        display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        padding: "10px 0", borderTop: "1px solid " + C.border,
+        fontSize: 13,
+      },
+    },
+      h("div", { style: { color: C.sub, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 } }, label),
+      h("div", { style: { color: color, fontSize: 13, textAlign: "right", maxWidth: "70%", overflowWrap: "break-word" } }, value)
+    );
+  }
+
+  // Friendly relative date ("Today" / "Yesterday" / Mar 25).
+  var dateLabel = tx.date;
+  try {
+    var todayStr = new Date().toISOString().slice(0, 10);
+    if (tx.date === todayStr) dateLabel = "Today";
+    else {
+      var diff = Math.round((new Date(todayStr + "T00:00:00Z") - new Date(tx.date + "T00:00:00Z")) / 86400000);
+      if (diff === 1) dateLabel = "Yesterday";
+      else if (diff > 1 && diff <= 6) dateLabel = diff + " days ago";
+      else dateLabel = new Date(tx.date + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
+  } catch {}
+  var timeLabel = "";
+  if (tx.ts) {
+    try { timeLabel = " · " + new Date(tx.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); } catch {}
+  }
+
+  return h("div", {
+    onClick: function(e) { if (e.target === e.currentTarget) onClose(); },
+    style: {
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+      background: "rgba(0,0,0,0.72)",
+      zIndex: 1000,
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      animation: "fadeIn 150ms ease",
+    },
+  },
+    h("div", {
+      onClick: function(e) { e.stopPropagation(); },
+      style: {
+        background: "#1a1a1a",
+        borderTopLeftRadius: 18, borderTopRightRadius: 18,
+        width: "100%", maxWidth: 520,
+        maxHeight: "85vh", overflow: "auto",
+        padding: "20px 22px 28px",
+        boxShadow: "0 -10px 40px rgba(0,0,0,0.5)",
+        animation: "slideUp 200ms ease",
+      },
+    },
+      // Drag handle (visual only)
+      h("div", {
         style: {
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          padding: "11px 14px", borderTop: i === 0 ? "none" : "1px solid " + C.border,
+          width: 36, height: 4, background: "rgba(255,255,255,0.18)",
+          borderRadius: 2, margin: "0 auto 18px",
+        },
+      }),
+      // Big amount headline
+      h("div", { style: { textAlign: "center", marginBottom: foreignLine ? 4 : 18 } },
+        h("div", { style: { fontFamily: "'Lora',serif", fontSize: 34, color: tx.kind === "refund" || tx.kind === "income" ? C.green : C.text, fontWeight: 400 } }, bigAmount),
+        foreignLine ? h("div", { style: { fontFamily: "'Lora',serif", fontSize: 14, color: C.muted, marginTop: 4 } }, foreignLine + " · " + tx.originalCurrency) : null
+      ),
+      foreignLine ? h("div", { style: { height: 14 } }) : null,
+      // Vendor — primary identifier
+      tx.vendor
+        ? h("div", { style: { textAlign: "center", fontSize: 18, color: C.text, fontWeight: 500, marginBottom: 4 } }, tx.vendor)
+        : null,
+      // Note (only if it adds info beyond vendor)
+      tx.note && tx.note.toLowerCase() !== (tx.vendor || "").toLowerCase()
+        ? h("div", { style: { textAlign: "center", fontSize: 13, color: C.sub, marginBottom: 14, padding: "0 12px" } }, tx.note)
+        : null,
+      // Tags + category as chips
+      (tx.category || (tx.tags && tx.tags.length > 0))
+        ? h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", marginBottom: 16 } },
+            tx.category && tx.category !== "other" ? h("span", { style: { fontSize: 11, padding: "4px 10px", borderRadius: 12, background: "rgba(79,184,136,0.12)", color: C.green, fontWeight: 500 } }, "#" + tx.category) : null,
+            (tx.tags || []).map(function(tag) {
+              return h("span", { key: tag, style: { fontSize: 11, padding: "4px 10px", borderRadius: 12, background: "rgba(255,255,255,0.06)", color: C.sub } }, tag);
+            })
+          )
+        : null,
+      // Detail rows
+      h("div", { style: { marginTop: 10 } },
+        row("Date", dateLabel + timeLabel),
+        row("Context", tx.context),
+        row("Type", tx.kind === "bill_payment" ? "Bill payment" : (tx.kind === "income" ? "Income" : tx.kind === "refund" ? "Refund" : "Spend"))
+      ),
+      // Hint about how to fix/remove
+      h("div", {
+        style: {
+          marginTop: 22, padding: "12px 14px", borderRadius: 10,
+          background: "rgba(255,255,255,0.04)", fontSize: 11, lineHeight: 1.5,
+          color: C.muted, textAlign: "center",
         },
       },
-        h("div", { style: { flex: 1, overflow: "hidden" } },
-          h("div", { style: { fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
-          h("div", { style: { fontSize: 10, color: C.muted, marginTop: 2, display: "flex", gap: 6 } },
-            lbl.secondary ? h("span", null, lbl.secondary) : null,
-            lbl.secondary && tx.ts ? h("span", { style: { color: C.muted } }, "·") : null,
-            tx.ts ? h("span", null, relativeTime(tx.ts)) : null
-          )
-        ),
-        h("div", {
-          style: {
-            fontFamily: "'Lora',serif", fontSize: 14,
-            color: tx.kind === "refund" ? C.green : C.text, marginLeft: 8,
-          },
-        }, (tx.kind === "refund" ? "+" : "") + fmtMoney(Math.abs(tx.amountCents), sym))
-      );
-    }),
-    // "+N more" / "show fewer" toggle row — keeps heatmap visible on
-    // heavy days (Goal-Layer fix: at-a-glance preserved, full list
-    // optional).
-    txs.length > TODAY_DEFAULT_VISIBLE
-      ? h("div", {
-          onClick: function() { tapHaptic && tapHaptic(); setExpanded(!expanded); },
-          style: {
-            padding: "10px 14px", borderTop: "1px solid " + C.border,
-            fontSize: 12, color: C.sub, textAlign: "center", cursor: "pointer",
-            background: "rgba(255,255,255,0.02)",
-            fontFamily: "'Inter',sans-serif", letterSpacing: "0.02em",
-          },
-        }, expanded
-          ? "▴ show fewer"
-          : "+" + hidden + " more · tap to expand")
-      : null
+        "Want to fix or remove this? Just message me — ",
+        h("span", { style: { color: C.sub, fontStyle: "italic" } }, tx.vendor ? "\"delete the " + tx.vendor.toLowerCase() + " one\"" : "\"delete that\"")
+      ),
+      // Close button
+      h("button", {
+        onClick: function() { tapHaptic && tapHaptic(); onClose(); },
+        style: {
+          marginTop: 18, width: "100%", padding: "12px",
+          background: "rgba(255,255,255,0.06)", color: C.text,
+          border: "none", borderRadius: 10, fontSize: 14,
+          cursor: "pointer", fontFamily: "'Inter',sans-serif",
+        },
+      }, "Close")
+    )
   );
+}
+
+// Small helper: format a foreign amount with its native symbol +
+// thousands separator, respecting per-currency decimals.
+function fmtForeignAmount(amount, code) {
+  var symbols = { USD: "$", EUR: "€", GBP: "£", RUB: "₽", JPY: "¥", VND: "₫", AUD: "A$", CAD: "C$", INR: "₹", CNY: "¥", THB: "฿", IDR: "Rp", MYR: "RM", SGD: "S$", HKD: "HK$", KRW: "₩", TRY: "₺", MXN: "MX$", BRL: "R$" };
+  var noDecimals = { VND: true, JPY: true, KRW: true, IDR: true };
+  var sym = symbols[code] || (code + " ");
+  if (noDecimals[code]) {
+    return sym + Math.round(amount).toLocaleString("en-US");
+  }
+  return sym + amount.toFixed(2);
 }
 
 // ── FIRST-TIME CELEBRATION CARD ──────────────────────────────
@@ -1021,7 +1189,7 @@ function Skeleton() {
     backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite", borderRadius: 12,
   };
   return h("div", { style: { padding: 20 } },
-    h("style", null, "@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }"),
+    h("style", null, "@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }"),
     h("div", { style: Object.assign({}, sh, { width: 80, height: 22, margin: "20px auto", borderRadius: 999 }) }),
     h("div", { style: Object.assign({}, sh, { width: "60%", height: 56, margin: "0 auto 8px" }) }),
     h("div", { style: Object.assign({}, sh, { width: "40%", height: 14, margin: "0 auto 24px" }) }),
