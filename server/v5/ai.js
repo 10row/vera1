@@ -16,7 +16,11 @@ const { compute } = require("./view");
 const dna = require("./dna");
 
 const MODEL = "gpt-4o-mini";
-const MAX_TOKENS = 500;
+// 1500 was 500 — but a 10-intent brain-dump batch runs ~80-120 tokens
+// per intent + message + structure ≈ 1000-1400. Old cap truncated
+// mid-JSON, AI emitted only the first few intents (user-reported:
+// voice note with 9 figures, only 5 got logged).
+const MAX_TOKENS = 1500;
 const TIMEOUT_MS = 15000;
 
 function buildSystemPrompt(state) {
@@ -92,7 +96,7 @@ function buildSystemPrompt(state) {
     '   { "mode":"talk", "message":"reply text" }',
     '   { "mode":"ask_simulate", "message":"reply text", "amountCents":N }',
     "3. NEVER calculate. Quote numbers from STATE / DNA SUMMARY only. Don't add daily pace + days; that's the bot's job.",
-    "4. EXTRACT EVERY ACTION the user mentions. If they brain-dump multiple things in one message (income + bill + budget), emit them all as an `intents` array (1-5 items max). Bot will show one combined confirm card with a single 'Yes, all N' button. NEVER drop intents on the floor — that's the worst failure mode.",
+    "4. EXTRACT EVERY ACTION the user mentions. If they brain-dump multiple things in one message (income + bill + budget) — including long voice notes with 8-10 figures — emit them all as an `intents` array (up to 10 items). Bot will show one combined confirm card with a single 'Yes, all N' button. NEVER drop intents on the floor — that's the worst failure mode. Prefer extracting all 9 over guessing which 5 are 'most important.'",
     "5. Keep replies SHORT — 1-2 sentences. No paragraphs.",
     "6. NEVER say \"setting up your account\" or \"I'll set up\" — they're already set up. Use plain action words: \"logging\", \"adding\", \"recording\".",
     "",
@@ -378,7 +382,11 @@ async function parseProposal(state, userMessage, history, options) {
       intents = [normalizeIntent(parsed.intent)];
     }
     // Cap at 5 — defensive against runaway batches.
-    if (intents.length > 5) intents = intents.slice(0, 5);
+    // Cap raised from 5 → 10 because real voice-note brain dumps often
+    // include 8-12 figures (user reported losing 4 of 9 from a voice
+    // note). 10 is the engineering ceiling — defensive against AI
+    // hallucinating runaway batches.
+    if (intents.length > 10) intents = intents.slice(0, 10);
     if (intents.length === 1) {
       return {
         mode: "do",
