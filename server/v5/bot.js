@@ -380,26 +380,37 @@ async function processText(prisma, ctx, telegramId, text, options) {
       const sim = result.simulate;
       if (sim) {
         const M = (c) => m.toMoney(c, state.currencySymbol);
-        const projBalance = M(sim.projected.balanceCents);
+        // Show DISPOSABLE (= balance − bills set aside), not raw balance.
+        // Reasoning: this is a "can I afford?" question, so the
+        // meaningful answer is "what's left of my SPENDING POOL after
+        // this purchase?" — not "what's my new bank-balance number?".
+        // Bills are already reserved; subtracting from total balance
+        // double-counts them in the user's mental ledger. (Same brand
+        // rule as the hero now: 'available', not 'in account'.)
+        const projAvailable = M(sim.projected.disposableCents);
         const irregular = state.payFrequency === "irregular";
         if (sim.projected.status === "over") {
-          // No: it'd put them over. Be direct.
+          // No: it'd put them over. Show the deficit AND raw balance
+          // for context — in over-state, disposable is capped at 0
+          // and isn't useful, but balance tells the user what's
+          // physically in the account.
+          const projBalance = M(sim.projected.balanceCents);
           lines.push(lang === "ru"
-            ? "🔴 *Не стоит* — это даст " + M(sim.projected.deficitCents) + " дефицита. Останется " + projBalance + "."
-            : "🔴 *Not really* — that'd put you " + M(sim.projected.deficitCents) + " over. You'd be at " + projBalance + ".");
+            ? "🔴 *Не стоит* — это даст " + M(sim.projected.deficitCents) + " дефицита. На счету останется " + projBalance + "."
+            : "🔴 *Not really* — that'd put you " + M(sim.projected.deficitCents) + " over. You'd have " + projBalance + " in account.");
         } else if (sim.projected.status === "tight") {
-          // Maybe: it's tight. Show what's left.
+          // Maybe: it's tight. Show what's left of the spending pool.
           const horizon = irregular
             ? (lang === "ru" ? " на месяц" : " for a month")
             : (lang === "ru" ? " на " + sim.projected.daysToPayday + " дн" : " for " + sim.projected.daysToPayday + " days");
           lines.push(lang === "ru"
-            ? "🟡 *Впритык* — после этого " + projBalance + ", " + sim.projected.dailyPaceFormatted + "/день" + horizon + "."
-            : "🟡 *Tight* — after that you'd have " + projBalance + ", " + sim.projected.dailyPaceFormatted + "/day" + horizon + ".");
+            ? "🟡 *Впритык* — после этого " + projAvailable + " доступно, " + sim.projected.dailyPaceFormatted + "/день" + horizon + "."
+            : "🟡 *Tight* — after that you'd have " + projAvailable + " available, " + sim.projected.dailyPaceFormatted + "/day" + horizon + ".");
         } else {
-          // Yes: clear. Show after-balance.
+          // Yes: clear. Show after-available + new pace.
           lines.push(lang === "ru"
-            ? "🟢 *Да, можно* — после этого " + projBalance + ", " + sim.projected.dailyPaceFormatted + "/день."
-            : "🟢 *Yep, you're fine* — after that you'd have " + projBalance + ", " + sim.projected.dailyPaceFormatted + "/day.");
+            ? "🟢 *Да, можно* — после этого " + projAvailable + " доступно, " + sim.projected.dailyPaceFormatted + "/день."
+            : "🟢 *Yep, you're fine* — after that you'd have " + projAvailable + " available, " + sim.projected.dailyPaceFormatted + "/day.");
         }
       }
       // Offer "log it now" button.
