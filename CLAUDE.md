@@ -185,6 +185,36 @@ deletedAt set   reverted no          no         restored*   no
   transactions: view.compute (today/week), buildHeatmap, dna.compute.
   delete_transaction reverses balance but keeps the row for audit.
 
+### Frozen-pace cache: when it's valid, when it's poison
+
+The cache fields are `state.dailyPaceCents` + `state.dailyPaceComputedDate`.
+Engine writes them on cycle events. View reads them in `compute()` if
+`dailyPaceComputedDate === todayStr`. Per Model B, this is correct for
+the LIVE state — pace stays put within a day so spending eats today's
+bucket, not the month.
+
+**The cache is INVALID for projections.** Anywhere you fork state to
+ask "what if user spent / paid / did X?", the cache is stale by
+definition — it reflects the live disposable, not the projected one.
+Reading it gives a silently wrong answer (projected pace = current
+pace, regardless of the simulated change).
+
+**Rule:** any function that builds a hypothetical state and calls
+`compute()` MUST first invalidate the cache on the clone:
+
+```js
+const next = JSON.parse(JSON.stringify(state));
+next.balanceCents -= amountCents;       // or whatever the projection mutates
+next.dailyPaceComputedDate = null;       // ← invalidate cache
+next.dailyPaceCents = 0;
+const projected = compute(next);
+```
+
+`view.simulateSpend` is the canonical example. Any new simulator
+(`simulatePayBill`, `simulateIncome`, `simulateAdjustBalance`, etc.)
+must follow the same pattern. The bug here shipped twice. Don't make
+it three.
+
 ### Cycle events (when frozen pace MUST refresh)
 
 ```
@@ -237,6 +267,11 @@ When the user says "X looks wrong":
 5. **Frozen pace stale?** If user just did a cycle event TODAY,
    `dailyPaceComputedDate === todayStr` should be true after the
    intent applies. If not, `refreshPace` was missed.
+6. **Projection vs live state?** If the bug is in a "what if I spent
+   X?" / "can I afford Y?" reply, suspect the simulate path FIRST.
+   The frozen-pace cache must be invalidated on the clone before
+   `compute()`. Pre-fix simulate had this bug — projected pace was
+   identical to current pace because the cache leaked through.
 
 ### Where the canonical math lives
 

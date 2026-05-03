@@ -49,6 +49,60 @@ test("[view] simulateSpend doesn't mutate source state", () => {
   assertEq(JSON.stringify(s), before);
 });
 
+// REGRESSION: simulateSpend must compute a FRESH pace on the projection,
+// not reuse the live-state's frozen cache. Pre-fix, the cached
+// `dailyPaceCents` carried over to the clone, so compute() returned the
+// SAME pace before and after the simulated spend. User asked "if I buy
+// perfume for $300, what's my pace?" → bot said "still $166/day" →
+// silently wrong. The pace SHOULD drop by ~$300/days-to-payday.
+// (Don't ship this bug a second time.)
+test("[view] simulateSpend recomputes pace fresh (not stale frozen cache)", () => {
+  // 30 days to payday, $5,000 balance, no bills → pace = $5,000/30 = ~$166.67
+  const s = setup(500000);
+  const cur = simulateSpend(s, 0);
+  assertTrue(cur.current.dailyPaceCents > 0, "baseline pace > 0");
+
+  // Simulating a $300 spend should drop pace by ~$300/30 = $10/day.
+  const sim = simulateSpend(s, 30000);
+  assertTrue(
+    sim.projected.dailyPaceCents < cur.current.dailyPaceCents,
+    "projected pace MUST be lower after simulated spend (was identical pre-fix)"
+  );
+  // Sanity on the magnitude: ~$300 / 30 days = ~$10 (1000 cents) drop.
+  const drop = cur.current.dailyPaceCents - sim.projected.dailyPaceCents;
+  assertTrue(drop >= 900 && drop <= 1100, "drop ~$10/day, got " + drop + " cents");
+  // delta field should match projected − current.
+  assertEq(sim.delta.dailyPaceCents, sim.projected.dailyPaceCents - sim.current.dailyPaceCents);
+  assertTrue(sim.delta.dailyPaceCents < 0, "delta is negative (pace went down)");
+});
+
+test("[view] simulateSpend projects disposable correctly with bills", () => {
+  // $5,000 balance, $1,400 rent set aside, 23 days → disposable $3,600 → pace ~$156
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 140000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
+  }).state;
+
+  const sim = simulateSpend(s, 30000); // $300 perfume
+  // Projected balance: $5,000 − $300 = $4,700
+  assertEq(sim.projected.balanceCents, 470000);
+  // Projected disposable: $4,700 − $1,400 = $3,300
+  assertEq(sim.projected.disposableCents, 330000);
+  // Projected pace: floor($3,300 / 23) = $143 → 14347 cents
+  assertTrue(
+    sim.projected.dailyPaceCents > 14000 && sim.projected.dailyPaceCents < 14400,
+    "projected pace recomputed from new disposable, got " + sim.projected.dailyPaceCents
+  );
+  // Bills set aside DOESN'T move on a discretionary spend simulation.
+  assertEq(sim.projected.obligatedCents, 140000, "rent still reserved (it wasn't paid in the simulation)");
+});
+
 // ── DELETED TXS DON'T POISON AGGREGATIONS (cat-was-deleted-but-still-counted bug) ──
 test("[view] deleted spend is excluded from todaySpent / weekSpent", () => {
   const m = require("../model");

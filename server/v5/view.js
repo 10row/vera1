@@ -262,11 +262,30 @@ function parseAmt(formatted) {
 }
 
 // Decision support: project state if user spent N cents.
+//
+// CRITICAL — the frozen-pace cache (Model B) MUST be invalidated on
+// the clone before recomputing. Without this, `compute()` reads the
+// LIVE-state's cached `dailyPaceCents` and returns it as the
+// projection, making the projected pace identical to the current
+// pace. User asks "if I buy perfume for $300, what's my new daily
+// rate?" → bot replies "still $166.55/day" → math is silently wrong.
+//
+// Why the cache exists at all: pace is FROZEN per day for the LIVE
+// state because spending today should eat today's bucket, not the
+// month (Model B — felt UX). But projections are an alternate
+// reality where balance/bills are different — the cache is stale
+// by definition. Clearing it forces fresh `floor(disposable/days)`.
+//
+// (User-reported bug. Don't ship this regression.)
 function simulateSpend(state, amountCents) {
   const cur = compute(state);
   if (!cur.setup) return null;
   const next = JSON.parse(JSON.stringify(state));
   next.balanceCents -= amountCents;
+  // Invalidate the frozen-pace cache on the projected state so
+  // compute() recomputes from the new disposable. See note above.
+  next.dailyPaceComputedDate = null;
+  next.dailyPaceCents = 0;
   const projected = compute(next);
   return {
     current: cur,
