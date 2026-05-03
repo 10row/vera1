@@ -62,20 +62,27 @@ function compute(state) {
     dailyPace = daysToPayday > 0 ? Math.floor(disposable / daysToPayday) : disposable;
   }
 
-  // Today / this week spend. CRITICAL: skip soft-deleted transactions —
-  // delete_transaction marks tx.deletedAt and reverses balance, but the
-  // tx stays in the array (journaling). If we don't filter here, deleted
-  // spends keep counting against today's spent → user deletes a $50 cat,
-  // hero still says "$50 spent today," looks like delete didn't work.
-  // (User-reported bug.)
+  // Today / this week DISCRETIONARY spend. CRITICAL: this is NOT "all
+  // money out today" — it's only kind === "spend" (the daily-pace
+  // budget). bill_payment is obligation-money that was already RESERVED
+  // in `obligated`; counting it as discretionary spend would double-
+  // book it: user pays $1,400 rent → today's pace ($166/day) goes
+  // wildly negative → variance chip says "$1,233 over today" → hero
+  // shows "$0 left today" → user thinks they overspent. They didn't;
+  // they paid an obligation that was already set aside.
+  //
+  // Same logic for weekSpent — it's the discretionary 7-day total for
+  // DNA insights ("this week's biggest category"), not raw cashflow.
+  //
+  // Soft-deleted (tx.deletedAt) skipped — delete_transaction reverses
+  // balance but keeps the tx for audit, so we filter it out here too.
   let todaySpent = 0, weekSpent = 0;
   const weekAgo = m.addDays(todayStr, -7);
   for (const tx of (state.transactions || [])) {
     if (tx.deletedAt) continue;
-    if (tx.kind === "spend" || tx.kind === "bill_payment") {
-      if (tx.date === todayStr) todaySpent += -tx.amountCents;
-      if (tx.date >= weekAgo) weekSpent += -tx.amountCents;
-    }
+    if (tx.kind !== "spend") continue; // bill_payment is OBLIGATION, not discretionary
+    if (tx.date === todayStr) todaySpent += -tx.amountCents;
+    if (tx.date >= weekAgo) weekSpent += -tx.amountCents;
   }
 
   // Status word

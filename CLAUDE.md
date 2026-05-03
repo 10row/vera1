@@ -127,6 +127,131 @@ without a matching `bug-reports/<id>/` from the last 24h is suspect.
 
 ---
 
+## Core logic — the mental model behind every number on screen
+
+**Every audit MUST start here.** Most "weird math" bugs are violations
+of one of these invariants. Memorize the model before patching.
+
+### The cycle
+
+A "cycle" is balance → next paycheck. Engine reserves money for bills
+landing inside this cycle, divides the rest by days-to-payday for a
+daily allowance, and freezes that allowance for the day.
+
+### Money buckets (mutually exclusive, exhaustive)
+
+```
+balance
+ ├─ obligated  = unpaid bills with dueDate ≤ payday  (reserved)
+ └─ disposable = balance − obligated                 (yours to spend)
+                  └─ daily pace = disposable / daysToPayday
+                                  (FROZEN per day; recomputes on cycle events)
+```
+
+- `balance` — total in account. Banking number. Rarely the answer to
+  any user question on its own.
+- `obligated` — bills LANDING THIS CYCLE that are still unpaid.
+  Excludes `paidThisCycle` and bills with `dueDate > payday` ("next
+  cycle"). Sum lives in `state.bills` keyed by `billKey`.
+- `disposable` — what's actually yours to spend before payday. THIS
+  is the headline number for the hero, not balance.
+- `dailyPace` — `floor(disposable / daysToPayday)`. Frozen per day;
+  spending today eats `todayLeft = pace − todaySpent` but does NOT
+  recompute the pace itself.
+
+### Transaction kinds and what counts where
+
+```
+kind            balance  todaySpent  weekSpent  obligated   heatmap
+─────────────  ───────  ──────────  ─────────  ──────────  ───────
+setup           +full    no          no         no          no
+correction      ±delta   no          no         no          no
+spend (disc.)   −amt     YES         YES        no          YES
+bill_payment    −amt     no          no         clears bill  no
+income          +amt     no          no         no          no
+deletedAt set   reverted no          no         restored*   no
+```
+
+- **`spend` is the ONLY thing counted as "today's discretionary"**
+  (todaySpent / weekSpent / heatmap).
+- **`bill_payment` is OBLIGATION money** — already reserved in
+  `obligated`, NEVER counted as today's discretionary spend. Counting
+  it would double-book: the user pays $1,400 rent, today's pace
+  ($166/day) goes wildly negative, hero says "$0 left today,"
+  variance chip says "$1,233 over today." User thinks they
+  overspent; they didn't. They paid an obligation that was already
+  set aside. (This bug shipped twice. Don't ship it a third time.)
+- **Soft-deleted (`tx.deletedAt`) is filtered EVERYWHERE** that sums
+  transactions: view.compute (today/week), buildHeatmap, dna.compute.
+  delete_transaction reverses balance but keeps the row for audit.
+
+### Cycle events (when frozen pace MUST refresh)
+
+```
+setup_account · adjust_balance · add_bill · remove_bill ·
+update_payday · delete_transaction · undo_last
++ first event of a new day (rollover)
+```
+
+NOT cycle events (pace stays frozen):
+```
+record_spend (including bill_payment) · record_income (unless paycheck advances payday)
+```
+
+### Bill payment lifecycle (the trickiest path)
+
+```
+1. record_spend with billKey arrives
+2. balance −= amount
+3. SNAPSHOT prevDueDate + prevPaidThisCycle on the tx (for delete/undo)
+4. if recurrence === "once":  paidThisCycle = true
+   else:                       dueDate = addBillCycle(dueDate, recurrence)
+                               paidThisCycle = false   (new cycle starts unpaid)
+```
+
+- Use **`addBillCycle`** (always advances by exactly one cycle), NOT
+  `advancePayday` (only fast-forwards past today — early-pay no-op
+  bug). They serve different purposes; don't substitute.
+- If the new dueDate > payday, the bill silently moves to "next cycle"
+  in obligation math — **this is correct behavior** and is surfaced
+  to the user via the bills section subtitle ("$X next cycle").
+- delete_transaction / undo_last for a bill_payment MUST restore both
+  prevDueDate AND prevPaidThisCycle from the snapshot, then call
+  refreshPace. Half-restored bills (paidThisCycle=false but dueDate
+  still advanced) silently drop out of obligation math.
+
+### Audit checklist (run before patching any "weird math" report)
+
+When the user says "X looks wrong":
+
+1. **Which bucket is wrong?** balance / obligated / disposable / pace
+   / todaySpent — be precise. "$166 in account" and "$166 available"
+   are different numbers.
+2. **Trace the kind.** What `kind` is the offending transaction?
+   `spend` vs `bill_payment` is the most common confusion source.
+3. **Cycle events covered?** If the user did delete/undo/pay-bill,
+   verify `refreshPace` fires AND bill snapshots are restored.
+4. **Soft-delete poisoning?** Is the offending tx `deletedAt`-set but
+   still being summed somewhere? grep for the loop and check the
+   filter is `if (tx.deletedAt) continue`.
+5. **Frozen pace stale?** If user just did a cycle event TODAY,
+   `dailyPaceComputedDate === todayStr` should be true after the
+   intent applies. If not, `refreshPace` was missed.
+
+### Where the canonical math lives
+
+- `server/v5/view.js` — `compute(state)` — the source of truth.
+  EVERYTHING the user sees flows from here. If a number is wrong,
+  this file is the first stop.
+- `server/v5/engine.js` — `applyIntent(state, intent)` — the only
+  thing that mutates state. Every intent path either calls
+  `refreshPace` (cycle event) or doesn't (record_spend per Model B).
+- `server/v5/index.js` — `v5ToV4View(state)` — the bridge to the
+  Mini App. Adds short-formatted versions, cycle classifications,
+  variance — but the math itself comes from `compute()`.
+
+---
+
 ## Vera edges + things you've gotten wrong (do not repeat)
 
 - **Onboarding is deterministic, not AI** (`server/v5/onboarding.js`).

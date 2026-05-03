@@ -285,23 +285,28 @@ function Hero(props) {
   );
 
   // Sub-line shows three quick-reference facts:
-  //   {balance in account} · {$/day pace} · {days to payday}
-  // Replaces the previous two-fact line — surfacing balance here means
-  // the user never has to scan/scroll for "how much do I actually have?"
-  // Short formatted ($2,140 not $2,140.00) keeps the strip dense + calm.
-  var balShort = v.balanceShort || v.balanceFormatted || "";
+  //   {available this cycle} · {$/day pace} · {days to payday}
+  //
+  // We feature DISPOSABLE (= balance − bills set aside), not raw
+  // account balance. Reasoning: balance is a banking-app number; what
+  // the user actually wants to know is "what's mine to spend this
+  // cycle?" — that's disposable. Bills are obligations already carved
+  // out by the engine; showing balance forces the user to do the
+  // subtraction in their head. Total balance still lives ON the bills
+  // section subtitle (where bill math reconciles).
+  var availShort = v.disposableShort || v.disposableFormatted || "";
   var paceShort = v.dailyPaceShort || v.dailyPaceFormatted || "";
 
   var heroNumber, heroLabel, subContext;
   if (v.state === "over") {
     heroNumber = v.deficitFormatted;
     heroLabel = t("miniapp.hero.overForPeriod");
-    subContext = t("miniapp.hero.subContextOver", { balance: balShort, pace: paceShort });
+    subContext = t("miniapp.hero.subContextOver", { available: availShort, pace: paceShort });
   } else {
     heroNumber = v.todayRemainingFormatted;
     heroLabel = t("miniapp.hero.freeToday");
     var key = (v.daysToPayday === 1) ? "miniapp.hero.subContextSingleDay" : "miniapp.hero.subContext";
-    subContext = t(key, { balance: balShort, pace: paceShort, days: v.daysToPayday });
+    subContext = t(key, { available: availShort, pace: paceShort, days: v.daysToPayday });
   }
 
   // Variance chip — informational ("today vs pace"), passive.
@@ -1417,19 +1422,24 @@ function Dashboard(props) {
         title: t("miniapp.bills.label"),
         count: bills.length,
         // Bills subtitle exposes the engine's bill-reservation math:
-        //   "$1,496 set aside · $104 next cycle"
-        // Three branches:
-        //   - both: "$X set aside · $Y next cycle"
-        //   - only this-cycle: "$X set aside"
-        //   - only next-cycle: "$Y next cycle"
-        //   - none: no subtitle (paid-this-cycle bills only)
+        //   "$5,327 in account · $1,400 set aside · $200 next cycle"
+        // Pieces are joined with " · ". Balance always shown when bills
+        // exist (this section is the canonical home for balance now —
+        // the hero shows AVAILABLE = balance − set-aside, which is the
+        // user's true spend pool). Built piece-by-piece to skip zero
+        // pieces gracefully.
         subtitle: (function() {
           var thisAmt = v.billsThisCycleCents || 0;
           var nextAmt = v.billsNextCycleCents || 0;
-          if (thisAmt > 0 && nextAmt > 0) return t("miniapp.bills.protectedAndNext", { amount: v.billsThisCycleShort, next: v.billsNextCycleShort });
-          if (thisAmt > 0) return t("miniapp.bills.protected", { amount: v.billsThisCycleShort });
-          if (nextAmt > 0) return t("miniapp.bills.allNextCycle", { amount: v.billsNextCycleShort });
-          return null;
+          var pieces = [];
+          if (v.balanceShort) pieces.push(t("miniapp.bills.balanceInAccount", { amount: v.balanceShort }));
+          if (thisAmt > 0) pieces.push(t("miniapp.bills.protected", { amount: v.billsThisCycleShort }));
+          if (nextAmt > 0) {
+            // Use the explicit "next cycle" piece — re-using the
+            // allNextCycle locale would say "{amount} next cycle" too.
+            pieces.push(t("miniapp.bills.allNextCycle", { amount: v.billsNextCycleShort }));
+          }
+          return pieces.length ? pieces.join(" · ") : null;
         })(),
       }),
       h("div", { style: { padding: "0 16px" } },

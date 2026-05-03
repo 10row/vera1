@@ -154,6 +154,7 @@ function v5ToV4View(state) {
     obligatedFormatted: view.obligatedFormatted,
     disposableCents: view.disposableCents,
     disposableFormatted: view.disposableFormatted,
+    disposableShort: m.toShort(view.disposableCents, sym),
     deficitCents: view.deficitCents,
     deficitFormatted: view.deficitFormatted,
     dailyPaceCents: view.dailyPaceCents,
