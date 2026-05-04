@@ -17,35 +17,82 @@ const { simulateSpend } = require("./view");
 const onboarding = require("./onboarding");
 const { recordWarning } = require("./ai-debug");
 
-// Backdate-tripwire patterns. Match user messages that clearly refer
-// to a past time. Used to flag AI compliance failures when a record_*
-// intent is emitted WITHOUT a date param even though the user's
-// message had an unambiguous time reference.
+// Backdate resolver. The AI is NON-DETERMINISTIC about emitting the
+// `date` param: same prompt + same message can yield date OR no date
+// across calls. Verified with two back-to-back real-AI runs — one
+// emitted "2026-05-03", the next omitted it entirely. For a money
+// tracker, "usually works" isn't AAA — so this resolver provides a
+// deterministic fallback.
 //
-// Tight on purpose — we want HIGH precision (low false-positive). Any
-// phrase here strongly implies backdate.
+// USAGE: pipeline calls resolveBackdateFromText(userMessage, todayStr)
+// AFTER the AI returns. If a high-confidence time marker is found AND
+// the AI's record_* intent has no date param, the resolver returns the
+// ISO date to inject. Otherwise null (no inject).
 //
-// EN: \b word-boundaries work fine.
+// PRECISION OVER RECALL: only fires on UNAMBIGUOUS markers. Phrases
+// where the time-word might describe context (not the action) are
+// excluded — e.g. "yesterday's leftovers" (apostrophe-s) is naturally
+// rejected by \byesterday\b because of word-boundary semantics.
+//
+// FALSE-POSITIVE GUARD: confirm card shows the resolved date — user
+// sees " · yesterday" before tapping Yes. A wrong inject is visible,
+// not silent corruption.
+//
+// EN: \b word-boundaries work fine for Latin script.
 // RU: \b is ASCII-only in JS regex. Cyrillic words need (?:^|[^\p{L}])
 //     lookarounds with the /u flag for proper word matching.
-const BACKDATE_HINT_PATTERNS = [
-  // EN
-  { rx: /\byesterday\b/i, group: 0 },
-  { rx: /\b(\d+\s+days?\s+ago)\b/i, group: 1 },
-  { rx: /\blast\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i, group: 0 },
-  // RU — capture the actual word inside lookaround boundaries.
-  { rx: /(?:^|[^\p{L}])(вчера)(?=[^\p{L}]|$)/iu, group: 1 },
-  { rx: /(?:^|[^\p{L}])(позавчера)(?=[^\p{L}]|$)/iu, group: 1 },
-  // "N дней/дня/день назад" — ASCII digits plus Cyrillic word.
-  { rx: /(\d+\s+(?:дней|дня|день)\s+назад)/iu, group: 1 },
+const BACKDATE_RESOLVERS = [
+  // English — yesterday → today − 1
+  { rx: /\byesterday\b/i, offset: -1, label: "yesterday" },
+  // English — N days ago → today − N
+  { rx: /\b(\d+)\s+days?\s+ago\b/i, offsetFromMatch: m => -parseInt(m[1], 10), label: "N days ago" },
+  // English — last weekday → most-recent matching weekday before today
+  { rx: /\blast\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i,
+    offsetFromMatch: (m, todayStr) => offsetForLastWeekday(m[1], todayStr), label: "last weekday" },
+  // Russian — вчера → today − 1
+  { rx: /(?:^|[^\p{L}])вчера(?=[^\p{L}]|$)/iu, offset: -1, label: "вчера" },
+  // Russian — позавчера → today − 2
+  { rx: /(?:^|[^\p{L}])позавчера(?=[^\p{L}]|$)/iu, offset: -2, label: "позавчера" },
+  // Russian — N дней/дня/день назад → today − N
+  { rx: /(\d+)\s+(?:дней|дня|день)\s+назад/iu, offsetFromMatch: m => -parseInt(m[1], 10), label: "N дней назад" },
 ];
-function userMentionsPastTime(text) {
-  if (!text) return null;
-  for (const p of BACKDATE_HINT_PATTERNS) {
-    const m = p.rx.exec(text);
-    if (m && m[p.group]) return m[p.group].trim();
+
+const WEEKDAY_INDEX = {
+  sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2,
+  wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5,
+  saturday: 6, sat: 6,
+};
+function offsetForLastWeekday(name, todayStr) {
+  const target = WEEKDAY_INDEX[name.toLowerCase()];
+  if (target == null) return 0;
+  const today = new Date(todayStr + "T00:00:00Z");
+  const cur = today.getUTCDay();
+  // "last X" = most recent X strictly before today. Same-day → 7 days back.
+  let diff = cur - target;
+  if (diff <= 0) diff += 7;
+  return -diff;
+}
+
+// Returns { date, label } or null. The label is for /debug breadcrumbs.
+function resolveBackdateFromText(text, todayStr) {
+  if (!text || !todayStr) return null;
+  for (const r of BACKDATE_RESOLVERS) {
+    const match = r.rx.exec(text);
+    if (!match) continue;
+    let offset;
+    if (typeof r.offset === "number") offset = r.offset;
+    else if (typeof r.offsetFromMatch === "function") offset = r.offsetFromMatch(match, todayStr);
+    if (!Number.isFinite(offset) || offset >= 0) continue; // must be in the past
+    return { date: m.addDays(todayStr, offset), label: r.label };
   }
   return null;
+}
+
+// Legacy alias kept for tripwire diagnostics — same patterns, just
+// returns the matched word for the warning message.
+function userMentionsPastTime(text) {
+  const r = resolveBackdateFromText(text, m.today("UTC"));
+  return r ? r.label : null;
 }
 
 // ── PROMISE-ACTION CONSISTENCY ────────────────────────────────
@@ -183,34 +230,44 @@ async function processMessage(state, userMessage, history, options) {
   if (proposal.intent) convertOnce(proposal.intent);
   if (Array.isArray(proposal.intents)) proposal.intents.forEach(convertOnce);
 
-  // ── BACKDATE TRIPWIRE (diagnostic only — does NOT auto-fix) ──
-  // If the user's message contains an unambiguous past-time reference
-  // ("yesterday" / "вчера" / "N days ago" / "last Saturday" / etc.) but
-  // the AI emitted a record_spend / record_income intent WITHOUT a
-  // date param, log a warning into the /debug ring buffer. We don't
-  // auto-inject the date — that risks fighting the AI on edge cases.
-  // The warning surfaces silent compliance failures so they can be
-  // diagnosed without waiting for the user to notice.
+  // ── BACKDATE AUTO-INJECT (deterministic safety net) ──
+  // Verified empirically: the AI is NON-DETERMINISTIC about emitting
+  // the `date` param — same prompt + same message can give date OR no
+  // date across consecutive calls. For AAA reliability we inject the
+  // date deterministically when the user's message has an unambiguous
+  // past-time marker AND the AI dropped it.
+  //
+  // Confirm card shows the resolved date so any false positive is
+  // visible to the user before they tap Yes — never silent corruption.
+  //
+  // Only fires for record_spend / record_income (the dateable intents).
   try {
-    const hint = userMentionsPastTime(userMessage);
-    // Match the keying used by recordAiRaw so /debug shows them together.
-    // bot.js passes options._debugUserId = telegramId.
-    const debugKey = (options && options._debugUserId != null) ? options._debugUserId : null;
-    if (hint && debugKey != null) {
-      const ints = [];
-      if (proposal.intent) ints.push(proposal.intent);
-      if (Array.isArray(proposal.intents)) ints.push(...proposal.intents);
+    const todayStr = m.today((state && state.timezone) || "UTC");
+    const resolved = resolveBackdateFromText(userMessage, todayStr);
+    if (resolved) {
       const dateableKinds = new Set(["record_spend", "record_income"]);
-      const dropped = ints.filter(i =>
-        i && dateableKinds.has(i.kind) && (!i.params || !i.params.date)
-      );
-      if (dropped.length > 0) {
+      const tryInject = (intent) => {
+        if (!intent || !dateableKinds.has(intent.kind)) return false;
+        if (!intent.params) intent.params = {};
+        if (intent.params.date) return false; // AI emitted; respect it
+        intent.params.date = resolved.date;
+        return true;
+      };
+      const injected = [];
+      if (proposal.intent && tryInject(proposal.intent)) injected.push("intent");
+      if (Array.isArray(proposal.intents)) {
+        proposal.intents.forEach((it, i) => { if (tryInject(it)) injected.push("intents[" + i + "]"); });
+      }
+      // Diagnostic breadcrumb in /debug — auto-inject is transparent,
+      // not silent. Lets us see when the safety net actually fired.
+      const debugKey = (options && options._debugUserId != null) ? options._debugUserId : null;
+      if (injected.length > 0 && debugKey != null) {
         recordWarning(debugKey,
-          "⚠ user said \"" + hint + "\" but AI dropped the date on " +
-          dropped.length + " intent(s). Likely backdate miss.");
+          "ℹ auto-injected date=" + resolved.date + " (\"" + resolved.label +
+          "\") onto " + injected.length + " intent(s) — AI dropped it.");
       }
     }
-  } catch { /* tripwire never blocks the user-facing flow */ }
+  } catch { /* never block the user-facing flow */ }
 
   // ── PROMISE-ACTION CHECK ──
   // If AI's text promises an action but no matching intent exists,

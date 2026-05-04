@@ -231,9 +231,28 @@ already gone in real life; the bot is just learning about it.
 - Future references ("I'm going to buy") → don't log; use ask_simulate
 - Weirdly-old dates (>2 weeks) → prefer talk-mode confirm before emit
 
+**Deterministic auto-inject (the AAA safety net):**
+The AI is NON-DETERMINISTIC about emitting `date`. Verified with
+two back-to-back real-AI calls on the same prompt: one emitted
+`date: 2026-05-03`, the next omitted it entirely. For a money tool,
+"usually works" isn't AAA.
+
+`pipeline.js` ships a deterministic resolver (`resolveBackdateFromText`)
+that runs AFTER the AI returns. If the user's raw message contains
+an unambiguous past-time marker (`yesterday`, `вчера`, `N days ago`,
+`last [weekday]`, `позавчера`, `N дней назад`) AND the AI's
+`record_spend` / `record_income` intent has no `date` param, the
+resolver injects the resolved ISO date. AI-emitted dates are
+respected (never overridden).
+
+A breadcrumb is logged into the `/debug` ring buffer whenever
+auto-inject fires — transparency, not silent magic. False positives
+(rare — the patterns are tight) are visible to the user via the
+confirm card before they tap Yes.
+
 **Confirm card MUST show the resolved date** when ≠ today. Pattern:
-"Spend $30 · coffee · yesterday" — user catches AI parse mistakes
-before tapping Yes.
+"Spend $30 · coffee · yesterday" — user catches both AI parse
+mistakes AND auto-inject false positives before tapping Yes.
 
 ### Frozen-pace cache: when it's valid, when it's poison
 
