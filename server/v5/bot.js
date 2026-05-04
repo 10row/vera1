@@ -153,6 +153,32 @@ function describeUndoTarget(intent, lang) {
 
 // ── INTENT FORMATTING ─────────────────────────────
 // Turn a validated intent into a one-line summary for the confirm card.
+// describeBackdate — render a friendly date suffix for the confirm card
+// when a record_spend / record_income is for a past day. Today returns
+// empty string (silent — that's the common case). Yesterday → "· yesterday".
+// 2-7 days back → "· N days ago". Older → "· May 1" (date itself).
+//
+// The user must SEE the resolved date before confirming so they catch
+// AI date-parsing mistakes (e.g. "last Tuesday" parsed as wrong week).
+function describeBackdate(dateStr, state, lang) {
+  if (!dateStr) return "";
+  const today = m.today((state && state.timezone) || "UTC");
+  if (dateStr === today) return "";
+  const days = m.daysBetween(dateStr, today); // positive = past
+  const ru = lang === "ru";
+  if (days === 1) return ru ? " · вчера" : " · yesterday";
+  if (days >= 2 && days <= 7) return ru ? " · " + days + " дн назад" : " · " + days + " days ago";
+  // Older or future (shouldn't happen post-validation): show the raw date.
+  // Friendly long-form like "May 1" reads better than "2026-05-01".
+  try {
+    const dt = new Date(dateStr + "T12:00:00Z");
+    const friendly = dt.toLocaleDateString(ru ? "ru-RU" : "en-US", { month: "short", day: "numeric" });
+    return " · " + friendly;
+  } catch {
+    return " · " + dateStr;
+  }
+}
+
 function describeIntent(intent, state) {
   const p = intent.params || {};
   const sym = state.currencySymbol || "$";
@@ -195,14 +221,21 @@ function describeIntent(intent, state) {
       const title = titleParts.length > 0 ? " · " + titleParts.join(" — ") : "";
       // Category as a small badge after the title.
       const catBadge = p.category && p.category !== "other" ? " #" + p.category : "";
+      // Backdate badge — surface the EVENT date when it's not today
+      // so the user catches AI date-parsing mistakes BEFORE confirming.
+      // Today = silent (default); past date = explicit ("· yesterday" /
+      // "· May 1" / "· 3 days ago").
+      const dateBadge = describeBackdate(p.date, state, lang);
       return lang === "ru"
-        ? "Расход " + amountPhrase + title + catBadge
-        : "Spend " + amountPhrase + title + catBadge;
+        ? "Расход " + amountPhrase + title + catBadge + dateBadge
+        : "Spend " + amountPhrase + title + catBadge + dateBadge;
     }
-    case "record_income":
+    case "record_income": {
+      const dateBadge = describeBackdate(p.date, state, lang);
       return lang === "ru"
-        ? "Доход " + M(p.amountCents) + (p.note ? " · " + E(p.note) : "")
-        : "Income " + M(p.amountCents) + (p.note ? " · " + E(p.note) : "");
+        ? "Доход " + M(p.amountCents) + (p.note ? " · " + E(p.note) : "") + dateBadge
+        : "Income " + M(p.amountCents) + (p.note ? " · " + E(p.note) : "") + dateBadge;
+    }
     case "update_payday":
       return lang === "ru"
         ? "Зарплата → " + (p.payday || "?") + (p.payFrequency ? " (" + p.payFrequency + ")" : "")

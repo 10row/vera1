@@ -74,6 +74,11 @@ function validateIntent(state, intent, todayStr) {
         const k = m.billKey(p.billKey);
         if (!state.bills || !state.bills[k]) return reject("No bill matching " + p.billKey + ".");
       }
+      // Backdate (optional p.date) — must not be in the future or
+      // before account setup. Engine throws on the same check; we
+      // catch it here with a friendly message.
+      const dr = m.resolveTxDate(state, p.date, todayStr);
+      if (dr.error) return reject(dr.error);
       return ok();
     }
 
@@ -81,6 +86,8 @@ function validateIntent(state, intent, todayStr) {
       if (!state.setup) return reject("Set up first.");
       const amt = Math.round(Number(p.amountCents));
       if (!Number.isFinite(amt) || amt <= 0) return reject("Need a valid amount.");
+      const dr = m.resolveTxDate(state, p.date, todayStr);
+      if (dr.error) return reject(dr.error);
       return ok();
     }
 

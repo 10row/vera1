@@ -185,6 +185,48 @@ deletedAt set   reverted no          no         restored*   no
   transactions: view.compute (today/week), buildHeatmap, dna.compute.
   delete_transaction reverses balance but keeps the row for audit.
 
+### Two dates on a transaction (the backdating model)
+
+Every spend / income carries TWO logical dates:
+
+| | What it means | Stored in |
+|---|---|---|
+| **Event date** | When the spend actually happened in real life | `tx.date` (ISO) |
+| **Effect date** | When balance changed | implicit: balance is a NOW snapshot |
+
+For a normal "I just spent X" log, both are today. The user can also
+backdate via natural language ("I forgot to log $30 for coffee
+yesterday"). The AI emits an explicit `date` param; engine stamps
+`tx.date` accordingly. **Balance still mutates NOW** — the money was
+already gone in real life; the bot is just learning about it.
+
+**What backdating affects:**
+- `tx.date` — drives heatmap, today/week aggregations, history display
+- Balance: drops NOW (one-shot, no retroactive math)
+- Frozen pace today: unchanged (was set this morning)
+- Tomorrow's pace: naturally lower (fresh refresh sees lower balance)
+
+**What it does NOT affect:**
+- Past pace numbers (we don't rewrite history)
+- Audit trail (event log records when the bot learned, not when it happened)
+- Undo / delete chain (works the same — by id and event order)
+
+**Hard rules** (enforced by `m.resolveTxDate`):
+- Date must be ≤ today (no future spending)
+- Date must be ≥ first transaction's date (can't backdate before account setup)
+- Format must be strict ISO `YYYY-MM-DD`
+
+**AI prompt rules:**
+- Only emit `date` when the user EXPLICITLY references a past time
+  ("yesterday", "last Saturday", "two days ago", "on the 1st")
+- Use the TODAY context block (date + day-of-week) for resolution
+- Future references ("I'm going to buy") → don't log; use ask_simulate
+- Weirdly-old dates (>2 weeks) → prefer talk-mode confirm before emit
+
+**Confirm card MUST show the resolved date** when ≠ today. Pattern:
+"Spend $30 · coffee · yesterday" — user catches AI parse mistakes
+before tapping Yes.
+
 ### Frozen-pace cache: when it's valid, when it's poison
 
 The cache fields are `state.dailyPaceCents` + `state.dailyPaceComputedDate`.

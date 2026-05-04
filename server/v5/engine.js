@@ -178,6 +178,15 @@ function applyIntent(state, intent) {
       const note = String(p.note || "").trim().slice(0, 120);
       const billKeyP = p.billKey ? m.billKey(p.billKey) : null;
       const isBillPayment = billKeyP && next.bills[billKeyP];
+
+      // Resolve the EVENT date. p.date allows "I forgot to log this
+      // yesterday" — tx is stamped with the past date for heatmap /
+      // history accuracy. Balance still mutates NOW (the money's gone
+      // either way; we're learning about it now). See CLAUDE.md "Two
+      // dates on a transaction" for the model.
+      const dateRes = m.resolveTxDate(next, p.date, todayStr);
+      if (dateRes.error) throw new Error(dateRes.error);
+      const txDate = dateRes.date;
       // Preserve original-currency info on the transaction so the feed
       // can show "₫200,000 ≈ $8.00" instead of just $8.00.
       const isForeign = p.originalCurrency && Number.isFinite(p.originalAmount) && p.originalAmount > 0;
@@ -239,7 +248,7 @@ function applyIntent(state, intent) {
         originalCurrency: isForeign ? p.originalCurrency.toUpperCase() : null,
         // Graph fields (all optional, null when absent — backward-compatible).
         vendor, category, context, tags,
-        date: todayStr,
+        date: txDate, // EVENT date — may be backdated; balance mutated NOW.
       });
 
       // Mark bill as paid this cycle, advance dueDate by one cycle.
@@ -283,11 +292,18 @@ function applyIntent(state, intent) {
       const amt = Math.round(Number(p.amountCents));
       if (!Number.isFinite(amt) || amt <= 0) throw new Error("Invalid amount");
       const note = String(p.note || "").trim().slice(0, 120);
+
+      // Resolve EVENT date (paycheck might've actually landed yesterday).
+      // See record_spend / model.resolveTxDate for the model.
+      const dateRes = m.resolveTxDate(next, p.date, todayStr);
+      if (dateRes.error) throw new Error(dateRes.error);
+      const txDate = dateRes.date;
+
       next.balanceCents += amt;
       next.transactions.push({
         id: m.uid(), ts: Date.now(),
         kind: "income", amountCents: amt, note,
-        date: todayStr,
+        date: txDate,
       });
       // If user got their paycheck, advance payday automatically.
       const prevPaydayForCycle = next.payday;

@@ -78,6 +78,37 @@ function normalizeDate(d) {
   return null;
 }
 
+// Resolve the effective transaction date. Used by record_spend and
+// record_income to support "I forgot to log this yesterday" — the
+// EVENT date can be in the past while the BALANCE impact is now.
+//
+// Returns { date: ISOString } on success, { error: "..." } on bad
+// input. Engine throws on error; validator returns reject().
+//
+// Hard rules (the ones we can't relax without lying about history):
+//   - Must parse as YYYY-MM-DD.
+//   - Must NOT be in the future (you can't have spent money tomorrow).
+//   - Must NOT be before the account setup transaction (we have no
+//     ledger from before — backdating there is a worm-can).
+//
+// Soft rule: NONE. If you've been on the bot for 6 months and want
+// to backdate 5 months, that's your call. The AI prompt is responsible
+// for surfacing "are you sure?" on weird-looking input.
+function resolveTxDate(state, dateInput, todayStr) {
+  if (!dateInput) return { date: todayStr };
+  const d = normalizeDate(dateInput);
+  if (!d) return { error: "Invalid date format — use YYYY-MM-DD." };
+  if (d > todayStr) return { error: "Can't log something for the future." };
+  // Earliest allowed = first tx's date (the setup tx, normally).
+  const txs = (state && state.transactions) || [];
+  const firstTx = txs[0];
+  const earliest = firstTx ? firstTx.date : null;
+  if (earliest && d < earliest) {
+    return { error: "Can't backdate before account setup (" + earliest + ")." };
+  }
+  return { date: d };
+}
+
 // Advance payday past today. Monthly is calendar-aware.
 function advancePayday(payday, freq, todayStr) {
   if (!payday) return null;
@@ -198,6 +229,7 @@ function createFreshState() {
 module.exports = {
   toCents, toMoney, toShort,
   today, daysBetween, daysUntil, addDays, normalizeDate, advancePayday, addBillCycle,
+  resolveTxDate,
   RECURRENCES, PAY_FREQS, INTENT_KINDS,
   billKey, uid, escapeMd,
   createFreshState,

@@ -544,6 +544,158 @@ test("[engine] addBillCycle handles month-end clamping (Jan 31 → Feb 28)", () 
   assertEq(m.addBillCycle("2026-05-15", "biweekly"), "2026-05-29", "biweekly = +14 days");
 });
 
+// ── BACKDATING (date param on record_spend / record_income) ─────
+// "I forgot to log this yesterday" — tx stamped with past date for
+// heatmap / history accuracy; balance mutated NOW.
+
+test("[engine] record_spend with date=yesterday stamps tx.date correctly", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  const yesterday = m.addDays(today, -1);
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  // Backfill setup tx date so the backdate window allows yesterday.
+  // (Real users sign up before they backdate; in tests we shortcut.)
+  s.transactions[0].date = m.addDays(today, -10);
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 3000, note: "coffee", date: yesterday },
+  }).state;
+
+  const tx = s.transactions[s.transactions.length - 1];
+  assertEq(tx.kind, "spend");
+  assertEq(tx.date, yesterday, "tx.date should be the backdated value");
+  assertEq(tx.amountCents, -3000);
+  assertEq(s.balanceCents, 497000, "balance still mutates NOW (money was already gone)");
+});
+
+test("[engine] backdated spend doesn't show in todaySpent", () => {
+  const { compute } = require("../view");
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  s.transactions[0].date = m.addDays(today, -10);
+  // Backdate $30 to yesterday.
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 3000, note: "coffee", date: m.addDays(today, -1) },
+  }).state;
+  // Spend $5 today.
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 500, note: "tip" } }).state;
+
+  const v = compute(s);
+  assertEq(v.todaySpentCents, 500, "only today's $5 shows in todaySpent (yesterday's backdate excluded)");
+  assertEq(v.weekSpentCents, 3500, "weekSpent includes both (within 7 days)");
+});
+
+test("[engine] record_spend rejects future date", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  assertThrows(
+    () => applyIntent(s, { kind: "record_spend", params: { amountCents: 1000, date: m.addDays(today, 1) } }),
+    /future/i
+  );
+});
+
+test("[engine] record_spend rejects date before setup", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  // Try to backdate to before setup (which happened today).
+  assertThrows(
+    () => applyIntent(s, { kind: "record_spend", params: { amountCents: 1000, date: m.addDays(today, -1) } }),
+    /before account setup/i
+  );
+});
+
+test("[engine] record_income with date=yesterday works", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  // Backfill the setup tx date to N days ago so backdate window is open.
+  s.transactions[0].date = m.addDays(today, -3);
+  const yesterday = m.addDays(today, -1);
+  s = applyIntent(s, {
+    kind: "record_income",
+    params: { amountCents: 50000, note: "freelance", date: yesterday },
+  }).state;
+  const tx = s.transactions[s.transactions.length - 1];
+  assertEq(tx.kind, "income");
+  assertEq(tx.date, yesterday);
+  assertEq(s.balanceCents, 550000);
+});
+
+test("[engine] no date param defaults to today (backward-compat)", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 1000, note: "test" } }).state;
+  const tx = s.transactions[s.transactions.length - 1];
+  assertEq(tx.date, today, "no date param → tx.date defaults to today");
+});
+
+test("[engine] backdated tx undo restores balance fully", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  s.transactions[0].date = m.addDays(today, -5);
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 3000, note: "coffee", date: m.addDays(today, -2) },
+  }).state;
+  assertEq(s.balanceCents, 497000);
+  s = applyIntent(s, { kind: "undo_last", params: {} }).state;
+  assertEq(s.balanceCents, 500000, "undo restores balance even for backdated txs");
+});
+
+// resolveTxDate helper unit checks (model.js)
+test("[model] resolveTxDate accepts valid past date within window", () => {
+  const today = m.today("UTC");
+  const state = { transactions: [{ kind: "setup", date: m.addDays(today, -10) }] };
+  const r = m.resolveTxDate(state, m.addDays(today, -3), today);
+  assertEq(r.date, m.addDays(today, -3));
+  assertEq(r.error, undefined);
+});
+
+test("[model] resolveTxDate rejects malformed date", () => {
+  const today = m.today("UTC");
+  const r = m.resolveTxDate({ transactions: [] }, "not-a-date", today);
+  assertTrue(/format/i.test(r.error));
+});
+
+test("[model] resolveTxDate rejects future", () => {
+  const today = m.today("UTC");
+  const r = m.resolveTxDate({ transactions: [] }, m.addDays(today, 1), today);
+  assertTrue(/future/i.test(r.error));
+});
+
+test("[model] resolveTxDate defaults to today when input is null", () => {
+  const today = m.today("UTC");
+  const r = m.resolveTxDate({ transactions: [] }, null, today);
+  assertEq(r.date, today);
+});
+
 test("[engine] backward-compat: delete tx without prevDueDate snapshot still works", () => {
   // Simulate a tx created BEFORE the prevDueDate snapshot existed.
   let s = setupWithPayday(500000, 23);

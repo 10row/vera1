@@ -53,3 +53,33 @@ test("[validator] add_bill before setup REJECTED", () => {
   assertEq(v.ok, false);
   assertTrue(/set up first/i.test(v.reason));
 });
+
+// ── BACKDATING (record_spend / record_income with date param) ─
+test("[validator] record_spend with valid backdate PASSES", () => {
+  const s = setup(500000);
+  // Setup tx is on TODAY by default; widen the window.
+  s.transactions[0].date = "2025-04-20";
+  const v = validateIntent(s, { kind: "record_spend", params: { amountCents: 1000, date: "2025-04-25" } }, TODAY);
+  assertEq(v.ok, true);
+});
+test("[validator] record_spend with future date REJECTED", () => {
+  const v = validateIntent(setup(500000), { kind: "record_spend", params: { amountCents: 1000, date: "2025-04-29" } }, TODAY);
+  assertEq(v.ok, false);
+  assertTrue(/future/i.test(v.reason));
+});
+test("[validator] record_spend with date before setup REJECTED", () => {
+  const v = validateIntent(setup(500000), { kind: "record_spend", params: { amountCents: 1000, date: "2024-12-31" } }, TODAY);
+  assertEq(v.ok, false);
+  assertTrue(/before account setup/i.test(v.reason));
+});
+test("[validator] record_spend with malformed date REJECTED", () => {
+  const v = validateIntent(setup(500000), { kind: "record_spend", params: { amountCents: 1000, date: "yesterday" } }, TODAY);
+  assertEq(v.ok, false);
+  assertTrue(/format/i.test(v.reason));
+});
+test("[validator] record_income with valid backdate PASSES", () => {
+  const s = setup(500000);
+  s.transactions[0].date = "2025-04-20";
+  const v = validateIntent(s, { kind: "record_income", params: { amountCents: 50000, date: "2025-04-26" } }, TODAY);
+  assertEq(v.ok, true);
+});
