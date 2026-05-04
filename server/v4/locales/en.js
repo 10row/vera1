@@ -138,6 +138,8 @@ module.exports = {
   "miniapp.hero.subContextSingleDay": "{available} available · {pace}/day · 1 day",
   "miniapp.hero.under": "{amount} under today",
   "miniapp.hero.over": "{amount} over today",
+  "miniapp.hero.tomorrowLess": "≈ {delta}/day less rest of cycle",
+  "miniapp.hero.tomorrowMore": "≈ {delta}/day more rest of cycle",
   "miniapp.heatmap.last30": "Last 30 days",
   "miniapp.heatmap.under": "under",
   "miniapp.heatmap.over": "over",

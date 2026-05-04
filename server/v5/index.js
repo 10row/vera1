@@ -136,6 +136,16 @@ function v5ToV4View(state) {
     ? (view.dailyPaceCents - view.todaySpentCents)
     : 0;
 
+  // Project tomorrow's pace using current state + days−1. Shows the
+  // user how today's variance ripples forward — under-spending today
+  // raises tomorrow's pace, over-spending lowers it. Skip in over-
+  // state (pace capped at 0) and when payday is tomorrow (no future).
+  let tomorrowPaceCents = view.dailyPaceCents;
+  if (view.status !== "over" && view.daysToPayday > 1) {
+    tomorrowPaceCents = Math.floor(view.disposableCents / (view.daysToPayday - 1));
+  }
+  const paceDeltaCents = tomorrowPaceCents - view.dailyPaceCents;
+
   return {
     setup: true,
     state: view.status,
@@ -171,6 +181,27 @@ function v5ToV4View(state) {
     // Hero variance chip — under/over today's pace.
     varianceCents,
     varianceShort: m.toShort(Math.abs(varianceCents), sym),
+
+    // Projected next-day pace and the per-day delta from today's
+    // frozen pace. Drives the "$X/day less/more rest of cycle" line
+    // under the variance chip — Option A from the design discussion.
+    //
+    // Math: balance has ALREADY been decremented by today's spends
+    // (record_spend mutates balance immediately). So tomorrow's
+    // disposable === current disposable, and tomorrow's pace =
+    // floor(disposable / (daysToPayday − 1)). Compared to today's
+    // FROZEN pace (which reflects the start-of-day disposable), the
+    // delta tells the user what today's variance costs (over) or
+    // saves (under) per day for the rest of the cycle.
+    //
+    // Skip when daysToPayday ≤ 1 (tomorrow is payday — projection is
+    // meaningless) or when the user is already in over-state (pace
+    // is capped at 0; delta math is degenerate). In those cases
+    // paceDeltaCents = 0 and the Mini App hides the line.
+    tomorrowPaceCents,
+    tomorrowPaceShort: m.toShort(tomorrowPaceCents, sym),
+    paceDeltaCents,
+    paceDeltaShort: m.toShort(Math.abs(paceDeltaCents), sym),
 
     // Bills protected vs next-cycle (visibility into engine math).
     billsThisCycleCents,

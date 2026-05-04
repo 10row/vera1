@@ -341,6 +341,34 @@ function Hero(props) {
     );
   }
 
+  // Pace-impact line — "Option A" from the audit discussion.
+  //
+  // Today's overspend doesn't vanish; it's redistributed across the
+  // remaining days of the cycle (tomorrow's pace recomputes at day
+  // rollover). Without surfacing this, the user has no signal that
+  // today's variance has consequences. With it, they see the cause-
+  // effect chain in one glance.
+  //
+  // Same color family as the variance chip but lighter weight so the
+  // chip stays the headline. Hidden alongside the chip when there's
+  // no signal (no spend / no pace), and ALSO hidden when the per-day
+  // delta is 0 (e.g. payday is tomorrow → no projection possible).
+  var paceDelta = v.paceDeltaCents || 0;
+  var showPaceImpact = showVariance && paceDelta !== 0;
+  var paceImpactLine = null;
+  if (showPaceImpact) {
+    var deltaShort = v.paceDeltaShort || "";
+    var deltaIsUp = paceDelta > 0; // tomorrow's pace HIGHER → user under-spent
+    var impactColor = deltaIsUp ? C.green : C.amber;
+    var impactKey = deltaIsUp ? "miniapp.hero.tomorrowMore" : "miniapp.hero.tomorrowLess";
+    paceImpactLine = h("div", {
+      style: {
+        fontSize: 10, color: impactColor, marginTop: 6,
+        letterSpacing: "0.02em", opacity: 0.9,
+      },
+    }, t(impactKey, { delta: deltaShort }));
+  }
+
   return h("div", { style: { padding: "32px 20px 22px", textAlign: "center" } },
     pill,
     h("div", {
@@ -352,7 +380,8 @@ function Hero(props) {
     }, heroNumber),
     h("div", { style: { fontSize: 13, color: C.sub, marginTop: 10, letterSpacing: "0.02em" } }, heroLabel),
     h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, subContext),
-    varianceChip
+    varianceChip,
+    paceImpactLine
   );
 }
 
