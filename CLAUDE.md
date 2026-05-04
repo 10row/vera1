@@ -203,12 +203,20 @@ already gone in real life; the bot is just learning about it.
 **What backdating affects:**
 - `tx.date` — drives heatmap, today/week aggregations, history display
 - Balance: drops NOW (one-shot, no retroactive math)
-- Frozen pace today: unchanged (was set this morning)
-- Tomorrow's pace: naturally lower (fresh refresh sees lower balance)
+- **Today's frozen pace: REFRESHED.** Backdated record_* is a CYCLE
+  EVENT (a correction, not a current-day action). Today's morning
+  pace was computed from a balance that didn't include this spend
+  (because the bot didn't know yet); refreshing recomputes from
+  now-correct state. Today-dated record_* still does NOT refresh
+  (Model B intact for normal living-day spending).
+- Tomorrow's pace: inherits from the refreshed pace (was already
+  going to recompute at rollover anyway).
 
 **What it does NOT affect:**
-- Past pace numbers (we don't rewrite history)
-- Audit trail (event log records when the bot learned, not when it happened)
+- Past pace numbers (we don't rewrite history — yesterday's heatmap
+  pace is whatever was computed yesterday)
+- Audit trail (event log records when the bot learned, not when
+  the spend happened)
 - Undo / delete chain (works the same — by id and event order)
 
 **Hard rules** (enforced by `m.resolveTxDate`):
@@ -263,12 +271,20 @@ it three.
 setup_account · adjust_balance · add_bill · remove_bill ·
 update_payday · delete_transaction · undo_last
 + first event of a new day (rollover)
++ BACKDATED record_spend (date < today) — historical correction
++ BACKDATED record_income (date < today) — historical correction
++ record_income that advances payday (paycheck arrival)
 ```
 
-NOT cycle events (pace stays frozen):
+NOT cycle events (pace stays frozen — Model B):
 ```
-record_spend (including bill_payment) · record_income (unless paycheck advances payday)
+TODAY-dated record_spend (including TODAY-dated bill_payment)
+TODAY-dated record_income (when payday hasn't advanced)
 ```
+
+**The mental rule:** a CORRECTION (delete / undo / backdated record_*)
+or a CYCLE BOUNDARY (setup / payday change / paycheck) refreshes
+pace. A NORMAL TODAY ACTION doesn't.
 
 ### Bill payment lifecycle (the trickiest path)
 

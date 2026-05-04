@@ -275,6 +275,24 @@ function applyIntent(state, intent) {
         }
       }
 
+      // CYCLE EVENT for BACKDATED spends only.
+      //
+      // Per Model B, today-dated record_spend does NOT refresh pace —
+      // spending today eats today's bucket, not the month. But a
+      // BACKDATED spend is a CORRECTION, not a current spend: the
+      // bot just learned about historical activity. Today's frozen
+      // pace was computed this morning from a balance that didn't
+      // include this spend (because the bot didn't know yet), so the
+      // pace is stale relative to actual current state. Refresh it.
+      //
+      // Same conceptual class as delete_transaction / undo_last —
+      // those are also corrections and refresh pace too. Today-dated
+      // spends keep Model B intact.
+      const isBackdated = txDate !== todayStr;
+      if (isBackdated) {
+        refreshPace(next, todayStr);
+      }
+
       // Also snapshot prevBill on the EVENT for undo_last (which reads
       // events, not transactions). Belt-and-suspenders: same data on
       // both, since undo and delete reach for different sources.
@@ -310,10 +328,13 @@ function applyIntent(state, intent) {
       if (next.payday && next.payFrequency && next.payFrequency !== "irregular") {
         next.payday = m.advancePayday(next.payday, next.payFrequency, todayStr);
       }
-      // CYCLE EVENT: if payday advanced (paycheck arrived), re-baseline pace.
-      // Otherwise income mid-cycle leaves pace alone (next day rollover picks
-      // up the new balance naturally).
-      if (next.payday !== prevPaydayForCycle) {
+      // CYCLE EVENT — refresh pace if EITHER:
+      //   1. Payday advanced (paycheck arrived; new cycle begins), OR
+      //   2. Income is BACKDATED (correction — see record_spend rationale).
+      // Today-dated mid-cycle income leaves pace alone (next day rollover
+      // picks up the new balance naturally).
+      const isBackdated = txDate !== todayStr;
+      if (next.payday !== prevPaydayForCycle || isBackdated) {
         refreshPace(next, todayStr);
       }
       const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents });

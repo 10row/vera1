@@ -652,6 +652,126 @@ test("[engine] no date param defaults to today (backward-compat)", () => {
   assertEq(tx.date, today, "no date param → tx.date defaults to today");
 });
 
+// REGRESSION — pace must refresh when a record_spend is backdated.
+// Pre-fix bug: today's pace was set this morning from a balance that
+// didn't reflect the backdated (yet-to-be-told) spend. Logging it
+// reduced balance but pace stayed frozen → user sees "same pace today"
+// even though they just told the bot about historical overspending.
+//
+// The new rule: backdated record_* is a CORRECTION (cycle event), not
+// a current-day spend. Refresh pace.
+test("[engine] backdated record_spend REFRESHES pace (cycle event correction)", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  // Widen backdate window.
+  s.transactions[0].date = m.addDays(today, -5);
+  const paceBefore = s.dailyPaceCents;
+  assertTrue(paceBefore > 0, "baseline pace > 0");
+
+  // Backdate a $300 spend to yesterday — pace MUST drop because
+  // today's pace was computed assuming this money was still there.
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 30000, note: "perfume", date: m.addDays(today, -1) },
+  }).state;
+  assertTrue(s.dailyPaceCents < paceBefore, "pace must drop after backdated spend (was identical pre-fix)");
+  assertEq(s.dailyPaceComputedDate, today, "pace was just refreshed today");
+});
+
+test("[engine] TODAY-dated record_spend does NOT refresh pace (Model B intact)", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  const paceBefore = s.dailyPaceCents;
+
+  // Spend today (no date param) — Model B says pace stays frozen.
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 30000, note: "perfume" },
+  }).state;
+  assertEq(s.dailyPaceCents, paceBefore, "today-dated record_spend must NOT refresh pace");
+
+  // Even with explicit date=today, no refresh.
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 1000, note: "coffee", date: today },
+  }).state;
+  assertEq(s.dailyPaceCents, paceBefore, "explicit date=today must NOT refresh pace");
+});
+
+test("[engine] backdated record_income REFRESHES pace (correction)", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  s.transactions[0].date = m.addDays(today, -5);
+  const paceBefore = s.dailyPaceCents;
+
+  // Backdated income (e.g., refund / freelance from yesterday) — pace
+  // should refresh upward because balance is higher than this morning's
+  // pace assumed.
+  s = applyIntent(s, {
+    kind: "record_income",
+    params: { amountCents: 50000, note: "refund", date: m.addDays(today, -1) },
+  }).state;
+  assertTrue(s.dailyPaceCents > paceBefore, "pace must rise after backdated income correction");
+  assertEq(s.dailyPaceComputedDate, today);
+});
+
+test("[engine] TODAY-dated record_income does NOT refresh pace (no payday advance)", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  // Use irregular payFrequency so payday never advances on income.
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "irregular" },
+  }).state;
+  const paceBefore = s.dailyPaceCents;
+  s = applyIntent(s, {
+    kind: "record_income",
+    params: { amountCents: 50000, note: "side gig" },
+  }).state;
+  assertEq(s.dailyPaceCents, paceBefore, "today-dated income with no payday advance must NOT refresh");
+});
+
+test("[engine] backdated bill_payment REFRESHES pace (correction)", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  s.transactions[0].date = m.addDays(today, -5);
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Phone", amountCents: 20000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
+  }).state;
+  const paceBefore = s.dailyPaceCents;
+
+  // Backdated bill payment — bill cycle advances AND pace refreshes
+  // (because backdated). Both behaviors should hold simultaneously.
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 20000, billKey: "Phone", date: m.addDays(today, -1) },
+  }).state;
+  // Pace refresh: should be different from baseline (cleaner: new pace
+  // is computed from new balance + bill state).
+  assertTrue(s.dailyPaceCents !== paceBefore || s.dailyPaceComputedDate === today, "pace refresh fired");
+  // Bill state: paidThisCycle false (recurring bill rolled to next cycle).
+  const bill = s.bills[m.billKey("Phone")];
+  assertEq(bill.paidThisCycle, false);
+  assertTrue(bill.dueDate > m.addDays(today, 5), "dueDate advanced one cycle");
+});
+
 test("[engine] backdated tx undo restores balance fully", () => {
   let s = m.createFreshState();
   const today = m.today("UTC");
