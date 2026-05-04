@@ -15,6 +15,38 @@ const { parseProposal } = require("./ai");
 const { validateIntent } = require("./validator");
 const { simulateSpend } = require("./view");
 const onboarding = require("./onboarding");
+const { recordWarning } = require("./ai-debug");
+
+// Backdate-tripwire patterns. Match user messages that clearly refer
+// to a past time. Used to flag AI compliance failures when a record_*
+// intent is emitted WITHOUT a date param even though the user's
+// message had an unambiguous time reference.
+//
+// Tight on purpose — we want HIGH precision (low false-positive). Any
+// phrase here strongly implies backdate.
+//
+// EN: \b word-boundaries work fine.
+// RU: \b is ASCII-only in JS regex. Cyrillic words need (?:^|[^\p{L}])
+//     lookarounds with the /u flag for proper word matching.
+const BACKDATE_HINT_PATTERNS = [
+  // EN
+  { rx: /\byesterday\b/i, group: 0 },
+  { rx: /\b(\d+\s+days?\s+ago)\b/i, group: 1 },
+  { rx: /\blast\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i, group: 0 },
+  // RU — capture the actual word inside lookaround boundaries.
+  { rx: /(?:^|[^\p{L}])(вчера)(?=[^\p{L}]|$)/iu, group: 1 },
+  { rx: /(?:^|[^\p{L}])(позавчера)(?=[^\p{L}]|$)/iu, group: 1 },
+  // "N дней/дня/день назад" — ASCII digits plus Cyrillic word.
+  { rx: /(\d+\s+(?:дней|дня|день)\s+назад)/iu, group: 1 },
+];
+function userMentionsPastTime(text) {
+  if (!text) return null;
+  for (const p of BACKDATE_HINT_PATTERNS) {
+    const m = p.rx.exec(text);
+    if (m && m[p.group]) return m[p.group].trim();
+  }
+  return null;
+}
 
 // ── PROMISE-ACTION CONSISTENCY ────────────────────────────────
 // THE silent-lie failure mode: AI's text says "I'll adjust your balance"
@@ -150,6 +182,35 @@ async function processMessage(state, userMessage, history, options) {
   }
   if (proposal.intent) convertOnce(proposal.intent);
   if (Array.isArray(proposal.intents)) proposal.intents.forEach(convertOnce);
+
+  // ── BACKDATE TRIPWIRE (diagnostic only — does NOT auto-fix) ──
+  // If the user's message contains an unambiguous past-time reference
+  // ("yesterday" / "вчера" / "N days ago" / "last Saturday" / etc.) but
+  // the AI emitted a record_spend / record_income intent WITHOUT a
+  // date param, log a warning into the /debug ring buffer. We don't
+  // auto-inject the date — that risks fighting the AI on edge cases.
+  // The warning surfaces silent compliance failures so they can be
+  // diagnosed without waiting for the user to notice.
+  try {
+    const hint = userMentionsPastTime(userMessage);
+    // Match the keying used by recordAiRaw so /debug shows them together.
+    // bot.js passes options._debugUserId = telegramId.
+    const debugKey = (options && options._debugUserId != null) ? options._debugUserId : null;
+    if (hint && debugKey != null) {
+      const ints = [];
+      if (proposal.intent) ints.push(proposal.intent);
+      if (Array.isArray(proposal.intents)) ints.push(...proposal.intents);
+      const dateableKinds = new Set(["record_spend", "record_income"]);
+      const dropped = ints.filter(i =>
+        i && dateableKinds.has(i.kind) && (!i.params || !i.params.date)
+      );
+      if (dropped.length > 0) {
+        recordWarning(debugKey,
+          "⚠ user said \"" + hint + "\" but AI dropped the date on " +
+          dropped.length + " intent(s). Likely backdate miss.");
+      }
+    }
+  } catch { /* tripwire never blocks the user-facing flow */ }
 
   // ── PROMISE-ACTION CHECK ──
   // If AI's text promises an action but no matching intent exists,

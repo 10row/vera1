@@ -435,3 +435,82 @@ test("[delete-amb] full chain: AI valid → pipeline → engine applies + balanc
   const r2 = applyIntent(s, r.intent);
   assertEq(r2.state.balanceCents, 499600); // juice still applied, cat removed
 });
+
+// ── BACKDATE TRIPWIRE — diagnostic tripwire records a warning when the
+// user's message clearly references a past time but the AI's intent
+// has no date param. Tests cover EN + RU + the no-trigger case.
+test("[pipeline] backdate tripwire fires when user says yesterday but AI drops date", async () => {
+  const debug = require("../ai-debug");
+  const s = fullySetUp(500000);
+  await processMessage(s,
+    "yesterday i forgot to tell you i got dinner for 780k vnd",
+    [],
+    {
+      _debugUserId: "tripwire-test-1",
+      _aiCall: stub({
+        mode: "do",
+        message: "Adding dinner.",
+        // INTENT WITHOUT date — the bug we're catching
+        intent: { kind: "record_spend", params: { amountCents: 0, originalAmount: 780000, originalCurrency: "VND", note: "dinner" } },
+      }),
+    });
+  const warnings = debug.getWarnings("tripwire-test-1");
+  assertTrue(warnings.length >= 1, "expected at least one warning");
+  assertTrue(/yesterday/i.test(warnings[0].message), "warning mentions 'yesterday'");
+  assertTrue(/AI dropped the date/i.test(warnings[0].message), "warning explains the miss");
+});
+
+test("[pipeline] backdate tripwire does NOT fire when AI emitted date correctly", async () => {
+  const debug = require("../ai-debug");
+  const s = fullySetUp(500000);
+  await processMessage(s,
+    "yesterday i bought coffee for 5",
+    [],
+    {
+      _debugUserId: "tripwire-test-2",
+      _aiCall: stub({
+        mode: "do",
+        message: "Adding.",
+        intent: { kind: "record_spend", params: { amountCents: 500, note: "coffee", date: m.addDays(m.today("UTC"), -1) } },
+      }),
+    });
+  const warnings = debug.getWarnings("tripwire-test-2");
+  assertEq(warnings.length, 0, "AI did its job — no tripwire");
+});
+
+test("[pipeline] backdate tripwire fires for Russian 'вчера'", async () => {
+  const debug = require("../ai-debug");
+  const s = fullySetUp(500000);
+  await processMessage(s,
+    "вчера купил кофе за 200 руб",
+    [],
+    {
+      _debugUserId: "tripwire-test-3",
+      _aiCall: stub({
+        mode: "do",
+        message: "Добавляю.",
+        intent: { kind: "record_spend", params: { amountCents: 0, originalAmount: 200, originalCurrency: "RUB", note: "кофе" } },
+      }),
+    });
+  const warnings = debug.getWarnings("tripwire-test-3");
+  assertTrue(warnings.length >= 1, "Russian past-time should trip");
+  assertTrue(/вчера/.test(warnings[0].message));
+});
+
+test("[pipeline] backdate tripwire does NOT fire for present-tense 'today'", async () => {
+  const debug = require("../ai-debug");
+  const s = fullySetUp(500000);
+  await processMessage(s,
+    "today i bought lunch for 15",
+    [],
+    {
+      _debugUserId: "tripwire-test-4",
+      _aiCall: stub({
+        mode: "do",
+        message: "Adding.",
+        intent: { kind: "record_spend", params: { amountCents: 1500, note: "lunch" } },
+      }),
+    });
+  const warnings = debug.getWarnings("tripwire-test-4");
+  assertEq(warnings.length, 0, "no past-time reference, no tripwire");
+});

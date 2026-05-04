@@ -308,7 +308,7 @@ async function safeEdit(ctx, text, options) {
 
 // Last-AI-output ring buffer per user. Powers `/debug` so we can
 // inspect what the AI actually returned without bothering the user.
-const { recordAiRaw, getAiRaw } = require("./ai-debug");
+const { recordAiRaw, getAiRaw, getWarnings } = require("./ai-debug");
 
 // ── PROCESS A USER MESSAGE ────────────────────────
 // `options` is harness-only — `_aiCall` injects an alternate AI backend
@@ -677,7 +677,16 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
       const r = e.raw && e.raw.length > 1500 ? e.raw.slice(0, 1500) + "…" : (e.raw || "");
       return "*[ai " + (i + 1) + " · " + ago + "]*\n```\n" + r.replace(/`/g, "'") + "\n```";
     });
-    await safeReply(ctx, lines.join("\n\n"), { parse_mode: "Markdown" });
+    // Warnings attached to the most recent turn (from pipeline tripwires
+    // — e.g. "user said yesterday but AI dropped the date"). Surfaces
+    // silent compliance failures so we catch them without retesting.
+    const warnings = getWarnings(telegramId);
+    let output = lines.join("\n\n");
+    if (warnings.length > 0) {
+      output += "\n\n*[tripwires on latest turn]*\n" +
+        warnings.map(w => "  " + w.message).join("\n");
+    }
+    await safeReply(ctx, output, { parse_mode: "Markdown" });
     return;
   }
 }
