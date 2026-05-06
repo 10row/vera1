@@ -261,6 +261,34 @@ function parseAmt(formatted) {
   return parseFloat(m) || 0;
 }
 
+// Pace-impact projection — given today's spend so far vs today's pace,
+// distribute the variance across remaining days. Pure helper, exported
+// so v5ToV4View can use it AND tests can verify the math directly.
+//
+// SIGN CONVENTION:
+//   delta > 0 → user under-spent today → tomorrow's pace creeps up
+//   delta < 0 → user over-spent today  → tomorrow's pace drops
+//   delta = 0 → no signal yet (no spend) OR exactly on pace → hide UI
+//
+// FORMULA:
+//   overspend = todaySpent − dailyPace      (signed: + over, − under)
+//   delta     = −overspend / (days − 1)     (rounded to int cents)
+//
+// Returns { tomorrowPaceCents, paceDeltaCents }. tomorrowPace = todayPace
+// + delta (for display). When delta is 0, the UI should hide the line.
+function projectPaceImpact(view) {
+  if (!view || !view.setup) return { tomorrowPaceCents: 0, paceDeltaCents: 0 };
+  const pace = view.dailyPaceCents || 0;
+  const todaySpent = view.todaySpentCents || 0;
+  const days = view.daysToPayday || 0;
+  if (pace <= 0 || days <= 1 || todaySpent <= 0 || view.status === "over") {
+    return { tomorrowPaceCents: pace, paceDeltaCents: 0 };
+  }
+  const overspend = todaySpent - pace;
+  const delta = Math.round(-overspend / (days - 1));
+  return { tomorrowPaceCents: pace + delta, paceDeltaCents: delta };
+}
+
 // Decision support: project state if user spent N cents.
 //
 // CRITICAL — the frozen-pace cache (Model B) MUST be invalidated on
@@ -298,4 +326,4 @@ function simulateSpend(state, amountCents) {
   };
 }
 
-module.exports = { compute, heroLine, heroLineWithInsight, heroInsight, simulateSpend };
+module.exports = { compute, heroLine, heroLineWithInsight, heroInsight, simulateSpend, projectPaceImpact };

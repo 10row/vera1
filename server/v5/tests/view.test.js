@@ -1,7 +1,7 @@
 "use strict";
 const m = require("../model");
 const { applyIntent } = require("../engine");
-const { compute, heroLine, simulateSpend } = require("../view");
+const { compute, heroLine, simulateSpend, projectPaceImpact } = require("../view");
 
 function setup(balance) {
   let s = m.createFreshState();
@@ -47,6 +47,52 @@ test("[view] simulateSpend doesn't mutate source state", () => {
   const before = JSON.stringify(s);
   simulateSpend(s, 10000);
   assertEq(JSON.stringify(s), before);
+});
+
+// ── PACE-IMPACT PROJECTION ─────────────────────────────────────
+// The "$X/day more/less rest of cycle" line under the variance chip.
+// REGRESSION: was computing day-decrement (always positive), now
+// computes variance-distribution (signed correctly).
+test("[view] projectPaceImpact: no spend → 0 delta (line hidden)", () => {
+  const r = projectPaceImpact({ setup: true, dailyPaceCents: 20000, todaySpentCents: 0, daysToPayday: 19, status: "calm" });
+  assertEq(r.paceDeltaCents, 0);
+  assertEq(r.tomorrowPaceCents, 20000);
+});
+test("[view] projectPaceImpact: under pace → positive delta (more next days)", () => {
+  // Spent $100, pace $200 → underspent $100 → distributed across 18 days = +$5.55/day
+  const r = projectPaceImpact({ setup: true, dailyPaceCents: 20000, todaySpentCents: 10000, daysToPayday: 19, status: "calm" });
+  assertTrue(r.paceDeltaCents > 0, "under pace → positive delta, got " + r.paceDeltaCents);
+  // Math: -(10000 - 20000) / 18 = 555.55... → rounds to 556
+  assertEq(r.paceDeltaCents, 556);
+  assertEq(r.tomorrowPaceCents, 20556);
+});
+test("[view] projectPaceImpact: OVER pace → negative delta (less next days)", () => {
+  // Spent $300, pace $200 → overspent $100 → distributed = −$5.55/day
+  const r = projectPaceImpact({ setup: true, dailyPaceCents: 20000, todaySpentCents: 30000, daysToPayday: 19, status: "calm" });
+  assertTrue(r.paceDeltaCents < 0, "over pace → negative delta, got " + r.paceDeltaCents);
+  assertEq(r.paceDeltaCents, -556);
+  assertEq(r.tomorrowPaceCents, 19444);
+});
+test("[view] projectPaceImpact: exactly on pace → 0 delta (hide)", () => {
+  const r = projectPaceImpact({ setup: true, dailyPaceCents: 20000, todaySpentCents: 20000, daysToPayday: 19, status: "calm" });
+  assertEq(r.paceDeltaCents, 0);
+});
+test("[view] projectPaceImpact: over-state → 0 delta (line meaningless)", () => {
+  const r = projectPaceImpact({ setup: true, dailyPaceCents: 0, todaySpentCents: 5000, daysToPayday: 19, status: "over" });
+  assertEq(r.paceDeltaCents, 0);
+});
+test("[view] projectPaceImpact: payday tomorrow → 0 delta (no future)", () => {
+  const r = projectPaceImpact({ setup: true, dailyPaceCents: 20000, todaySpentCents: 30000, daysToPayday: 1, status: "calm" });
+  assertEq(r.paceDeltaCents, 0);
+});
+test("[view] projectPaceImpact: REGRESSION - was day-decrement (always +), now variance-correct", () => {
+  // BEFORE: with todaySpent=0, the old buggy formula returned a
+  // positive delta from day-decrement alone (disposable/(days-1) -
+  // disposable/days). That made the chip light up "+$X/day more"
+  // every single day even with no overspend. After the fix, no
+  // spend → no signal → 0 delta, line hides.
+  const r = projectPaceImpact({ setup: true, dailyPaceCents: 20000, disposableCents: 380000, todaySpentCents: 0, daysToPayday: 19, status: "calm" });
+  assertEq(r.paceDeltaCents, 0, "no spend yet → hide the line (was lying with day-decrement)");
 });
 
 // REGRESSION: simulateSpend must compute a FRESH pace on the projection,

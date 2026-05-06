@@ -9,7 +9,7 @@ const { execSync } = require("child_process");
 
 const prisma = require("../db/client");
 const m = require("./model");
-const { compute, simulateSpend, heroLine } = require("./view");
+const { compute, simulateSpend, heroLine, projectPaceImpact } = require("./view");
 const { applyIntent } = require("./engine");
 const { validateIntent } = require("./validator");
 const db = require("./db");
@@ -136,15 +136,12 @@ function v5ToV4View(state) {
     ? (view.dailyPaceCents - view.todaySpentCents)
     : 0;
 
-  // Project tomorrow's pace using current state + days−1. Shows the
-  // user how today's variance ripples forward — under-spending today
-  // raises tomorrow's pace, over-spending lowers it. Skip in over-
-  // state (pace capped at 0) and when payday is tomorrow (no future).
-  let tomorrowPaceCents = view.dailyPaceCents;
-  if (view.status !== "over" && view.daysToPayday > 1) {
-    tomorrowPaceCents = Math.floor(view.disposableCents / (view.daysToPayday - 1));
-  }
-  const paceDeltaCents = tomorrowPaceCents - view.dailyPaceCents;
+  // Pace-impact line — show how today's variance (over/under) ripples
+  // across the rest of the cycle. See projectPaceImpact() in view.js
+  // for the math + the bug-class history (was: day-decrement; now:
+  // variance distribution). Returns 0 delta when there's no signal
+  // yet (no spend today) OR when user is in over-state.
+  const { tomorrowPaceCents, paceDeltaCents } = projectPaceImpact(view);
 
   return {
     setup: true,
