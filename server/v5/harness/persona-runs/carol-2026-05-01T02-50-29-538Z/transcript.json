@@ -1,0 +1,1214 @@
+{
+  "persona": {
+    "id": "carol",
+    "name": "Carol Bishop",
+    "lang": "en"
+  },
+  "turns": 20,
+  "conversation": [
+    {
+      "role": "user",
+      "text": "Hello. I'm new to this app and I'm not sure if I'm doing it right. My balance right now is $3,120, I think. Can you help me get started?"
+    },
+    {
+      "role": "bot",
+      "text": "Got it — $3,120.00. 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular."
+    },
+    {
+      "role": "user",
+      "text": "Oh, um. I get paid on the 1st and the 15th. Every month. So... the next one is the 15th I think? Actually wait, is today before the 15th or after? Sorry, I'm a little confused. Let me just say the 15th for now, okay?"
+    },
+    {
+      "role": "bot",
+      "text": "All set ✅ — $3,120.00, payday 2026-05-01.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n\n🟢 *Calm* — $3,120.00/day, 0 days to payday.\nGot it — updating your payday to the 15th, biweekly. You're all set!\n\nPayday → 2026-05-15 (biweekly)  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Payday → 2026-05-15 (biweekly)\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $222.85/day, 14 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Thank you for helping me set this up. Um, I think I should tell you about my mortgage now? It's $1,450, and it's due on the 1st of the month. Is that okay?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding mortgage — $1,450 monthly, due the 1st.\n\nAdd bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $222.85/day, 14 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, I'm sorry. The mortgage is actually $1,450 a month, but... hmm, that's what I said. Never mind. Um, I also have property tax escrow that comes out the same day. That's $380 a month on the 1st. Should I add that too?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding property tax escrow — $380 monthly on the 1st. You're all set with both.\n\nAdd bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $222.85/day, 14 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Okay, thank you. Um, I also have my electric bill. That's $120 a month, and it's due on the 10th. Should I add that one too, or... wait, is that too many bills at once? Sorry, I'm just being careful."
+    },
+    {
+      "role": "bot",
+      "text": "Adding electric bill — $120 monthly on the 10th. You're good!\n\nAdd bill *Electric* — $120.00 · 2026-05-10 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Electric* — $120.00 · 2026-05-10 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $214.28/day, 14 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Thank you. Um, I also have water and my phone bill. Should I add those next? Water is $65 a month on the 20th, and phone is $75 on the 5th. Is that okay?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding water and phone — $65 on the 20th and $75 on the 5th, both monthly.\n\n*I'll add:*\n  1. Add bill *Phone* — $75.00 · 2026-05-05 · monthly\n  2. Add bill *Water* — $65.00 · 2026-05-20 · monthly  [buttons: Yes, all 2 / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes, all 2)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Phone* — $75.00 · 2026-05-05 · monthly\n✓ Add bill *Water* — $65.00 · 2026-05-20 · monthly\n🟢 *Calm* — $208.92/day, 14 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Oh, thank you. Um, wait — I think I forgot one more bill. I have a streaming bundle that's $44.99 a month, due on the 3rd. Should I add that too, or am I being too much?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding streaming bundle — $44.99 monthly on the 3rd. You're all set!\n\nAdd bill *Streaming Bundle* — $44.99 · 2026-05-03 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Streaming Bundle* — $44.99 · 2026-05-03 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $205.71/day, 14 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $2,880.01 for 14 days ($205.71/day)."
+    },
+    {
+      "role": "user",
+      "text": "Okay, thank you. Um, wait — what's my balance right now? Just to make sure I'm seeing it right."
+    },
+    {
+      "role": "bot",
+      "text": "You've got $3,120 in balance. After your $2,134.99 in monthly bills, you're looking at $2,880 for the next 14 days until payday — about $206/day. Solid."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, sorry — I want to make sure that's right. The bot said $3,120 but I thought I had $3,120... um, hold on. Let me think. That sounds okay I guess. Thank you for checking with me."
+    },
+    {
+      "role": "bot",
+      "text": "Yep, $3,120 is what I see — anything you want to change?"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh, I'm sorry — I'm getting a little confused with all these buttons. Um, okay so $3,120 sounds right. I think I was just worried I made a mistake somewhere. Can we maybe move on? I want to add my electric bill now if that's okay."
+    },
+    {
+      "role": "bot",
+      "text": "_You already have a bill named Electric._"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh gosh, I'm sorry — I didn't mean to tap that again. Um, okay so the electric bill is already in there? I thought... wait, let me look. Yes, I see it now. Sorry about that. Can I add my water bill instead? That's due on the 20th."
+    },
+    {
+      "role": "bot",
+      "text": "Water bill is already there too — $65 on the 20th. You've got all your bills locked in. Anything else?"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh my goodness, I keep hitting things by accident. I'm so sorry. Um, okay — so all my bills are in there already? That's... that's good. I think. Let me just... wait, what's my balance right now? I want to make sure everything is right before I do anything else."
+    },
+    {
+      "role": "bot",
+      "text": "Your balance is $3,120. All your bills are set: Streaming Bundle (due tomorrow), Phone (due in 4d), Electric (due in 9d), Water (due in 19d), and Mortgage + Property Tax (due in 31d). You're all good — no changes needed."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Wait, $3,120? But I thought... oh. Oh, I see. That's after the streaming bundle came out, isn't it? Sorry, I'm getting confused. So that's correct then? That's my actual balance right now?"
+    },
+    {
+      "role": "bot",
+      "text": "Yep, $3,120 is your actual balance right now. The streaming bill hasn't come out yet — it's due tomorrow (May 3rd), so that $44.99 is still sitting in your account. You're good."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh okay, thank you. So if the streaming one hasn't come out yet, then I still have $3,120. That makes sense. Um, I'm sorry — I keep second-guessing myself. I think I'm ready to add my first spending now. I bought groceries yesterday for... oh wait, let me think. I think it was $11,200? No wait, $11.20? Oh my goodness, no — $112. Let me try that again. It was $112."
+    },
+    {
+      "role": "bot",
+      "text": "Logging $112 on groceries. You're at $3,008 now.\n\nSpend $112.00 · groceries  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Spend $112.00 · groceries\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $197.71/day, 14 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $2,768.01 for 14 days ($197.71/day)."
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, that doesn't seem right. I spent more than $112 on groceries. I think it was actually $11.20? No, sorry, I mean... eleven dollars and twenty cents? Or was it... oh gosh. Let me think. I believe it was $112, actually that part was correct. But wait, the balance seems so low now. Is $3,008 right?"
+    },
+    {
+      "role": "bot",
+      "text": "Yes, $3,008 is right — that's $3,120 minus the $112 you just spent on groceries. The math checks out. Take a breath; you're doing fine!"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh, okay. Thank you for explaining that. Um, I think I'm ready to add another bill now. My electric bill is $120 a month, and it's due on the 10th. Is that okay?"
+    },
+    {
+      "role": "bot",
+      "text": "You're all set — Electric is already logged at $120/month due May 10th. No changes needed!"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh, it's already there? I... I didn't realize. Sorry, I must have added it before and forgot. Thank you for checking. Um, what's my balance again right now? Just want to make sure everything is... correct."
+    },
+    {
+      "role": "bot",
+      "text": "Your balance is $3,008. You're all set — no changes needed. Everything's correct."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Wait, $3,008? That seems low. I thought I had more than that. Let me think... oh, maybe I spent more on groceries than I remember. Um, could you show me what I've spent this month so far?"
+    },
+    {
+      "role": "bot",
+      "text": "You've spent $112 on groceries so far this month (May 1st). That's all I'm tracking — the rest is bills coming up. If $3,008 feels wrong, let me know the number you think it should be and I'll correct it."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, I'm confused. $3,008 seems really low. Let me think about this... I had $3,120 yesterday I think? Oh, or was that last week? Sorry, I'm getting mixed up. Could you maybe show me the last few transactions? I want to understand where it all went."
+    },
+    {
+      "role": "bot",
+      "text": "I only track spends you log with me — so far just the $112 groceries from today. I don't have a transaction history view yet, sorry. If you think your balance should be higher than $3,008, just tell me what it actually is right now and I'll update it."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh, I'm sorry. Let me check my actual balance right now. Um, I think it's $3,120? Maybe $3,150? I'm not sure. Can you just tell me what you have on file for me?"
+    },
+    {
+      "role": "bot",
+      "text": "I have $3,008 on file for you right now. If your actual balance is different — like $3,120 or $3,150 — just let me know the exact number and I'll update it for you."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    }
+  ],
+  "finalState": {
+    "setup": true,
+    "balanceCents": 300800,
+    "bills": [
+      {
+        "name": "Mortgage",
+        "amountCents": 145000,
+        "due": "2026-06-01"
+      },
+      {
+        "name": "Property Tax Escrow",
+        "amountCents": 38000,
+        "due": "2026-06-01"
+      },
+      {
+        "name": "Electric",
+        "amountCents": 12000,
+        "due": "2026-05-10"
+      },
+      {
+        "name": "Phone",
+        "amountCents": 7500,
+        "due": "2026-05-05"
+      },
+      {
+        "name": "Water",
+        "amountCents": 6500,
+        "due": "2026-05-20"
+      },
+      {
+        "name": "Streaming Bundle",
+        "amountCents": 4499,
+        "due": "2026-05-03"
+      }
+    ],
+    "transactionCount": 2,
+    "eventCount": 9
+  },
+  "chatTranscript": [
+    {
+      "ts": 1777603831376,
+      "dir": "→",
+      "kind": "text",
+      "text": "Hello. I'm new to this app and I'm not sure if I'm doing it right. My balance right now is $3,120, I think. Can you help me get started?",
+      "message_id": 1
+    },
+    {
+      "ts": 1777603831416,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Got it — $3,120.00. 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular.",
+      "message_id": 2,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603833257,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, um. I get paid on the 1st and the 15th. Every month. So... the next one is the 15th I think? Actually wait, is today before the 15th or after? Sorry, I'm a little confused. Let me just say the 15th for now, okay?",
+      "message_id": 3
+    },
+    {
+      "ts": 1777603833262,
+      "dir": "←",
+      "kind": "reply",
+      "text": "All set ✅ — $3,120.00, payday 2026-05-01.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n\n🟢 *Calm* — $3,120.00/day, 0 days to payday.",
+      "message_id": 4,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603834909,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Got it — updating your payday to the 15th, biweekly. You're all set!\n\nPayday → 2026-05-15 (biweekly)",
+      "message_id": 5,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:xj92tfxrfdb1"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:xj92tfxrfdb1"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777603834909,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:xj92tfxrfdb1",
+      "on_message_id": 5
+    },
+    {
+      "ts": 1777603834910,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Payday → 2026-05-15 (biweekly)\n_(if this was a mistake, type /undo)_",
+      "message_id": 5,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603834911,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $222.85/day, 14 days to payday.",
+      "message_id": 6,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603837568,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you for helping me set this up. Um, I think I should tell you about my mortgage now? It's $1,450, and it's due on the 1st of the month. Is that okay?",
+      "message_id": 7
+    },
+    {
+      "ts": 1777603839208,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding mortgage — $1,450 monthly, due the 1st.\n\nAdd bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly",
+      "message_id": 8,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:rpiwqf7vfgmg"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:rpiwqf7vfgmg"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777603839209,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:rpiwqf7vfgmg",
+      "on_message_id": 8
+    },
+    {
+      "ts": 1777603839209,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 8,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603839209,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $222.85/day, 14 days to payday.",
+      "message_id": 9,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603841204,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, I'm sorry. The mortgage is actually $1,450 a month, but... hmm, that's what I said. Never mind. Um, I also have property tax escrow that comes out the same day. That's $380 a month on the 1st. Should I add that too?",
+      "message_id": 10
+    },
+    {
+      "ts": 1777603843079,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding property tax escrow — $380 monthly on the 1st. You're all set with both.\n\nAdd bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly",
+      "message_id": 11,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:ot0cjs0rfjlz"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:ot0cjs0rfjlz"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777603843079,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:ot0cjs0rfjlz",
+      "on_message_id": 11
+    },
+    {
+      "ts": 1777603843080,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 11,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603843080,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $222.85/day, 14 days to payday.",
+      "message_id": 12,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603844627,
+      "dir": "→",
+      "kind": "text",
+      "text": "Okay, thank you. Um, I also have my electric bill. That's $120 a month, and it's due on the 10th. Should I add that one too, or... wait, is that too many bills at once? Sorry, I'm just being careful.",
+      "message_id": 13
+    },
+    {
+      "ts": 1777603846175,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding electric bill — $120 monthly on the 10th. You're good!\n\nAdd bill *Electric* — $120.00 · 2026-05-10 · monthly",
+      "message_id": 14,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:a8spv1qiflzz"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:a8spv1qiflzz"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777603846175,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:a8spv1qiflzz",
+      "on_message_id": 14
+    },
+    {
+      "ts": 1777603846176,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Electric* — $120.00 · 2026-05-10 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 14,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603846176,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $214.28/day, 14 days to payday.",
+      "message_id": 15,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603847645,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you. Um, I also have water and my phone bill. Should I add those next? Water is $65 a month on the 20th, and phone is $75 on the 5th. Is that okay?",
+      "message_id": 16
+    },
+    {
+      "ts": 1777603850201,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding water and phone — $65 on the 20th and $75 on the 5th, both monthly.\n\n*I'll add:*\n  1. Add bill *Phone* — $75.00 · 2026-05-05 · monthly\n  2. Add bill *Water* — $65.00 · 2026-05-20 · monthly",
+      "message_id": 17,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes, all 2",
+            "callback_data": "yes:c7gozybrfp3t"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:c7gozybrfp3t"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777603850201,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes, all 2",
+      "callback_data": "yes:c7gozybrfp3t",
+      "on_message_id": 17
+    },
+    {
+      "ts": 1777603850202,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Phone* — $75.00 · 2026-05-05 · monthly\n✓ Add bill *Water* — $65.00 · 2026-05-20 · monthly",
+      "message_id": 17,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603850202,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $208.92/day, 14 days to payday.",
+      "message_id": 18,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603852418,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, thank you. Um, wait — I think I forgot one more bill. I have a streaming bundle that's $44.99 a month, due on the 3rd. Should I add that too, or am I being too much?",
+      "message_id": 19
+    },
+    {
+      "ts": 1777603853988,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding streaming bundle — $44.99 monthly on the 3rd. You're all set!\n\nAdd bill *Streaming Bundle* — $44.99 · 2026-05-03 · monthly",
+      "message_id": 20,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:j102z0esfs10"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:j102z0esfs10"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777603853988,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:j102z0esfs10",
+      "on_message_id": 20
+    },
+    {
+      "ts": 1777603853988,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Streaming Bundle* — $44.99 · 2026-05-03 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 20,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603853991,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $205.71/day, 14 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $2,880.01 for 14 days ($205.71/day).",
+      "message_id": 21,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603855427,
+      "dir": "→",
+      "kind": "text",
+      "text": "Okay, thank you. Um, wait — what's my balance right now? Just to make sure I'm seeing it right.",
+      "message_id": 22
+    },
+    {
+      "ts": 1777603856965,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You've got $3,120 in balance. After your $2,134.99 in monthly bills, you're looking at $2,880 for the next 14 days until payday — about $206/day. Solid.",
+      "message_id": 23,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603856965,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:j102z0esfs10",
+      "on_message_id": 20
+    },
+    {
+      "ts": 1777603856965,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 20,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603858820,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, sorry — I want to make sure that's right. The bot said $3,120 but I thought I had $3,120... um, hold on. Let me think. That sounds okay I guess. Thank you for checking with me.",
+      "message_id": 24
+    },
+    {
+      "ts": 1777603860444,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Yep, $3,120 is what I see — anything you want to change?",
+      "message_id": 25,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603860444,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:j102z0esfs10",
+      "on_message_id": 20
+    },
+    {
+      "ts": 1777603860444,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 20,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603862476,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, I'm sorry — I'm getting a little confused with all these buttons. Um, okay so $3,120 sounds right. I think I was just worried I made a mistake somewhere. Can we maybe move on? I want to add my electric bill now if that's okay.",
+      "message_id": 26
+    },
+    {
+      "ts": 1777603864127,
+      "dir": "←",
+      "kind": "reply",
+      "text": "_You already have a bill named Electric._",
+      "message_id": 27,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603864127,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:j102z0esfs10",
+      "on_message_id": 20
+    },
+    {
+      "ts": 1777603864127,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 20,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603866073,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh gosh, I'm sorry — I didn't mean to tap that again. Um, okay so the electric bill is already in there? I thought... wait, let me look. Yes, I see it now. Sorry about that. Can I add my water bill instead? That's due on the 20th.",
+      "message_id": 28
+    },
+    {
+      "ts": 1777603867448,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Water bill is already there too — $65 on the 20th. You've got all your bills locked in. Anything else?",
+      "message_id": 29,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603867448,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:j102z0esfs10",
+      "on_message_id": 20
+    },
+    {
+      "ts": 1777603867448,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 20,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603869246,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh my goodness, I keep hitting things by accident. I'm so sorry. Um, okay — so all my bills are in there already? That's... that's good. I think. Let me just... wait, what's my balance right now? I want to make sure everything is right before I do anything else.",
+      "message_id": 30
+    },
+    {
+      "ts": 1777603871499,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Your balance is $3,120. All your bills are set: Streaming Bundle (due tomorrow), Phone (due in 4d), Electric (due in 9d), Water (due in 19d), and Mortgage + Property Tax (due in 31d). You're all good — no changes needed.",
+      "message_id": 31,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603871499,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:j102z0esfs10",
+      "on_message_id": 20
+    },
+    {
+      "ts": 1777603871499,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 20,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603873141,
+      "dir": "→",
+      "kind": "text",
+      "text": "Wait, $3,120? But I thought... oh. Oh, I see. That's after the streaming bundle came out, isn't it? Sorry, I'm getting confused. So that's correct then? That's my actual balance right now?",
+      "message_id": 32
+    },
+    {
+      "ts": 1777603874782,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Yep, $3,120 is your actual balance right now. The streaming bill hasn't come out yet — it's due tomorrow (May 3rd), so that $44.99 is still sitting in your account. You're good.",
+      "message_id": 33,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603874782,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:j102z0esfs10",
+      "on_message_id": 20
+    },
+    {
+      "ts": 1777603874782,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 20,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603877234,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh okay, thank you. So if the streaming one hasn't come out yet, then I still have $3,120. That makes sense. Um, I'm sorry — I keep second-guessing myself. I think I'm ready to add my first spending now. I bought groceries yesterday for... oh wait, let me think. I think it was $11,200? No wait, $11.20? Oh my goodness, no — $112. Let me try that again. It was $112.",
+      "message_id": 34
+    },
+    {
+      "ts": 1777603879082,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Logging $112 on groceries. You're at $3,008 now.\n\nSpend $112.00 · groceries",
+      "message_id": 35,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:qc8wt0gugbe2"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:qc8wt0gugbe2"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777603879082,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:qc8wt0gugbe2",
+      "on_message_id": 35
+    },
+    {
+      "ts": 1777603879083,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Spend $112.00 · groceries\n_(if this was a mistake, type /undo)_",
+      "message_id": 35,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603879085,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $197.71/day, 14 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $2,768.01 for 14 days ($197.71/day).",
+      "message_id": 36,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603881534,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, that doesn't seem right. I spent more than $112 on groceries. I think it was actually $11.20? No, sorry, I mean... eleven dollars and twenty cents? Or was it... oh gosh. Let me think. I believe it was $112, actually that part was correct. But wait, the balance seems so low now. Is $3,008 right?",
+      "message_id": 37
+    },
+    {
+      "ts": 1777603883070,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Yes, $3,008 is right — that's $3,120 minus the $112 you just spent on groceries. The math checks out. Take a breath; you're doing fine!",
+      "message_id": 38,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603883071,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:qc8wt0gugbe2",
+      "on_message_id": 35
+    },
+    {
+      "ts": 1777603883071,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 35,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603884509,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, okay. Thank you for explaining that. Um, I think I'm ready to add another bill now. My electric bill is $120 a month, and it's due on the 10th. Is that okay?",
+      "message_id": 39
+    },
+    {
+      "ts": 1777603885717,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You're all set — Electric is already logged at $120/month due May 10th. No changes needed!",
+      "message_id": 40,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603885717,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:qc8wt0gugbe2",
+      "on_message_id": 35
+    },
+    {
+      "ts": 1777603885717,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 35,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603887347,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, it's already there? I... I didn't realize. Sorry, I must have added it before and forgot. Thank you for checking. Um, what's my balance again right now? Just want to make sure everything is... correct.",
+      "message_id": 41
+    },
+    {
+      "ts": 1777603888571,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Your balance is $3,008. You're all set — no changes needed. Everything's correct.",
+      "message_id": 42,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603888571,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:qc8wt0gugbe2",
+      "on_message_id": 35
+    },
+    {
+      "ts": 1777603888571,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 35,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603890241,
+      "dir": "→",
+      "kind": "text",
+      "text": "Wait, $3,008? That seems low. I thought I had more than that. Let me think... oh, maybe I spent more on groceries than I remember. Um, could you show me what I've spent this month so far?",
+      "message_id": 43
+    },
+    {
+      "ts": 1777603892089,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You've spent $112 on groceries so far this month (May 1st). That's all I'm tracking — the rest is bills coming up. If $3,008 feels wrong, let me know the number you think it should be and I'll correct it.",
+      "message_id": 44,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603892090,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:qc8wt0gugbe2",
+      "on_message_id": 35
+    },
+    {
+      "ts": 1777603892090,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 35,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603893683,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, I'm confused. $3,008 seems really low. Let me think about this... I had $3,120 yesterday I think? Oh, or was that last week? Sorry, I'm getting mixed up. Could you maybe show me the last few transactions? I want to understand where it all went.",
+      "message_id": 45
+    },
+    {
+      "ts": 1777603895876,
+      "dir": "←",
+      "kind": "reply",
+      "text": "I only track spends you log with me — so far just the $112 groceries from today. I don't have a transaction history view yet, sorry. If you think your balance should be higher than $3,008, just tell me what it actually is right now and I'll update it.",
+      "message_id": 46,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603895877,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:qc8wt0gugbe2",
+      "on_message_id": 35
+    },
+    {
+      "ts": 1777603895877,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 35,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777603897309,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, I'm sorry. Let me check my actual balance right now. Um, I think it's $3,120? Maybe $3,150? I'm not sure. Can you just tell me what you have on file for me?",
+      "message_id": 47
+    },
+    {
+      "ts": 1777603898640,
+      "dir": "←",
+      "kind": "reply",
+      "text": "I have $3,008 on file for you right now. If your actual balance is different — like $3,120 or $3,150 — just let me know the exact number and I'll update it for you.",
+      "message_id": 48,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777603898640,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:qc8wt0gugbe2",
+      "on_message_id": 35
+    },
+    {
+      "ts": 1777603898640,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 35,
+      "inline_keyboard": []
+    }
+  ],
+  "botAiRaw": [
+    {
+      "turn": 4,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Got it — updating your payday to the 15th, biweekly. You're all set!\",\n  \"intent\": {\n    \"kind\": \"update_payday\",\n    \"params\": {\n      \"payday\": \"2026-05-15\",\n      \"payFrequency\": \"biweekly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 8,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding mortgage — $1,450 monthly, due the 1st.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Mortgage\",\n      \"amountCents\": 145000,\n      \"dueDate\": \"2026-06-01\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 12,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding property tax escrow — $380 monthly on the 1st. You're all set with both.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Property Tax Escrow\",\n      \"amountCents\": 38000,\n      \"dueDate\": \"2026-06-01\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 16,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding electric bill — $120 monthly on the 10th. You're good!\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Electric\",\n      \"amountCents\": 12000,\n      \"dueDate\": \"2026-05-10\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 20,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding water and phone — $65 on the 20th and $75 on the 5th, both monthly.\",\n  \"intents\": [\n    {\n      \"kind\": \"add_bill\",\n      \"params\": {\n        \"name\": \"Phone\",\n        \"amountCents\": 7500,\n        \"dueDate\": \"2026-05-05\",\n        \"recurrence\": \"monthly\"\n      }\n    },\n    {\n      \"kind\": \"add_bill\",\n      \"params\": {\n        \"name\": \"Water\",\n        \"amountCents\": 6500,\n        \"dueDate\": \"2026-05-20\",\n        \"recurrence\": \"monthly\"\n      }\n    }\n  ]\n}"
+    },
+    {
+      "turn": 24,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding streaming bundle — $44.99 monthly on the 3rd. You're all set!\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Streaming Bundle\",\n      \"amountCents\": 4499,\n      \"dueDate\": \"2026-05-03\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 28,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"You've got $3,120 in balance. After your $2,134.99 in monthly bills, you're looking at $2,880 for the next 14 days until payday — about $206/day. Solid.\"\n}"
+    },
+    {
+      "turn": 32,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Yep, $3,120 is what I see — anything you want to change?\"\n}"
+    },
+    {
+      "turn": 36,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding electric — $120 monthly on the 10th.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Electric\",\n      \"amountCents\": 12000,\n      \"dueDate\": \"2026-05-10\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 40,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Water bill is already there too — $65 on the 20th. You've got all your bills locked in. Anything else?\"\n}"
+    },
+    {
+      "turn": 44,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Your balance is $3,120. All your bills are set: Streaming Bundle (due tomorrow), Phone (due in 4d), Electric (due in 9d), Water (due in 19d), and Mortgage + Property Tax (due in 31d). You're all good — no changes needed.\"\n}"
+    },
+    {
+      "turn": 48,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Yep, $3,120 is your actual balance right now. The streaming bill hasn't come out yet — it's due tomorrow (May 3rd), so that $44.99 is still sitting in your account. You're good.\"\n}"
+    },
+    {
+      "turn": 52,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Logging $112 on groceries. You're at $3,008 now.\",\n  \"intent\": {\n    \"kind\": \"record_spend\",\n    \"params\": {\n      \"amountCents\": 11200,\n      \"note\": \"groceries\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 56,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Yes, $3,008 is right — that's $3,120 minus the $112 you just spent on groceries. The math checks out. Take a breath; you're doing fine!\"\n}"
+    },
+    {
+      "turn": 60,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"You're all set — Electric is already logged at $120/month due May 10th. No changes needed!\"\n}"
+    },
+    {
+      "turn": 64,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Your balance is $3,008. You're all set — no changes needed. Everything's correct.\"\n}"
+    },
+    {
+      "turn": 68,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"You've spent $112 on groceries so far this month (May 1st). That's all I'm tracking — the rest is bills coming up. If $3,008 feels wrong, let me know the number you think it should be and I'll correct it.\"\n}"
+    },
+    {
+      "turn": 72,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"I only track spends you log with me — so far just the $112 groceries from today. I don't have a transaction history view yet, sorry. If you think your balance should be higher than $3,008, just tell me what it actually is right now and I'll update it.\"\n}"
+    },
+    {
+      "turn": 76,
+      "raw": "I have $3,008 on file for you right now. If your actual balance is different — like $3,120 or $3,150 — just let me know the exact number and I'll update it for you."
+    }
+  ],
+  "timestamp": "2026-05-01T02:51:38.641Z"
+}

@@ -1,0 +1,50 @@
+[1] U: ok lets do this
+      B: This is just for me — so I can spot your rhythm and nudge in the moment. No bank link, not
+[2] U: i think 6100 in checking but maybe 6200 idk
+      B: Got it — $6,100.00. 👍 /  / When's your next paycheck? A date like *"the 15th"* or *"April 30"
+[3] U: paid 1st and 15th
+      B: All set ✅ — $6,100.00, payday 2026-06-01. /  / From here just talk to me: "spent 20 on coffee"
+[4] U: rent is 2200 due 1st
+      B: Sorry, brain blip — try that again?
+[5] U: actually wait it's 2250
+      B: Sorry, brain blip — try that again?
+[6] U: phone bill is 85 monthly on the 12th
+      B: Sorry, brain blip — try that again?
+[7] U: my podcast hosting is 19 a month due the 20th
+      B: Sorry, brain blip — try that again?
+[8] U: domain renewal coming up, $120 due aug 30
+      B: Sorry, brain blip — try that again?
+[9] U: logged a $14 lunch
+      B: Sorry, brain blip — try that again?
+[10] U: scratch that it was 12
+      B: Sorry, brain blip — try that again?
+[11] U: /today
+      B: 🟢 *Calm* — $196.77/day, 31 days to payday.
+[12] U: i'm in vienna for work this week, eur40 on dinner
+      B: Sorry, brain blip — try that again?
+[13] U: 200000 dong on coffee in vietnam
+      B: Sorry, brain blip — try that again?
+[14] U: got engaged this weekend, ring was 2000 oof
+      B: Sorry, brain blip — try that again?
+[15] U: should i save more or just enjoy?
+      B: Sorry, brain blip — try that again?
+[16] U: what was my biggest spend last month
+      B: Sorry, brain blip — try that again?
+[17] U: set up auto-save 200 a month
+      B: Sorry, brain blip — try that again?
+[18] U: transfer 500 from checking to savings
+      B: Sorry, brain blip — try that again?
+[19] U: im stressed about money btw
+      B: Sorry, brain blip — try that again?
+[20] U: /today
+      B: 🟢 *Calm* — $196.77/day, 31 days to payday.
+[21] U: paid the phone bill
+      B: Sorry, brain blip — try that again?
+[22] U: delete that last one
+      B: Sorry, brain blip — try that again?
+[23] U: /undo
+      B: _Can't undo setup. Use reset._
+[24] U: /reset
+      B: *This will wipe everything.* Are you sure?  [Yes, reset] [Cancel]
+[25] U: actually nevermind
+      B: This is just for me — so I can spot your rhythm and nudge in the moment. No bank link, not

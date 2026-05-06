@@ -1,0 +1,896 @@
+{
+  "persona": {
+    "id": "bea",
+    "name": "Bea Morrison",
+    "lang": "en"
+  },
+  "turns": 20,
+  "conversation": [
+    {
+      "role": "user",
+      "text": "hello. new here. where do I tap?"
+    },
+    {
+      "role": "bot",
+      "text": "This is just for me — so I can spot your rhythm and nudge in the moment. No bank link, nothing shared. What's roughly in your account?"
+    },
+    {
+      "role": "user",
+      "text": "8250"
+    },
+    {
+      "role": "bot",
+      "text": "Got it — $8,250.00. 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular."
+    },
+    {
+      "role": "user",
+      "text": "1st"
+    },
+    {
+      "role": "bot",
+      "text": "All set ✅ — $8,250.00, payday 2026-06-01.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n\n🟢 *Calm* — $266.12/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "thank you"
+    },
+    {
+      "role": "bot",
+      "text": "You're welcome! Just ping me whenever you spend, get paid, or want to check if something's doable. I've got your back. 💚"
+    },
+    {
+      "role": "user",
+      "text": "✅ Status"
+    },
+    {
+      "role": "bot",
+      "text": "🟢 *Calm* — $266.12/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "📌 Bill"
+    },
+    {
+      "role": "bot",
+      "text": "What's the bill called? E.g. *Rent*, *Phone*."
+    },
+    {
+      "role": "user",
+      "text": "Mortgage"
+    },
+    {
+      "role": "bot",
+      "text": "Got *Mortgage*. How much?"
+    },
+    {
+      "role": "user",
+      "text": "1650"
+    },
+    {
+      "role": "bot",
+      "text": "*Mortgage* — $1,650.00. When's it due? Pick one or type a date.  [buttons: 1st / 15th / Last day]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: 1st)"
+    },
+    {
+      "role": "bot",
+      "text": "*Mortgage* — $1,650.00 · 2026-05-01. How often?"
+    },
+    {
+      "role": "user",
+      "text": "Monthly"
+    },
+    {
+      "role": "bot",
+      "text": "Add bill *Mortgage* — $1,650.00 · 2026-05-01 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Mortgage* — $1,650.00 · 2026-05-01 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $212.90/day, 31 days to payday.\n⏰ Mortgage ($1,650.00) due today. After: $6,600.00 for 31 days ($212.90/day)."
+    },
+    {
+      "role": "user",
+      "text": "✅ Status"
+    },
+    {
+      "role": "bot",
+      "text": "🟢 *Calm* — $212.90/day, 31 days to payday.\n⏰ Mortgage ($1,650.00) due today. After: $6,600.00 for 31 days ($212.90/day)."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "thank you"
+    },
+    {
+      "role": "bot",
+      "text": "You're all set! Balance $8,250, mortgage $1,650 due today. After bills you've got $6,600 for 31 days ($212.90/day) — calm and steady. Anything else?"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "where do I tap?"
+    },
+    {
+      "role": "bot",
+      "text": "I'm a chat bot — I don't have a tap interface. Your Telegram app shows buttons for actions like 'Add Spend', 'Add Bill', etc. Just type what you need (e.g., 'spent 25 on coffee' or 'rent is 1400 due the 1st') and I'll handle it. What's next?"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "💸 Spend"
+    },
+    {
+      "role": "bot",
+      "text": "How much? Just type the amount, e.g. *25* or *$25*."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "where do I tap?"
+    },
+    {
+      "role": "bot",
+      "text": "I didn't catch a number. Try again — just the amount, like *25*."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "💸 Spend"
+    },
+    {
+      "role": "bot",
+      "text": "How much? Just type the amount, e.g. *25* or *$25*."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "where do I tap?"
+    },
+    {
+      "role": "bot",
+      "text": "I didn't catch a number. Try again — just the amount, like *25*."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "💸 Spend"
+    },
+    {
+      "role": "bot",
+      "text": "How much? Just type the amount, e.g. *25* or *$25*."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "where do I tap?"
+    },
+    {
+      "role": "bot",
+      "text": "I didn't catch a number. Try again — just the amount, like *25*."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "💸 Spend"
+    },
+    {
+      "role": "bot",
+      "text": "How much? Just type the amount, e.g. *25* or *$25*."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "where do I tap?"
+    },
+    {
+      "role": "bot",
+      "text": "I didn't catch a number. Try again — just the amount, like *25*."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    }
+  ],
+  "finalState": {
+    "setup": true,
+    "balanceCents": 825000,
+    "bills": [
+      {
+        "name": "Mortgage",
+        "amountCents": 165000,
+        "due": "2026-05-01"
+      }
+    ],
+    "transactionCount": 1,
+    "eventCount": 2
+  },
+  "chatTranscript": [
+    {
+      "ts": 1777604792900,
+      "dir": "→",
+      "kind": "text",
+      "text": "hello. new here. where do I tap?",
+      "message_id": 50
+    },
+    {
+      "ts": 1777604792900,
+      "dir": "←",
+      "kind": "reply",
+      "text": "This is just for me — so I can spot your rhythm and nudge in the moment. No bank link, nothing shared. What's roughly in your account?",
+      "message_id": 51,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604794002,
+      "dir": "→",
+      "kind": "text",
+      "text": "8250",
+      "message_id": 52
+    },
+    {
+      "ts": 1777604794009,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Got it — $8,250.00. 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular.",
+      "message_id": 53,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604795356,
+      "dir": "→",
+      "kind": "text",
+      "text": "1st",
+      "message_id": 54
+    },
+    {
+      "ts": 1777604795357,
+      "dir": "←",
+      "kind": "reply",
+      "text": "All set ✅ — $8,250.00, payday 2026-06-01.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n\n🟢 *Calm* — $266.12/day, 31 days to payday.",
+      "message_id": 55,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604796349,
+      "dir": "→",
+      "kind": "text",
+      "text": "thank you",
+      "message_id": 56
+    },
+    {
+      "ts": 1777604797741,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You're welcome! Just ping me whenever you spend, get paid, or want to check if something's doable. I've got your back. 💚",
+      "message_id": 57,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604798609,
+      "dir": "→",
+      "kind": "text",
+      "text": "✅ Status",
+      "message_id": 58
+    },
+    {
+      "ts": 1777604798609,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $266.12/day, 31 days to payday.",
+      "message_id": 59,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604800046,
+      "dir": "→",
+      "kind": "text",
+      "text": "📌 Bill",
+      "message_id": 60
+    },
+    {
+      "ts": 1777604800046,
+      "dir": "←",
+      "kind": "reply",
+      "text": "What's the bill called? E.g. *Rent*, *Phone*.",
+      "message_id": 61,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604800970,
+      "dir": "→",
+      "kind": "text",
+      "text": "Mortgage",
+      "message_id": 62
+    },
+    {
+      "ts": 1777604800970,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Got *Mortgage*. How much?",
+      "message_id": 63,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604801943,
+      "dir": "→",
+      "kind": "text",
+      "text": "1650",
+      "message_id": 64
+    },
+    {
+      "ts": 1777604801944,
+      "dir": "←",
+      "kind": "reply",
+      "text": "*Mortgage* — $1,650.00. When's it due? Pick one or type a date.",
+      "message_id": 65,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "1st",
+            "callback_data": "wiz:due:1"
+          },
+          {
+            "text": "15th",
+            "callback_data": "wiz:due:15"
+          },
+          {
+            "text": "Last day",
+            "callback_data": "wiz:due:last"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777604801944,
+      "dir": "→",
+      "kind": "tap",
+      "text": "1st",
+      "callback_data": "wiz:due:1",
+      "on_message_id": 65
+    },
+    {
+      "ts": 1777604801945,
+      "dir": "←",
+      "kind": "edit_buttons",
+      "message_id": 65,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604801945,
+      "dir": "←",
+      "kind": "reply",
+      "text": "*Mortgage* — $1,650.00 · 2026-05-01. How often?",
+      "message_id": 66,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Monthly",
+            "callback_data": "wiz:freq:monthly"
+          },
+          {
+            "text": "Biweekly",
+            "callback_data": "wiz:freq:biweekly"
+          },
+          {
+            "text": "Weekly",
+            "callback_data": "wiz:freq:weekly"
+          }
+        ],
+        [
+          {
+            "text": "Once",
+            "callback_data": "wiz:freq:once"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777604803029,
+      "dir": "→",
+      "kind": "text",
+      "text": "Monthly",
+      "message_id": 67
+    },
+    {
+      "ts": 1777604803030,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Add bill *Mortgage* — $1,650.00 · 2026-05-01 · monthly",
+      "message_id": 68,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:lnbh8ern04ba"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:lnbh8ern04ba"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777604803030,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604803030,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Mortgage* — $1,650.00 · 2026-05-01 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604803030,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $212.90/day, 31 days to payday.\n⏰ Mortgage ($1,650.00) due today. After: $6,600.00 for 31 days ($212.90/day).",
+      "message_id": 69,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604803924,
+      "dir": "→",
+      "kind": "text",
+      "text": "✅ Status",
+      "message_id": 70
+    },
+    {
+      "ts": 1777604803924,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $212.90/day, 31 days to payday.\n⏰ Mortgage ($1,650.00) due today. After: $6,600.00 for 31 days ($212.90/day).",
+      "message_id": 71,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604803924,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604803924,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604804607,
+      "dir": "→",
+      "kind": "text",
+      "text": "thank you",
+      "message_id": 72
+    },
+    {
+      "ts": 1777604805898,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You're all set! Balance $8,250, mortgage $1,650 due today. After bills you've got $6,600 for 31 days ($212.90/day) — calm and steady. Anything else?",
+      "message_id": 73,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604805899,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604805899,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604806844,
+      "dir": "→",
+      "kind": "text",
+      "text": "where do I tap?",
+      "message_id": 74
+    },
+    {
+      "ts": 1777604808665,
+      "dir": "←",
+      "kind": "reply",
+      "text": "I'm a chat bot — I don't have a tap interface. Your Telegram app shows buttons for actions like 'Add Spend', 'Add Bill', etc. Just type what you need (e.g., 'spent 25 on coffee' or 'rent is 1400 due the 1st') and I'll handle it. What's next?",
+      "message_id": 75,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604808665,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604808665,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604809646,
+      "dir": "→",
+      "kind": "text",
+      "text": "💸 Spend",
+      "message_id": 76
+    },
+    {
+      "ts": 1777604809646,
+      "dir": "←",
+      "kind": "reply",
+      "text": "How much? Just type the amount, e.g. *25* or *$25*.",
+      "message_id": 77,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604809646,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604809646,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604810612,
+      "dir": "→",
+      "kind": "text",
+      "text": "where do I tap?",
+      "message_id": 78
+    },
+    {
+      "ts": 1777604810613,
+      "dir": "←",
+      "kind": "reply",
+      "text": "I didn't catch a number. Try again — just the amount, like *25*.",
+      "message_id": 79,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604810613,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604810613,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604811506,
+      "dir": "→",
+      "kind": "text",
+      "text": "💸 Spend",
+      "message_id": 80
+    },
+    {
+      "ts": 1777604811506,
+      "dir": "←",
+      "kind": "reply",
+      "text": "How much? Just type the amount, e.g. *25* or *$25*.",
+      "message_id": 81,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604811506,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604811506,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604812467,
+      "dir": "→",
+      "kind": "text",
+      "text": "where do I tap?",
+      "message_id": 82
+    },
+    {
+      "ts": 1777604812468,
+      "dir": "←",
+      "kind": "reply",
+      "text": "I didn't catch a number. Try again — just the amount, like *25*.",
+      "message_id": 83,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604812468,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604812468,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604813380,
+      "dir": "→",
+      "kind": "text",
+      "text": "💸 Spend",
+      "message_id": 84
+    },
+    {
+      "ts": 1777604813380,
+      "dir": "←",
+      "kind": "reply",
+      "text": "How much? Just type the amount, e.g. *25* or *$25*.",
+      "message_id": 85,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604813380,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604813380,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604814195,
+      "dir": "→",
+      "kind": "text",
+      "text": "where do I tap?",
+      "message_id": 86
+    },
+    {
+      "ts": 1777604814195,
+      "dir": "←",
+      "kind": "reply",
+      "text": "I didn't catch a number. Try again — just the amount, like *25*.",
+      "message_id": 87,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604814195,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604814195,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604815354,
+      "dir": "→",
+      "kind": "text",
+      "text": "💸 Spend",
+      "message_id": 88
+    },
+    {
+      "ts": 1777604815354,
+      "dir": "←",
+      "kind": "reply",
+      "text": "How much? Just type the amount, e.g. *25* or *$25*.",
+      "message_id": 89,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604815354,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604815354,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604816446,
+      "dir": "→",
+      "kind": "text",
+      "text": "where do I tap?",
+      "message_id": 90
+    },
+    {
+      "ts": 1777604816446,
+      "dir": "←",
+      "kind": "reply",
+      "text": "I didn't catch a number. Try again — just the amount, like *25*.",
+      "message_id": 91,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604816446,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:lnbh8ern04ba",
+      "on_message_id": 68
+    },
+    {
+      "ts": 1777604816446,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 68,
+      "inline_keyboard": []
+    }
+  ],
+  "botAiRaw": [
+    {
+      "turn": 8,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"You're welcome! Just ping me whenever you spend, get paid, or want to check if something's doable. I've got your back. 💚\"\n}"
+    },
+    {
+      "turn": 28,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"You're all set! Balance $8,250, mortgage $1,650 due today. After bills you've got $6,600 for 31 days ($212.90/day) — calm and steady. Anything else?\"\n}"
+    },
+    {
+      "turn": 32,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"I'm a chat bot — I don't have a tap interface. Your Telegram app shows buttons for actions like 'Add Spend', 'Add Bill', etc. Just type what you need (e.g., 'spent 25 on coffee' or 'rent is 1400 due the 1st') and I'll handle it. What's next?\"\n}"
+    }
+  ],
+  "timestamp": "2026-05-01T03:06:56.446Z"
+}

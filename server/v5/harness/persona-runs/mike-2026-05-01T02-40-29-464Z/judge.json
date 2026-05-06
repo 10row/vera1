@@ -1,0 +1,4 @@
+{
+  "error": "judge JSON parse failed",
+  "raw": "{\n  \"scores\": {\n    \"mechanical_correctness\": 3,\n    \"voice_consistency\": 6,\n    \"conversational_quality\": 2,\n    \"intent_capture\": 4,\n    \"ux_friction\": 2\n  },\n  \"overall\": 3,\n  \"summary\": \"Severe UX breakdown: bot enters infinite confirm-expiration loop, loses data consistency, repeats itself excessively, and fails to capture user intents reliably across a frustrating 78-turn conversation.\",\n  \"strengths\": [\n    \"Bot clearly states upfront which features don't exist yet (no bank sync, no caps,"
+}

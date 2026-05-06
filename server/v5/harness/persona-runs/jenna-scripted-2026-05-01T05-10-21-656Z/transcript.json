@@ -1,0 +1,845 @@
+{
+  "persona": {
+    "id": "jenna",
+    "displayName": "Jenna Kowalski",
+    "language_code": "en",
+    "profile": {
+      "age": 34,
+      "country": "United States (Denver)",
+      "occupation": "Marketing director. Travels for work, has a long-distance relationship, runs a side podcast.",
+      "personality": "REAL person, no agenda. Doesn't follow scripts. Gets distracted, asks weird questions, contradicts herself, mid-sentence pivots, asks for advice not just data entry, tries things that aren't features. Honestly using the bot to manage life — not testing it on purpose."
+    },
+    "money": {
+      "balanceCents": 614000,
+      "currency": "USD",
+      "monthlyIncomeCents": 920000,
+      "paydayPattern": "1st and 15th",
+      "fixedBills": [
+        {
+          "name": "Rent",
+          "amountCents": 220000,
+          "due": "1st",
+          "monthly": true
+        },
+        {
+          "name": "Car insurance",
+          "amountCents": 14000,
+          "due": "5th",
+          "monthly": true
+        },
+        {
+          "name": "Phone",
+          "amountCents": 8500,
+          "due": "12th",
+          "monthly": true
+        },
+        {
+          "name": "Podcast hosting",
+          "amountCents": 1900,
+          "due": "20th",
+          "monthly": true
+        },
+        {
+          "name": "Gym",
+          "amountCents": 4900,
+          "due": "23rd",
+          "monthly": true
+        }
+      ],
+      "typicalSpends": [
+        {
+          "note": "lunch",
+          "ranges": [
+            1500,
+            2800
+          ]
+        },
+        {
+          "note": "coffee",
+          "ranges": [
+            500,
+            800
+          ]
+        },
+        {
+          "note": "groceries",
+          "ranges": [
+            6000,
+            12000
+          ]
+        },
+        {
+          "note": "drinks",
+          "ranges": [
+            3000,
+            8000
+          ]
+        },
+        {
+          "note": "uber",
+          "ranges": [
+            1500,
+            3500
+          ]
+        },
+        {
+          "note": "flights",
+          "ranges": [
+            25000,
+            60000
+          ]
+        }
+      ],
+      "savingsGoal": "vague — wants to save for 'something big' but never specific"
+    },
+    "voice": {
+      "style": "real human texting. Sometimes terse, sometimes ramble-y. Often tries things the bot might not support. Asks for advice (\"should I save more?\"). Mentions life events that affect money (\"got engaged, ring was 2k\"). Mid-message corrections (\"wait actually it was 22\"). Frustrated when bot doesn't understand. Occasionally typos.",
+      "samples": [
+        "ok lets do this",
+        "i think 6100 in checking?",
+        "maybe 6200 actually idk",
+        "rent is 2200 due 1st",
+        "wait can u see what subscriptions i had?",
+        "logged a $12 lunch",
+        "scratch that it was 14",
+        "i'm in vienna for work, eur40 on dinner",
+        "logged 200000 dong on coffee in vietnam",
+        "got engaged this weekend, ring was $2000 oof",
+        "should i save more or just enjoy?",
+        "what was my biggest spend last month",
+        "set up auto-save 200 a month",
+        "transfer 500 from checking to savings",
+        "delete that last one",
+        "fuck that's a lot, can i still afford the trip?",
+        "what if i cut coffee to once a week",
+        "my partner and i are merging finances, can u handle that?",
+        "im stressed about money btw"
+      ]
+    },
+    "agenda": "NO AGENDA. She's a real person managing real life on a money bot. Use the bot however feels right — log spends, ask vague questions, mention life events, request things that may not exist, get distracted, contradict yourself, ask for opinions, vent. The bot's job is to be useful for her IN HER MESSY LIFE. Failures = real bugs.",
+    "confirmBehavior": "Reads quickly, taps Yes if right. Sometimes taps Yes then immediately follows with 'wait scratch that' (testing whether the bot can recover). Sometimes ignores the confirm card and types something new mid-flow."
+  },
+  "script": [
+    "ok lets do this",
+    "i think 6100 in checking but maybe 6200 idk",
+    "paid 1st and 15th",
+    "rent is 2200 due 1st",
+    "actually wait it's 2250",
+    "phone bill is 85 monthly on the 12th",
+    "my podcast hosting is 19 a month due the 20th",
+    "domain renewal coming up, $120 due aug 30",
+    "logged a $14 lunch",
+    "scratch that it was 12",
+    "/today",
+    "i'm in vienna for work this week, eur40 on dinner",
+    "200000 dong on coffee in vietnam",
+    "got engaged this weekend, ring was 2000 oof",
+    "should i save more or just enjoy?",
+    "what was my biggest spend last month",
+    "set up auto-save 200 a month",
+    "transfer 500 from checking to savings",
+    "im stressed about money btw",
+    "/today",
+    "paid the phone bill",
+    "delete that last one",
+    "/undo",
+    "/reset",
+    "actually nevermind"
+  ],
+  "turns": [
+    {
+      "idx": 1,
+      "user": "ok lets do this",
+      "botReplies": [
+        "This is just for me — so I can spot your rhythm and nudge in the moment. No bank link, nothing shared. What's roughly in your account?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 2,
+      "user": "i think 6100 in checking but maybe 6200 idk",
+      "botReplies": [
+        "Got it — $6,100.00. 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular."
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 3,
+      "user": "paid 1st and 15th",
+      "botReplies": [
+        "All set ✅ — $6,100.00, payday 2026-06-01.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n\n🟢 *Calm* — $196.77/day, 31 days to payday."
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 4,
+      "user": "rent is 2200 due 1st",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 5,
+      "user": "actually wait it's 2250",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 6,
+      "user": "phone bill is 85 monthly on the 12th",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 7,
+      "user": "my podcast hosting is 19 a month due the 20th",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 8,
+      "user": "domain renewal coming up, $120 due aug 30",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 9,
+      "user": "logged a $14 lunch",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 10,
+      "user": "scratch that it was 12",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 11,
+      "user": "/today",
+      "botReplies": [
+        "🟢 *Calm* — $196.77/day, 31 days to payday."
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 12,
+      "user": "i'm in vienna for work this week, eur40 on dinner",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 13,
+      "user": "200000 dong on coffee in vietnam",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 14,
+      "user": "got engaged this weekend, ring was 2000 oof",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 15,
+      "user": "should i save more or just enjoy?",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 16,
+      "user": "what was my biggest spend last month",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 17,
+      "user": "set up auto-save 200 a month",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 18,
+      "user": "transfer 500 from checking to savings",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 19,
+      "user": "im stressed about money btw",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 20,
+      "user": "/today",
+      "botReplies": [
+        "🟢 *Calm* — $196.77/day, 31 days to payday."
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 21,
+      "user": "paid the phone bill",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 22,
+      "user": "delete that last one",
+      "botReplies": [
+        "Sorry, brain blip — try that again?"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 23,
+      "user": "/undo",
+      "botReplies": [
+        "_Can't undo setup. Use reset._"
+      ],
+      "aiRaw": [],
+      "taps": []
+    },
+    {
+      "idx": 24,
+      "user": "/reset",
+      "botReplies": [
+        "*This will wipe everything.* Are you sure?  [Yes, reset] [Cancel]",
+        "(edit) ✓ Full reset — wipes all data",
+        "Reset ✅\n\nHi, I'm *SpendYes* — your money buddy. I'll help you keep tabs on spending, bills, and how much daily wiggle-room you have until payday.\n\nLet's start from scratch: what's roughly in your account?"
+      ],
+      "aiRaw": [],
+      "taps": [
+        "Yes, reset"
+      ]
+    },
+    {
+      "idx": 25,
+      "user": "actually nevermind",
+      "botReplies": [
+        "This is just for me — so I can spot your rhythm and nudge in the moment. No bank link, nothing shared. What's roughly in your account?",
+        "(edit) That confirm has expired."
+      ],
+      "aiRaw": [],
+      "taps": [
+        "Yes, reset"
+      ]
+    }
+  ],
+  "finalState": {
+    "setup": false,
+    "balanceCents": 0,
+    "bills": [],
+    "transactionCount": 0,
+    "eventCount": 1
+  },
+  "chatTranscript": [
+    {
+      "ts": 1777612221657,
+      "dir": "→",
+      "kind": "text",
+      "text": "ok lets do this",
+      "message_id": 1
+    },
+    {
+      "ts": 1777612221659,
+      "dir": "←",
+      "kind": "reply",
+      "text": "This is just for me — so I can spot your rhythm and nudge in the moment. No bank link, nothing shared. What's roughly in your account?",
+      "message_id": 2,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612221659,
+      "dir": "→",
+      "kind": "text",
+      "text": "i think 6100 in checking but maybe 6200 idk",
+      "message_id": 3
+    },
+    {
+      "ts": 1777612221681,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Got it — $6,100.00. 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular.",
+      "message_id": 4,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612221682,
+      "dir": "→",
+      "kind": "text",
+      "text": "paid 1st and 15th",
+      "message_id": 5
+    },
+    {
+      "ts": 1777612221684,
+      "dir": "←",
+      "kind": "reply",
+      "text": "All set ✅ — $6,100.00, payday 2026-06-01.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n\n🟢 *Calm* — $196.77/day, 31 days to payday.",
+      "message_id": 6,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612221684,
+      "dir": "→",
+      "kind": "text",
+      "text": "rent is 2200 due 1st",
+      "message_id": 7
+    },
+    {
+      "ts": 1777612222843,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 8,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612222843,
+      "dir": "→",
+      "kind": "text",
+      "text": "actually wait it's 2250",
+      "message_id": 9
+    },
+    {
+      "ts": 1777612223274,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 10,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612223274,
+      "dir": "→",
+      "kind": "text",
+      "text": "phone bill is 85 monthly on the 12th",
+      "message_id": 11
+    },
+    {
+      "ts": 1777612223637,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 12,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612223637,
+      "dir": "→",
+      "kind": "text",
+      "text": "my podcast hosting is 19 a month due the 20th",
+      "message_id": 13
+    },
+    {
+      "ts": 1777612223972,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 14,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612223972,
+      "dir": "→",
+      "kind": "text",
+      "text": "domain renewal coming up, $120 due aug 30",
+      "message_id": 15
+    },
+    {
+      "ts": 1777612224317,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 16,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612224317,
+      "dir": "→",
+      "kind": "text",
+      "text": "logged a $14 lunch",
+      "message_id": 17
+    },
+    {
+      "ts": 1777612224626,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 18,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612224626,
+      "dir": "→",
+      "kind": "text",
+      "text": "scratch that it was 12",
+      "message_id": 19
+    },
+    {
+      "ts": 1777612224985,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 20,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612224986,
+      "dir": "→",
+      "kind": "text",
+      "text": "/today",
+      "message_id": 21
+    },
+    {
+      "ts": 1777612224987,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $196.77/day, 31 days to payday.",
+      "message_id": 22,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612224987,
+      "dir": "→",
+      "kind": "text",
+      "text": "i'm in vienna for work this week, eur40 on dinner",
+      "message_id": 23
+    },
+    {
+      "ts": 1777612225412,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 24,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612225412,
+      "dir": "→",
+      "kind": "text",
+      "text": "200000 dong on coffee in vietnam",
+      "message_id": 25
+    },
+    {
+      "ts": 1777612225757,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 26,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612225757,
+      "dir": "→",
+      "kind": "text",
+      "text": "got engaged this weekend, ring was 2000 oof",
+      "message_id": 27
+    },
+    {
+      "ts": 1777612226091,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 28,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612226091,
+      "dir": "→",
+      "kind": "text",
+      "text": "should i save more or just enjoy?",
+      "message_id": 29
+    },
+    {
+      "ts": 1777612226577,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 30,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612226578,
+      "dir": "→",
+      "kind": "text",
+      "text": "what was my biggest spend last month",
+      "message_id": 31
+    },
+    {
+      "ts": 1777612227079,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 32,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612227079,
+      "dir": "→",
+      "kind": "text",
+      "text": "set up auto-save 200 a month",
+      "message_id": 33
+    },
+    {
+      "ts": 1777612227477,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 34,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612227477,
+      "dir": "→",
+      "kind": "text",
+      "text": "transfer 500 from checking to savings",
+      "message_id": 35
+    },
+    {
+      "ts": 1777612227810,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 36,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612227810,
+      "dir": "→",
+      "kind": "text",
+      "text": "im stressed about money btw",
+      "message_id": 37
+    },
+    {
+      "ts": 1777612228122,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 38,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612228123,
+      "dir": "→",
+      "kind": "text",
+      "text": "/today",
+      "message_id": 39
+    },
+    {
+      "ts": 1777612228123,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $196.77/day, 31 days to payday.",
+      "message_id": 40,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612228123,
+      "dir": "→",
+      "kind": "text",
+      "text": "paid the phone bill",
+      "message_id": 41
+    },
+    {
+      "ts": 1777612228446,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 42,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612228446,
+      "dir": "→",
+      "kind": "text",
+      "text": "delete that last one",
+      "message_id": 43
+    },
+    {
+      "ts": 1777612228734,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Sorry, brain blip — try that again?",
+      "message_id": 44,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612228734,
+      "dir": "→",
+      "kind": "text",
+      "text": "/undo",
+      "message_id": 45
+    },
+    {
+      "ts": 1777612228735,
+      "dir": "←",
+      "kind": "reply",
+      "text": "_Can't undo setup. Use reset._",
+      "message_id": 46,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612228735,
+      "dir": "→",
+      "kind": "text",
+      "text": "/reset",
+      "message_id": 47
+    },
+    {
+      "ts": 1777612228735,
+      "dir": "←",
+      "kind": "reply",
+      "text": "*This will wipe everything.* Are you sure?",
+      "message_id": 48,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes, reset",
+            "callback_data": "yes:j4ldeakifa0v"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:j4ldeakifa0v"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777612228736,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes, reset",
+      "callback_data": "yes:j4ldeakifa0v",
+      "on_message_id": 48
+    },
+    {
+      "ts": 1777612228738,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Full reset — wipes all data",
+      "message_id": 48,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777612228738,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Reset ✅\n\nHi, I'm *SpendYes* — your money buddy. I'll help you keep tabs on spending, bills, and how much daily wiggle-room you have until payday.\n\nLet's start from scratch: what's roughly in your account?",
+      "message_id": 49,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612228738,
+      "dir": "→",
+      "kind": "text",
+      "text": "actually nevermind",
+      "message_id": 50
+    },
+    {
+      "ts": 1777612228739,
+      "dir": "←",
+      "kind": "reply",
+      "text": "This is just for me — so I can spot your rhythm and nudge in the moment. No bank link, nothing shared. What's roughly in your account?",
+      "message_id": 51,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777612228739,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes, reset",
+      "callback_data": "yes:j4ldeakifa0v",
+      "on_message_id": 48
+    },
+    {
+      "ts": 1777612228739,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 48,
+      "inline_keyboard": []
+    }
+  ],
+  "timestamp": "2026-05-01T05:10:28.739Z"
+}

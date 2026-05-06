@@ -1,0 +1,1441 @@
+{
+  "persona": {
+    "id": "carol",
+    "name": "Carol Bishop",
+    "lang": "en"
+  },
+  "turns": 20,
+  "conversation": [
+    {
+      "role": "user",
+      "text": "Hello. I'm new to this app. My name is Carol. I have $3,120 in my account right now, I think. Should I start by telling you about my bills?"
+    },
+    {
+      "role": "bot",
+      "text": "Got it — $3,120.00. 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular."
+    },
+    {
+      "role": "user",
+      "text": "Oh, I get paid on the 1st and the 15th. So twice a month. Is that what you meant?"
+    },
+    {
+      "role": "bot",
+      "text": "All set ✅ — $3,120.00, payday 2026-06-01.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n\n🟢 *Calm* — $100.64/day, 31 days to payday.\nUpdating to twice monthly — the 1st and 15th. Got it!\n\nPayday → 2026-06-01 (biweekly)  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Payday → 2026-06-01 (biweekly)\n🟢 *Calm* — $100.64/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Thank you. OK so my biggest bill is my mortgage. It's $1,450 a month, due on the 1st. Should I tell you all of them at once or one at a time?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding mortgage — $1,450 monthly on the 1st. Go ahead and rattle off the rest whenever; I can handle them all at once or one by one.\n\nAdd bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly\n🟢 *Calm* — $53.87/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "OK good. Um, my next bill is property tax escrow. That's $380 a month, also due on the 1st. Is that... is that the same as the mortgage payment or separate?"
+    },
+    {
+      "role": "bot",
+      "text": "Separate — I'll log it as its own bill. So mortgage $1,450 + property tax escrow $380, both due the 1st. Keep 'em coming!"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Undo: bill Mortgage)"
+    },
+    {
+      "role": "bot",
+      "text": "Undone.\n🟢 *Calm* — $100.64/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, I didn't mean to undo that! I need the mortgage back. Sorry, I'm still learning this. Can we add it again? $1,450 on the 1st?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding mortgage back — $1,450 monthly on the 1st. No worries!\n\n*I'll add:*\n  1. Add bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly\n  2. Add bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly  [buttons: Yes, all 2 / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes, all 2)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly\n✓ Add bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly\n🟢 *Calm* — $41.61/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Thank you. OK so I also have electric bill, that's $120 a month, due on the 10th. Should I add that now?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding electric — $120 monthly on the 10th.\n\nAdd bill *Electric* — $120.00 · 2026-05-10 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Electric* — $120.00 · 2026-05-10 · monthly\n🟢 *Calm* — $37.74/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Thank you. Oh, and I have a water bill too — that's $65 a month, due on the 20th. Should I add that?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding water — $65 monthly on the 20th. You're all set with bills now!\n\nAdd bill *Water* — $65.00 · 2026-05-20 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Water* — $65.00 · 2026-05-20 · monthly\n🟢 *Calm* — $35.64/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Thank you. Oh wait, I also have my phone bill — that's $75 a month, due on the 5th. Should I add that one too?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding phone bill — $75 monthly on the 5th.\n\nAdd bill *Phone* — $75.00 · 2026-05-05 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Phone* — $75.00 · 2026-05-05 · monthly\n🟢 *Calm* — $33.22/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Oh, and I have a streaming bundle too — that's $44.99 a month, due on the 3rd. Should I add that one?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding streaming bundle — $44.99 monthly on the 3rd.\n\nAdd bill *Streaming Bundle* — $44.99 · 2026-06-03 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Streaming Bundle* — $44.99 · 2026-06-03 · monthly\n🟢 *Calm* — $33.22/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Okay, so I think I have all my regular bills in now. Let me just... wait, what's my balance right now? I want to make sure I'm tracking this right."
+    },
+    {
+      "role": "bot",
+      "text": "You're at $3,120.00. After your $2,134.99 in monthly bills, you've got $1,030.00 cushion for 31 days — about $33/day. You're in good shape."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Undo: bill Streaming Bundle)"
+    },
+    {
+      "role": "bot",
+      "text": "Undone.\n🟢 *Calm* — $33.22/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, I didn't mean to undo that! I do have the streaming bundle. Sorry, can you add it back? I'm getting confused with all these buttons."
+    },
+    {
+      "role": "bot",
+      "text": "Adding streaming bundle back — $44.99 monthly on the 3rd.\n\nAdd bill *Streaming Bundle* — $44.99 · 2026-05-03 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Streaming Bundle* — $44.99 · 2026-05-03 · monthly\n🟢 *Calm* — $31.77/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $985.01 for 31 days ($31.77/day)."
+    },
+    {
+      "role": "user",
+      "text": "Thank you for being patient with me. So my balance is $3,120, right? And I have the streaming bundle back in. I think I'm ready to log some spending now. I bought groceries today — let me see, I spent $12.50 on eggs and milk and... wait, no, that was $12 and fifty cents, so $12.50. No hold on, I think it was closer to $125. Let me just say $125 for groceries?"
+    },
+    {
+      "role": "bot",
+      "text": "Just to confirm — you spent $125 on groceries today, right? That'll leave you at $2,995. You good with that?\n🟢 *Yep, you're fine* — after that you'd have $2,995.00, $27.74/day.  [buttons: Log it / Skip]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Log it)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Spend $125.00\n🟢 *Calm* — $27.74/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $860.01 for 31 days ($27.74/day)."
+    },
+    {
+      "role": "user",
+      "text": "Wait, hold on. My balance was $3,120 before I spent the $125, so now it should be $2,995? Let me make sure that's right. Sorry, I'm second-guessing myself. Can you just tell me what my balance is right now?"
+    },
+    {
+      "role": "bot",
+      "text": "Your balance is $2,995.00 — that's the $3,120 minus the $125 you just spent on groceries. All logged and correct."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Undo: spend )"
+    },
+    {
+      "role": "bot",
+      "text": "Undone.\n🟢 *Calm* — $31.77/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $985.01 for 31 days ($31.77/day)."
+    },
+    {
+      "role": "user",
+      "text": "Oh goodness, okay. So I undid that. My balance is back to $3,120, right? I'm sorry, I just want to make sure before I log the groceries again. Did I spend $125 or was it actually $112.50? I'm getting confused now."
+    },
+    {
+      "role": "bot",
+      "text": "Yes, you're back at $3,120 after the undo. Take a breath — check your receipt and let me know the exact amount when you're ready. Was it $125 or $112.50?"
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, I found the receipt. It was $112.50, not $125. I'm sorry for the confusion. Can I log that instead?"
+    },
+    {
+      "role": "bot",
+      "text": "Got it — logging $112.50 on groceries. Your balance drops to $3,007.50.\n\nSpend $112.50 · groceries  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Spend $112.50 · groceries\n🟢 *Calm* — $28.14/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $872.51 for 31 days ($28.14/day)."
+    },
+    {
+      "role": "user",
+      "text": "Thank you for being patient with me. Okay, so my balance is $3,007.50 now. That feels right. I think I'm getting the hang of this... oh wait, I should log my pharmacy refill. It was $34.99. Is that okay?"
+    },
+    {
+      "role": "bot",
+      "text": "Logging $34.99 pharmacy refill. You're at $2,972.51 after that.\n\nSpend $34.99 · pharmacy refill  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Spend $34.99 · pharmacy refill\n🟢 *Calm* — $27.01/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $837.52 for 31 days ($27.01/day)."
+    },
+    {
+      "role": "user",
+      "text": "Okay, that's good. I'm feeling a little better about all this. Oh, but wait — can I ask you something? My balance shows $2,972.51 now, but earlier you said $3,007.50 after the groceries. Let me make sure I'm understanding this right. The pharmacy spend brought it down by $34.99, so that's... yes, that math works out. Sorry, I just wanted to double-check. Am I doing okay so far?"
+    },
+    {
+      "role": "bot",
+      "text": "You're doing great — the math checks out perfectly. Balance $2,972.51 is correct. You've got $837.52 breathing room after bills, and groceries are your biggest spend at $112.50. You're on track."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Undo: spend pharmacy refill)"
+    },
+    {
+      "role": "bot",
+      "text": "Undone.\n🟢 *Calm* — $28.14/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $872.51 for 31 days ($28.14/day)."
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, I undid that by accident. I didn't mean to. Can I log the pharmacy refill again? $34.99. Sorry about that."
+    },
+    {
+      "role": "bot",
+      "text": "Logging $34.99 pharmacy refill again. Back to $2,972.51.\n\nSpend $34.99 · pharmacy refill  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Spend $34.99 · pharmacy refill\n🟢 *Calm* — $27.01/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $837.52 for 31 days ($27.01/day)."
+    },
+    {
+      "role": "user",
+      "text": "Thank you. I feel like I'm getting the hang of this now. You've been real patient with me. I think... I think I'm ready to keep going with the rest of the month."
+    },
+    {
+      "role": "bot",
+      "text": "You've got this. You're calm, you've got runway, and you're tracking things — that's the whole game right there. Hit me up anytime you spend or need a check-in. 👍"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Undo: spend pharmacy refill)"
+    },
+    {
+      "role": "bot",
+      "text": "Undone.\n🟢 *Calm* — $28.14/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $872.51 for 31 days ($28.14/day)."
+    },
+    {
+      "role": "user",
+      "text": "Oh no, wait — I didn't mean to do that again. I'm so sorry. Can we put the pharmacy refill back? $34.99. I keep hitting the wrong button. This is embarrassing."
+    },
+    {
+      "role": "bot",
+      "text": "No worries at all — happens to everyone. Logging $34.99 pharmacy refill again. You're back to $2,972.51.\n\nSpend $34.99 · pharmacy refill  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Spend $34.99 · pharmacy refill\n🟢 *Calm* — $27.01/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $837.52 for 31 days ($27.01/day)."
+    }
+  ],
+  "finalState": {
+    "setup": true,
+    "balanceCents": 297251,
+    "bills": [
+      {
+        "name": "Mortgage",
+        "amountCents": 145000,
+        "due": "2026-06-01"
+      },
+      {
+        "name": "Property Tax Escrow",
+        "amountCents": 38000,
+        "due": "2026-06-01"
+      },
+      {
+        "name": "Electric",
+        "amountCents": 12000,
+        "due": "2026-05-10"
+      },
+      {
+        "name": "Water",
+        "amountCents": 6500,
+        "due": "2026-05-20"
+      },
+      {
+        "name": "Phone",
+        "amountCents": 7500,
+        "due": "2026-05-05"
+      },
+      {
+        "name": "Streaming Bundle",
+        "amountCents": 4499,
+        "due": "2026-05-03"
+      }
+    ],
+    "transactionCount": 3,
+    "eventCount": 20
+  },
+  "chatTranscript": [
+    {
+      "ts": 1777602750196,
+      "dir": "→",
+      "kind": "text",
+      "text": "Hello. I'm new to this app. My name is Carol. I have $3,120 in my account right now, I think. Should I start by telling you about my bills?",
+      "message_id": 1
+    },
+    {
+      "ts": 1777602750236,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Got it — $3,120.00. 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular.",
+      "message_id": 2,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602751762,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, I get paid on the 1st and the 15th. So twice a month. Is that what you meant?",
+      "message_id": 3
+    },
+    {
+      "ts": 1777602751767,
+      "dir": "←",
+      "kind": "reply",
+      "text": "All set ✅ — $3,120.00, payday 2026-06-01.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n\n🟢 *Calm* — $100.64/day, 31 days to payday.",
+      "message_id": 4,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602753454,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Updating to twice monthly — the 1st and 15th. Got it!\n\nPayday → 2026-06-01 (biweekly)",
+      "message_id": 5,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:z9hrkqiks6um"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:z9hrkqiks6um"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602753468,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:z9hrkqiks6um",
+      "on_message_id": 5
+    },
+    {
+      "ts": 1777602753470,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Payday → 2026-06-01 (biweekly)",
+      "message_id": 5,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: payday change",
+            "callback_data": "undo:ebf536c8631bf76e4b01ddd3"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602753470,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $100.64/day, 31 days to payday.",
+      "message_id": 6,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602754567,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you. OK so my biggest bill is my mortgage. It's $1,450 a month, due on the 1st. Should I tell you all of them at once or one at a time?",
+      "message_id": 7
+    },
+    {
+      "ts": 1777602756596,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding mortgage — $1,450 monthly on the 1st. Go ahead and rattle off the rest whenever; I can handle them all at once or one by one.\n\nAdd bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly",
+      "message_id": 8,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:xlg5ymrks99w"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:xlg5ymrks99w"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602756596,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:xlg5ymrks99w",
+      "on_message_id": 8
+    },
+    {
+      "ts": 1777602756597,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly",
+      "message_id": 8,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: bill Mortgage",
+            "callback_data": "undo:d5c9303398f6c51efef5f610"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602756597,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $53.87/day, 31 days to payday.",
+      "message_id": 9,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602758065,
+      "dir": "→",
+      "kind": "text",
+      "text": "OK good. Um, my next bill is property tax escrow. That's $380 a month, also due on the 1st. Is that... is that the same as the mortgage payment or separate?",
+      "message_id": 10
+    },
+    {
+      "ts": 1777602759810,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Separate — I'll log it as its own bill. So mortgage $1,450 + property tax escrow $380, both due the 1st. Keep 'em coming!",
+      "message_id": 11,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602759811,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Undo: bill Mortgage",
+      "callback_data": "undo:d5c9303398f6c51efef5f610",
+      "on_message_id": 8
+    },
+    {
+      "ts": 1777602759811,
+      "dir": "←",
+      "kind": "edit_buttons",
+      "message_id": 8,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777602759812,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Undone.\n🟢 *Calm* — $100.64/day, 31 days to payday.",
+      "message_id": 12,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602761556,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, I didn't mean to undo that! I need the mortgage back. Sorry, I'm still learning this. Can we add it again? $1,450 on the 1st?",
+      "message_id": 13
+    },
+    {
+      "ts": 1777602763611,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding mortgage back — $1,450 monthly on the 1st. No worries!\n\n*I'll add:*\n  1. Add bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly\n  2. Add bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly",
+      "message_id": 14,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes, all 2",
+            "callback_data": "yes:spcpy9djseor"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:spcpy9djseor"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602763611,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes, all 2",
+      "callback_data": "yes:spcpy9djseor",
+      "on_message_id": 14
+    },
+    {
+      "ts": 1777602763612,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly\n✓ Add bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly",
+      "message_id": 14,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: bill Property Tax Escrow",
+            "callback_data": "undo:795203202ab49c26e7d1e402"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602763612,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $41.61/day, 31 days to payday.",
+      "message_id": 15,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602764964,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you. OK so I also have electric bill, that's $120 a month, due on the 10th. Should I add that now?",
+      "message_id": 16
+    },
+    {
+      "ts": 1777602766461,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding electric — $120 monthly on the 10th.\n\nAdd bill *Electric* — $120.00 · 2026-05-10 · monthly",
+      "message_id": 17,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:amlompxgsgvw"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:amlompxgsgvw"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602766461,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:amlompxgsgvw",
+      "on_message_id": 17
+    },
+    {
+      "ts": 1777602766461,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Electric* — $120.00 · 2026-05-10 · monthly",
+      "message_id": 17,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: bill Electric",
+            "callback_data": "undo:4a328ea2a6c98808313b8a14"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602766461,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $37.74/day, 31 days to payday.",
+      "message_id": 18,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602767759,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you. Oh, and I have a water bill too — that's $65 a month, due on the 20th. Should I add that?",
+      "message_id": 19
+    },
+    {
+      "ts": 1777602769348,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding water — $65 monthly on the 20th. You're all set with bills now!\n\nAdd bill *Water* — $65.00 · 2026-05-20 · monthly",
+      "message_id": 20,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:squ7tsb1sj44"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:squ7tsb1sj44"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602769348,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:squ7tsb1sj44",
+      "on_message_id": 20
+    },
+    {
+      "ts": 1777602769349,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Water* — $65.00 · 2026-05-20 · monthly",
+      "message_id": 20,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: bill Water",
+            "callback_data": "undo:156cd318ba864213ba4f4d03"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602769349,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $35.64/day, 31 days to payday.",
+      "message_id": 21,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602770485,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you. Oh wait, I also have my phone bill — that's $75 a month, due on the 5th. Should I add that one too?",
+      "message_id": 22
+    },
+    {
+      "ts": 1777602772212,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding phone bill — $75 monthly on the 5th.\n\nAdd bill *Phone* — $75.00 · 2026-05-05 · monthly",
+      "message_id": 23,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:punkgpe4slbo"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:punkgpe4slbo"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602772212,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:punkgpe4slbo",
+      "on_message_id": 23
+    },
+    {
+      "ts": 1777602772213,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Phone* — $75.00 · 2026-05-05 · monthly",
+      "message_id": 23,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: bill Phone",
+            "callback_data": "undo:fea61bd5388918277870079c"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602772213,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $33.22/day, 31 days to payday.",
+      "message_id": 24,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602773680,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, and I have a streaming bundle too — that's $44.99 a month, due on the 3rd. Should I add that one?",
+      "message_id": 25
+    },
+    {
+      "ts": 1777602775123,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding streaming bundle — $44.99 monthly on the 3rd.\n\nAdd bill *Streaming Bundle* — $44.99 · 2026-06-03 · monthly",
+      "message_id": 26,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:6flsjj4gsnkj"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:6flsjj4gsnkj"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602775123,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:6flsjj4gsnkj",
+      "on_message_id": 26
+    },
+    {
+      "ts": 1777602775124,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Streaming Bundle* — $44.99 · 2026-06-03 · monthly",
+      "message_id": 26,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: bill Streaming Bundle",
+            "callback_data": "undo:691a342235ffed7241d5fa7a"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602775124,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $33.22/day, 31 days to payday.",
+      "message_id": 27,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602776846,
+      "dir": "→",
+      "kind": "text",
+      "text": "Okay, so I think I have all my regular bills in now. Let me just... wait, what's my balance right now? I want to make sure I'm tracking this right.",
+      "message_id": 28
+    },
+    {
+      "ts": 1777602778134,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You're at $3,120.00. After your $2,134.99 in monthly bills, you've got $1,030.00 cushion for 31 days — about $33/day. You're in good shape.",
+      "message_id": 29,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602778134,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Undo: bill Streaming Bundle",
+      "callback_data": "undo:691a342235ffed7241d5fa7a",
+      "on_message_id": 26
+    },
+    {
+      "ts": 1777602778135,
+      "dir": "←",
+      "kind": "edit_buttons",
+      "message_id": 26,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777602778135,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Undone.\n🟢 *Calm* — $33.22/day, 31 days to payday.",
+      "message_id": 30,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602779615,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, I didn't mean to undo that! I do have the streaming bundle. Sorry, can you add it back? I'm getting confused with all these buttons.",
+      "message_id": 31
+    },
+    {
+      "ts": 1777602781046,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding streaming bundle back — $44.99 monthly on the 3rd.\n\nAdd bill *Streaming Bundle* — $44.99 · 2026-05-03 · monthly",
+      "message_id": 32,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:1pt23biess52"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:1pt23biess52"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602781046,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:1pt23biess52",
+      "on_message_id": 32
+    },
+    {
+      "ts": 1777602781046,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Streaming Bundle* — $44.99 · 2026-05-03 · monthly",
+      "message_id": 32,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: bill Streaming Bundle",
+            "callback_data": "undo:42e7e6a6596c00a11acb59bf"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602781047,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $31.77/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $985.01 for 31 days ($31.77/day).",
+      "message_id": 33,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602783404,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you for being patient with me. So my balance is $3,120, right? And I have the streaming bundle back in. I think I'm ready to log some spending now. I bought groceries today — let me see, I spent $12.50 on eggs and milk and... wait, no, that was $12 and fifty cents, so $12.50. No hold on, I think it was closer to $125. Let me just say $125 for groceries?",
+      "message_id": 34
+    },
+    {
+      "ts": 1777602785346,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Just to confirm — you spent $125 on groceries today, right? That'll leave you at $2,995. You good with that?\n🟢 *Yep, you're fine* — after that you'd have $2,995.00, $27.74/day.",
+      "message_id": 35,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Log it",
+            "callback_data": "yes:dhu9dwehsvgi"
+          },
+          {
+            "text": "Skip",
+            "callback_data": "no:dhu9dwehsvgi"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602785346,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Log it",
+      "callback_data": "yes:dhu9dwehsvgi",
+      "on_message_id": 35
+    },
+    {
+      "ts": 1777602785347,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Spend $125.00",
+      "message_id": 35,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: spend ",
+            "callback_data": "undo:b35e62035b051ab89f40b651"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602785348,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $27.74/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $860.01 for 31 days ($27.74/day).",
+      "message_id": 36,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602786609,
+      "dir": "→",
+      "kind": "text",
+      "text": "Wait, hold on. My balance was $3,120 before I spent the $125, so now it should be $2,995? Let me make sure that's right. Sorry, I'm second-guessing myself. Can you just tell me what my balance is right now?",
+      "message_id": 37
+    },
+    {
+      "ts": 1777602788146,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Your balance is $2,995.00 — that's the $3,120 minus the $125 you just spent on groceries. All logged and correct.",
+      "message_id": 38,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602788146,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Undo: spend ",
+      "callback_data": "undo:b35e62035b051ab89f40b651",
+      "on_message_id": 35
+    },
+    {
+      "ts": 1777602788146,
+      "dir": "←",
+      "kind": "edit_buttons",
+      "message_id": 35,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777602788146,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Undone.\n🟢 *Calm* — $31.77/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $985.01 for 31 days ($31.77/day).",
+      "message_id": 39,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602789954,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh goodness, okay. So I undid that. My balance is back to $3,120, right? I'm sorry, I just want to make sure before I log the groceries again. Did I spend $125 or was it actually $112.50? I'm getting confused now.",
+      "message_id": 40
+    },
+    {
+      "ts": 1777602791387,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Yes, you're back at $3,120 after the undo. Take a breath — check your receipt and let me know the exact amount when you're ready. Was it $125 or $112.50?",
+      "message_id": 41,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602794117,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, I found the receipt. It was $112.50, not $125. I'm sorry for the confusion. Can I log that instead?",
+      "message_id": 42
+    },
+    {
+      "ts": 1777602795694,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Got it — logging $112.50 on groceries. Your balance drops to $3,007.50.\n\nSpend $112.50 · groceries",
+      "message_id": 43,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:sqzb579at3fy"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:sqzb579at3fy"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602795695,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:sqzb579at3fy",
+      "on_message_id": 43
+    },
+    {
+      "ts": 1777602795695,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Spend $112.50 · groceries",
+      "message_id": 43,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: spend groceries",
+            "callback_data": "undo:4806f022a97d119f786926a7"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602795696,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $28.14/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $872.51 for 31 days ($28.14/day).",
+      "message_id": 44,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602797236,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you for being patient with me. Okay, so my balance is $3,007.50 now. That feels right. I think I'm getting the hang of this... oh wait, I should log my pharmacy refill. It was $34.99. Is that okay?",
+      "message_id": 45
+    },
+    {
+      "ts": 1777602798779,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Logging $34.99 pharmacy refill. You're at $2,972.51 after that.\n\nSpend $34.99 · pharmacy refill",
+      "message_id": 46,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:6618o9rqt5tn"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:6618o9rqt5tn"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602798779,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:6618o9rqt5tn",
+      "on_message_id": 46
+    },
+    {
+      "ts": 1777602798780,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Spend $34.99 · pharmacy refill",
+      "message_id": 46,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: spend pharmacy refill",
+            "callback_data": "undo:9792e213fbedc6d6db067446"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602798780,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $27.01/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $837.52 for 31 days ($27.01/day).",
+      "message_id": 47,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602801325,
+      "dir": "→",
+      "kind": "text",
+      "text": "Okay, that's good. I'm feeling a little better about all this. Oh, but wait — can I ask you something? My balance shows $2,972.51 now, but earlier you said $3,007.50 after the groceries. Let me make sure I'm understanding this right. The pharmacy spend brought it down by $34.99, so that's... yes, that math works out. Sorry, I just wanted to double-check. Am I doing okay so far?",
+      "message_id": 48
+    },
+    {
+      "ts": 1777602803265,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You're doing great — the math checks out perfectly. Balance $2,972.51 is correct. You've got $837.52 breathing room after bills, and groceries are your biggest spend at $112.50. You're on track.",
+      "message_id": 49,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602803265,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Undo: spend pharmacy refill",
+      "callback_data": "undo:9792e213fbedc6d6db067446",
+      "on_message_id": 46
+    },
+    {
+      "ts": 1777602803266,
+      "dir": "←",
+      "kind": "edit_buttons",
+      "message_id": 46,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777602803266,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Undone.\n🟢 *Calm* — $28.14/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $872.51 for 31 days ($28.14/day).",
+      "message_id": 50,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602804395,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, I undid that by accident. I didn't mean to. Can I log the pharmacy refill again? $34.99. Sorry about that.",
+      "message_id": 51
+    },
+    {
+      "ts": 1777602805929,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Logging $34.99 pharmacy refill again. Back to $2,972.51.\n\nSpend $34.99 · pharmacy refill",
+      "message_id": 52,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:2huqwu5ktbc9"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:2huqwu5ktbc9"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602805929,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:2huqwu5ktbc9",
+      "on_message_id": 52
+    },
+    {
+      "ts": 1777602805930,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Spend $34.99 · pharmacy refill",
+      "message_id": 52,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: spend pharmacy refill",
+            "callback_data": "undo:7b0d8cb2d6c35f9d57007552"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602805930,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $27.01/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $837.52 for 31 days ($27.01/day).",
+      "message_id": 53,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602807982,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you. I feel like I'm getting the hang of this now. You've been real patient with me. I think... I think I'm ready to keep going with the rest of the month.",
+      "message_id": 54
+    },
+    {
+      "ts": 1777602809714,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You've got this. You're calm, you've got runway, and you're tracking things — that's the whole game right there. Hit me up anytime you spend or need a check-in. 👍",
+      "message_id": 55,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602809714,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Undo: spend pharmacy refill",
+      "callback_data": "undo:7b0d8cb2d6c35f9d57007552",
+      "on_message_id": 52
+    },
+    {
+      "ts": 1777602809715,
+      "dir": "←",
+      "kind": "edit_buttons",
+      "message_id": 52,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777602809715,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Undone.\n🟢 *Calm* — $28.14/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $872.51 for 31 days ($28.14/day).",
+      "message_id": 56,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777602811161,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh no, wait — I didn't mean to do that again. I'm so sorry. Can we put the pharmacy refill back? $34.99. I keep hitting the wrong button. This is embarrassing.",
+      "message_id": 57
+    },
+    {
+      "ts": 1777602812798,
+      "dir": "←",
+      "kind": "reply",
+      "text": "No worries at all — happens to everyone. Logging $34.99 pharmacy refill again. You're back to $2,972.51.\n\nSpend $34.99 · pharmacy refill",
+      "message_id": 58,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:7ec88tp0tgn2"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:7ec88tp0tgn2"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602812798,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:7ec88tp0tgn2",
+      "on_message_id": 58
+    },
+    {
+      "ts": 1777602812799,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Spend $34.99 · pharmacy refill",
+      "message_id": 58,
+      "inline_keyboard": [
+        [
+          {
+            "text": "Undo: spend pharmacy refill",
+            "callback_data": "undo:63b139eeebe85aecde4601a8"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777602812799,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $27.01/day, 31 days to payday.\n⏰ Streaming Bundle ($44.99) due in 2 days. After: $837.52 for 31 days ($27.01/day).",
+      "message_id": 59,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    }
+  ],
+  "botAiRaw": [
+    {
+      "turn": 4,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Updating to twice monthly — the 1st and 15th. Got it!\",\n  \"intent\": {\n    \"kind\": \"update_payday\",\n    \"params\": {\n      \"payday\": \"2026-06-01\",\n      \"payFrequency\": \"biweekly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 8,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding mortgage — $1,450 monthly on the 1st. Go ahead and rattle off the rest whenever; I can handle them all at once or one by one.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Mortgage\",\n      \"amountCents\": 145000,\n      \"dueDate\": \"2026-06-01\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 12,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Separate — I'll log it as its own bill. So mortgage $1,450 + property tax escrow $380, both due the 1st. Keep 'em coming!\"\n}"
+    },
+    {
+      "turn": 16,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding mortgage back — $1,450 monthly on the 1st. No worries!\",\n  \"intents\": [\n    {\n      \"kind\": \"add_bill\",\n      \"params\": {\n        \"name\": \"Mortgage\",\n        \"amountCents\": 145000,\n        \"dueDate\": \"2026-06-01\",\n        \"recurrence\": \"monthly\"\n      }\n    },\n    {\n      \"kind\": \"add_bill\",\n      \"params\": {\n        \"name\": \"Property Tax Escrow\",\n        \"amountCents\": 38000,\n        \"dueDate\": \"2026-06-01\",\n        \"recurrence\": \"monthly\"\n      }\n    }\n  ]\n}"
+    },
+    {
+      "turn": 20,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding electric — $120 monthly on the 10th.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Electric\",\n      \"amountCents\": 12000,\n      \"dueDate\": \"2026-05-10\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 24,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding water — $65 monthly on the 20th. You're all set with bills now!\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Water\",\n      \"amountCents\": 6500,\n      \"dueDate\": \"2026-05-20\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 28,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding phone bill — $75 monthly on the 5th.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Phone\",\n      \"amountCents\": 7500,\n      \"dueDate\": \"2026-05-05\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 32,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding streaming bundle — $44.99 monthly on the 3rd.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Streaming Bundle\",\n      \"amountCents\": 4499,\n      \"dueDate\": \"2026-06-03\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 36,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"You're at $3,120.00. After your $2,134.99 in monthly bills, you've got $1,030.00 cushion for 31 days — about $33/day. You're in good shape.\"\n}"
+    },
+    {
+      "turn": 40,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding streaming bundle back — $44.99 monthly on the 3rd.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Streaming Bundle\",\n      \"amountCents\": 4499,\n      \"dueDate\": \"2026-05-03\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 44,
+      "raw": "{\n  \"mode\": \"ask_simulate\",\n  \"message\": \"Just to confirm — you spent $125 on groceries today, right? That'll leave you at $2,995. You good with that?\",\n  \"amountCents\": 12500\n}"
+    },
+    {
+      "turn": 48,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Your balance is $2,995.00 — that's the $3,120 minus the $125 you just spent on groceries. All logged and correct.\"\n}"
+    },
+    {
+      "turn": 52,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Yes, you're back at $3,120 after the undo. Take a breath — check your receipt and let me know the exact amount when you're ready. Was it $125 or $112.50?\"\n}"
+    },
+    {
+      "turn": 54,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Got it — logging $112.50 on groceries. Your balance drops to $3,007.50.\",\n  \"intent\": {\n    \"kind\": \"record_spend\",\n    \"params\": {\n      \"amountCents\": 11250,\n      \"note\": \"groceries\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 58,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Logging $34.99 pharmacy refill. You're at $2,972.51 after that.\",\n  \"intent\": {\n    \"kind\": \"record_spend\",\n    \"params\": {\n      \"amountCents\": 3499,\n      \"note\": \"pharmacy refill\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 62,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"You're doing great — the math checks out perfectly. Balance $2,972.51 is correct. You've got $837.52 breathing room after bills, and groceries are your biggest spend at $112.50. You're on track.\"\n}"
+    },
+    {
+      "turn": 66,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Logging $34.99 pharmacy refill again. Back to $2,972.51.\",\n  \"intent\": {\n    \"kind\": \"record_spend\",\n    \"params\": {\n      \"amountCents\": 3499,\n      \"note\": \"pharmacy refill\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 70,
+      "raw": "You've got this. You're calm, you've got runway, and you're tracking things — that's the whole game right there. Hit me up anytime you spend or need a check-in. 👍"
+    },
+    {
+      "turn": 74,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"No worries at all — happens to everyone. Logging $34.99 pharmacy refill again. You're back to $2,972.51.\",\n  \"intent\": {\n    \"kind\": \"record_spend\",\n    \"params\": {\n      \"amountCents\": 3499,\n      \"note\": \"pharmacy refill\"\n    }\n  }\n}"
+    }
+  ],
+  "timestamp": "2026-05-01T02:33:32.799Z"
+}

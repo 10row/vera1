@@ -633,7 +633,7 @@ function ErrorState(props) {
     if (loadingDiag) return;
     setLoadingDiag(true);
     setDiag(null);
-    fetch(API_BASE + "/api/v3/whoami", { headers: authHeaders() })
+    fetch(API_BASE + "/api/v4/whoami", { headers: authHeaders() })
       .then(function(r) { return r.json(); })
       .then(function(d) { setDiag(d); })
       .catch(function(e) { setDiag({ status: "network", hint: e.message }); })
@@ -955,7 +955,7 @@ function App() {
       setError(false);
     }
 
-    return fetch(API_BASE + "/api/v3/picture/" + sid.current, {
+    return fetch(API_BASE + "/api/v4/view/" + sid.current, {
       headers: authHeaders(),
     })
       .then(function(r) {
@@ -963,8 +963,20 @@ function App() {
         return r.json();
       })
       .then(function(d) {
-        if (d.pic) {
-          setPic(d.pic);
+        // V5 server returns { view, recentTransactions, heatmap }
+        var v = d.view || d.pic;
+        if (v) {
+          // Map V5 view fields to what the dashboard expects
+          v.freeRemainingTodayCents = v.todayRemainingCents != null ? v.todayRemainingCents : v.freeRemainingTodayCents;
+          v.freeRemainingTodayFormatted = v.todayRemainingFormatted || v.freeRemainingTodayFormatted;
+          v.daysLeft = v.daysToPayday != null ? v.daysToPayday : v.daysLeft;
+          v.transactions = d.recentTransactions || v.transactions || [];
+          v.thisWeekSpentFormatted = v.weekSpentFormatted || v.thisWeekSpentFormatted;
+          v.thisWeekSpentCents = v.weekSpentCents != null ? v.weekSpentCents : v.thisWeekSpentCents;
+          // Bills/envelopes
+          v.upcomingEnvelopes = v.upcoming || d.upcoming || v.upcomingEnvelopes || [];
+          v.dueEnvelopes = v.dueNow || d.dueNow || v.dueEnvelopes || [];
+          setPic(v);
           setLastUpdated(Date.now());
         }
         setError(false);
@@ -1042,28 +1054,4 @@ function App() {
   var content;
   if (loading && !pic) {
     content = h(Skeleton, null);
-  } else if (error && !pic) {
-    content = h(ErrorState, { onRetry: function() { loadPicture(); }, errMsg: lastErr });
-  } else if (!pic || !pic.setup) {
-    content = h(NotSetUpState, null);
-  } else {
-    content = h(Dashboard, { pic: pic, lastUpdated: lastUpdated });
-  }
-
-  return h("div", { style: S.page },
-    h(RefreshBar, { show: refreshing }),
-    h("div", {
-      ref: scrollRef,
-      style: Object.assign({}, S.scroll, {
-        transform: pullDist > 0 ? "translateY(" + pullDist + "px)" : "none",
-        transition: pullDist > 0 ? "none" : "transform 0.3s ease",
-      }),
-    },
-      h(PullIndicator, { dist: pullDist }),
-      content
-    )
-  );
-}
-
-// ── MOUNT ───────────────────────────────────────────────────────
-ReactDOM.createRoot(document.getElementById("root")).render(h(App, null));
+  } else if (error && !p

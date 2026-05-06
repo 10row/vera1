@@ -1,0 +1,1214 @@
+{
+  "persona": {
+    "id": "carol",
+    "name": "Carol Bishop",
+    "lang": "en"
+  },
+  "turns": 20,
+  "conversation": [
+    {
+      "role": "user",
+      "text": "Hello. I'm trying to learn how to use this app. My name is Margaret. I have $3,120 in my checking account right now, I think. Can you help me set things up?"
+    },
+    {
+      "role": "bot",
+      "text": "Got it — $3,120.00. 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular."
+    },
+    {
+      "role": "user",
+      "text": "Oh, thank you. I get paid the 1st and the 15th of each month. So twice a month."
+    },
+    {
+      "role": "bot",
+      "text": "All set ✅ — $3,120.00, payday 2026-06-01.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n\n🟢 *Calm* — $100.64/day, 31 days to payday.\nUpdating your payday to twice monthly — 1st and 15th. You're all set!\n\nPayday → 2026-06-01 (biweekly)  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Payday → 2026-06-01 (biweekly)\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $100.64/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Thank you. Okay, so I should start adding my bills now, right? My mortgage is $1,450 a month, due on the 1st."
+    },
+    {
+      "role": "bot",
+      "text": "Adding mortgage — $1,450 monthly, due the 1st.\n\nAdd bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $53.87/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Okay, good. Now I have my property tax escrow, which is $380 a month, also due the 1st. Should I add that next?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding property tax escrow — $380 monthly, due the 1st.\n\nAdd bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $41.61/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, I'm sorry — the property tax escrow is actually $380, but that's per month... wait, no, I think I said that right. Let me add my electric bill next. That's $120 a month, due on the 10th."
+    },
+    {
+      "role": "bot",
+      "text": "Adding electric bill — $120 monthly, due the 10th.\n\nAdd bill *Electric* — $120.00 · 2026-05-10 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Electric* — $120.00 · 2026-05-10 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $37.74/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Okay, good. Now I need to add my water bill. That's $65 a month, due on the 20th. Please."
+    },
+    {
+      "role": "bot",
+      "text": "Adding water bill — $65 monthly, due the 20th.\n\nAdd bill *Water* — $65.00 · 2026-05-20 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Water* — $65.00 · 2026-05-20 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $35.64/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Thank you. Now my phone bill — that's $75 a month, due on the 5th."
+    },
+    {
+      "role": "bot",
+      "text": "Adding phone bill — $75 monthly, due the 5th.\n\nAdd bill *Phone* — $75.00 · 2026-05-05 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Phone* — $75.00 · 2026-05-05 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $33.22/day, 31 days to payday."
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, I'm sorry — the phone bill is actually $75, but I think I said that right? Yes, $75. Okay good. Now I need to add my streaming, that's the Netflix and Hulu bundle. That's $44.99 a month, due on the 3rd. Is that okay?"
+    },
+    {
+      "role": "bot",
+      "text": "Adding streaming bundle — $44.99 monthly, due the 3rd.\n\nAdd bill *Netflix & Hulu* — $44.99 · 2026-05-03 · monthly  [buttons: Yes / Cancel]"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) ✓ Add bill *Netflix & Hulu* — $44.99 · 2026-05-03 · monthly\n_(if this was a mistake, type /undo)_\n🟢 *Calm* — $31.77/day, 31 days to payday.\n⏰ Netflix & Hulu ($44.99) due in 2 days. After: $985.01 for 31 days ($31.77/day)."
+    },
+    {
+      "role": "user",
+      "text": "Oh, good. Thank you. Um, wait — can I ask... what's my balance right now? Just want to make sure I'm following along."
+    },
+    {
+      "role": "bot",
+      "text": "You're at $3,120.00. After your $2,134.99 in monthly bills, you've got $985.01 to breathe with over 31 days — about $31.77/day. You're in good shape."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh, okay. So $3,120 total. That sounds right, I think. Um, let me add my electric bill now. That's $120 a month, due on the 10th. Is that good?"
+    },
+    {
+      "role": "bot",
+      "text": "_You already have a bill named Electric._"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh, I'm sorry — I didn't realize I already added that one. Um, okay. Well, let me try something else then. Can I add my water bill? That's $65 a month, due on the 20th."
+    },
+    {
+      "role": "bot",
+      "text": "You've already got water on the books — $65 monthly, due the 20th. All set there!"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh goodness, I'm sorry — I keep trying to add things that are already there. Um, let me check. What bills do I have so far? I want to make sure I didn't miss anything."
+    },
+    {
+      "role": "bot",
+      "text": "No problem! Here's what you've got: Netflix & Hulu ($44.99, due 5/3), Phone ($75, due 5/5), Electric ($120, due 5/10), Water ($65, due 5/20), Mortgage ($1,450, due 6/1), and Property Tax Escrow ($380, due 6/1). That's $2,134.99 total monthly. Anything missing?"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Wait, that's not quite right. My mortgage is $1,450 but I also have groceries, gas, pharmacy stuff... oh wait, those aren't bills are they? Sorry, I'm getting confused. But also — um — my streaming is actually $44.99 but that's Netflix AND Hulu bundled together. Is that showing up right? And I think I'm missing something but I can't remember what."
+    },
+    {
+      "role": "bot",
+      "text": "You're right — groceries, gas, pharmacy are spends, not bills. Your streaming is showing correctly as Netflix & Hulu at $44.99 (bundled). For the bill you can't remember — take a breath and think, or just tell me when it comes to you and I'll add it!"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh! I remember now — property tax escrow. Wait, is that already in there? Let me see... yes, it says $380 due 6/1. Okay good. But hold on, that should be $380 a month, right? Let me think... actually I'm not sure if I'm seeing all of it. Sorry, can you tell me what my total monthly bills add up to again?"
+    },
+    {
+      "role": "bot",
+      "text": "Your total monthly bills are $2,134.99: Netflix & Hulu ($44.99), Phone ($75), Electric ($120), Water ($65), Mortgage ($1,450), and Property Tax Escrow ($380). You're all set!"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Wait, hold on. That's $2,134.99 but... um, I don't think that's right. My mortgage alone is $1,450, and the property tax escrow is $380, so that's already $1,830. Then phone, electric, water... that should be more than $2,134. Let me think. Oh! Did I forget to tell you about something? I feel like there's more."
+    },
+    {
+      "role": "bot",
+      "text": "You're absolutely right — let me add it up: Mortgage ($1,450) + Property Tax Escrow ($380) + Phone ($75) + Electric ($120) + Water ($65) + Netflix & Hulu ($44.99) = $2,134.99. The math checks out! But if you feel like something's missing, trust that feeling — what else do you think there might be?"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh! The streaming bundle! I have Netflix and Hulu but I also pay for the bundle — that's the $44.99 you said, right? Wait, no... I think I'm confused. Let me see what I actually have. Did I tell you about all of them? I'm sorry, this is confusing me."
+    },
+    {
+      "role": "bot",
+      "text": "No worries — yes, Netflix & Hulu bundled together is the $44.99 we have on file. You've told me about all six bills (Mortgage, Property Tax Escrow, Phone, Electric, Water, Netflix & Hulu). If you think there's another one, just name it and I'll add it!"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh wait, I'm sorry — I think I see it now. The streaming bundle is $44.99, but... hmm, actually that sounds right for Netflix and Hulu together. I'm confusing myself. Let me just... can you show me the full list of bills again? I want to make sure I didn't miss anything before we move on. Thank you for your patience."
+    },
+    {
+      "role": "bot",
+      "text": "Here's your full bill list:\n• Netflix & Hulu: $44.99/month (due 5/3)\n• Phone: $75/month (due 5/5)\n• Electric: $120/month (due 5/10)\n• Water: $65/month (due 5/20)\n• Mortgage: $1,450/month (due 6/1)\n• Property Tax Escrow: $380/month (due 6/1)\n\nTotal: $2,134.99/month. Does that match what you have?"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Wait, I'm looking at this and... oh no. The mortgage should be $1,450 but the property tax is $380? Let me think... I thought property tax was $380 a month. Yes, that's right. But wait — my mortgage is actually $1,450 a month, not... sorry, I'm reading this wrong. Let me start over. Is the total really just $2,134.99? That seems low compared to what I pay on the 1st."
+    },
+    {
+      "role": "bot",
+      "text": "Let me break it down: on the 1st you pay Mortgage ($1,450) + Property Tax Escrow ($380) = $1,830 just for those two. Then the other bills (Phone $75, Electric $120, Water $65, Netflix $44.99) add another $304.99. That's $2,134.99 total each month. Does that feel right, or is one of these amounts off?"
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Oh yes, okay, that does add up. I was just... I wasn't thinking straight. Thank you for breaking it down like that. So $2,134.99 every month, that's what I owe in bills. I feel better now. Sorry for all the confusion."
+    },
+    {
+      "role": "bot",
+      "text": "No apologies needed — it's easy to lose track with multiple bills! You're all set: $2,134.99/month, and you've got $985 breathing room after they're paid. You're in good shape."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    },
+    {
+      "role": "user",
+      "text": "Thank you. That really helps. So I have $3,120 in the bank right now, and after bills I can save a bit each month. I'm trying to get to $5,000 for emergencies. Do you think I'm on track?"
+    },
+    {
+      "role": "bot",
+      "text": "You're at $3,120 with $985/month left after bills — so you could hit $5k in about 2 months if you don't spend that cushion. You're on track! I can't manage a savings goal formally yet, but I'll keep flagging your runway and biggest spends so you can stay intentional about it."
+    },
+    {
+      "role": "user",
+      "text": "(tapped: Yes)"
+    },
+    {
+      "role": "bot",
+      "text": "(edit) That confirm has expired."
+    }
+  ],
+  "finalState": {
+    "setup": true,
+    "balanceCents": 312000,
+    "bills": [
+      {
+        "name": "Mortgage",
+        "amountCents": 145000,
+        "due": "2026-06-01"
+      },
+      {
+        "name": "Property Tax Escrow",
+        "amountCents": 38000,
+        "due": "2026-06-01"
+      },
+      {
+        "name": "Electric",
+        "amountCents": 12000,
+        "due": "2026-05-10"
+      },
+      {
+        "name": "Water",
+        "amountCents": 6500,
+        "due": "2026-05-20"
+      },
+      {
+        "name": "Phone",
+        "amountCents": 7500,
+        "due": "2026-05-05"
+      },
+      {
+        "name": "Netflix & Hulu",
+        "amountCents": 4499,
+        "due": "2026-05-03"
+      }
+    ],
+    "transactionCount": 1,
+    "eventCount": 8
+  },
+  "chatTranscript": [
+    {
+      "ts": 1777604817736,
+      "dir": "→",
+      "kind": "text",
+      "text": "Hello. I'm trying to learn how to use this app. My name is Margaret. I have $3,120 in my checking account right now, I think. Can you help me set things up?",
+      "message_id": 92
+    },
+    {
+      "ts": 1777604817740,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Got it — $3,120.00. 👍\n\nWhen's your next paycheck? A date like *\"the 15th\"* or *\"April 30\"*, or *\"skip\"* if it's irregular.",
+      "message_id": 93,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604819524,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, thank you. I get paid the 1st and the 15th of each month. So twice a month.",
+      "message_id": 94
+    },
+    {
+      "ts": 1777604819525,
+      "dir": "←",
+      "kind": "reply",
+      "text": "All set ✅ — $3,120.00, payday 2026-06-01.\n\nFrom here just talk to me: \"spent 20 on coffee\", \"rent 1400 due the 1st\", \"can I afford 200?\" — I'll handle it.\n\n🟢 *Calm* — $100.64/day, 31 days to payday.",
+      "message_id": 95,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604821160,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Updating your payday to twice monthly — 1st and 15th. You're all set!\n\nPayday → 2026-06-01 (biweekly)",
+      "message_id": 96,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:ifim5ck10iaw"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:ifim5ck10iaw"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777604821160,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:ifim5ck10iaw",
+      "on_message_id": 96
+    },
+    {
+      "ts": 1777604821161,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Payday → 2026-06-01 (biweekly)\n_(if this was a mistake, type /undo)_",
+      "message_id": 96,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604821161,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $100.64/day, 31 days to payday.",
+      "message_id": 97,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604822482,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you. Okay, so I should start adding my bills now, right? My mortgage is $1,450 a month, due on the 1st.",
+      "message_id": 98
+    },
+    {
+      "ts": 1777604823928,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding mortgage — $1,450 monthly, due the 1st.\n\nAdd bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly",
+      "message_id": 99,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:dz1hs5vu0kfs"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:dz1hs5vu0kfs"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777604823928,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:dz1hs5vu0kfs",
+      "on_message_id": 99
+    },
+    {
+      "ts": 1777604823928,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Mortgage* — $1,450.00 · 2026-06-01 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 99,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604823928,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $53.87/day, 31 days to payday.",
+      "message_id": 100,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604826796,
+      "dir": "→",
+      "kind": "text",
+      "text": "Okay, good. Now I have my property tax escrow, which is $380 a month, also due the 1st. Should I add that next?",
+      "message_id": 101
+    },
+    {
+      "ts": 1777604828267,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding property tax escrow — $380 monthly, due the 1st.\n\nAdd bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly",
+      "message_id": 102,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:zsbvbbbw0nsb"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:zsbvbbbw0nsb"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777604828267,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zsbvbbbw0nsb",
+      "on_message_id": 102
+    },
+    {
+      "ts": 1777604828268,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Property Tax Escrow* — $380.00 · 2026-06-01 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 102,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604828268,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $41.61/day, 31 days to payday.",
+      "message_id": 103,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604829760,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, I'm sorry — the property tax escrow is actually $380, but that's per month... wait, no, I think I said that right. Let me add my electric bill next. That's $120 a month, due on the 10th.",
+      "message_id": 104
+    },
+    {
+      "ts": 1777604831195,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding electric bill — $120 monthly, due the 10th.\n\nAdd bill *Electric* — $120.00 · 2026-05-10 · monthly",
+      "message_id": 105,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:un1ykx250q1m"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:un1ykx250q1m"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777604831195,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:un1ykx250q1m",
+      "on_message_id": 105
+    },
+    {
+      "ts": 1777604831195,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Electric* — $120.00 · 2026-05-10 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 105,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604831195,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $37.74/day, 31 days to payday.",
+      "message_id": 106,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604832304,
+      "dir": "→",
+      "kind": "text",
+      "text": "Okay, good. Now I need to add my water bill. That's $65 a month, due on the 20th. Please.",
+      "message_id": 107
+    },
+    {
+      "ts": 1777604833753,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding water bill — $65 monthly, due the 20th.\n\nAdd bill *Water* — $65.00 · 2026-05-20 · monthly",
+      "message_id": 108,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:dx0awlyf0s0p"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:dx0awlyf0s0p"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777604833754,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:dx0awlyf0s0p",
+      "on_message_id": 108
+    },
+    {
+      "ts": 1777604833754,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Water* — $65.00 · 2026-05-20 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 108,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604833754,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $35.64/day, 31 days to payday.",
+      "message_id": 109,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604835095,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you. Now my phone bill — that's $75 a month, due on the 5th.",
+      "message_id": 110
+    },
+    {
+      "ts": 1777604836928,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding phone bill — $75 monthly, due the 5th.\n\nAdd bill *Phone* — $75.00 · 2026-05-05 · monthly",
+      "message_id": 111,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:soummvnh0ugw"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:soummvnh0ugw"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777604836928,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:soummvnh0ugw",
+      "on_message_id": 111
+    },
+    {
+      "ts": 1777604836929,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Phone* — $75.00 · 2026-05-05 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 111,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604836929,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $33.22/day, 31 days to payday.",
+      "message_id": 112,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604838583,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, I'm sorry — the phone bill is actually $75, but I think I said that right? Yes, $75. Okay good. Now I need to add my streaming, that's the Netflix and Hulu bundle. That's $44.99 a month, due on the 3rd. Is that okay?",
+      "message_id": 113
+    },
+    {
+      "ts": 1777604840282,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Adding streaming bundle — $44.99 monthly, due the 3rd.\n\nAdd bill *Netflix & Hulu* — $44.99 · 2026-05-03 · monthly",
+      "message_id": 114,
+      "parse_mode": "Markdown",
+      "inline_keyboard": [
+        [
+          {
+            "text": "Yes",
+            "callback_data": "yes:zggfzrwv0x22"
+          },
+          {
+            "text": "Cancel",
+            "callback_data": "no:zggfzrwv0x22"
+          }
+        ]
+      ]
+    },
+    {
+      "ts": 1777604840282,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604840283,
+      "dir": "←",
+      "kind": "edit",
+      "text": "✓ Add bill *Netflix & Hulu* — $44.99 · 2026-05-03 · monthly\n_(if this was a mistake, type /undo)_",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604840283,
+      "dir": "←",
+      "kind": "reply",
+      "text": "🟢 *Calm* — $31.77/day, 31 days to payday.\n⏰ Netflix & Hulu ($44.99) due in 2 days. After: $985.01 for 31 days ($31.77/day).",
+      "message_id": 115,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604841486,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, good. Thank you. Um, wait — can I ask... what's my balance right now? Just want to make sure I'm following along.",
+      "message_id": 116
+    },
+    {
+      "ts": 1777604843177,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You're at $3,120.00. After your $2,134.99 in monthly bills, you've got $985.01 to breathe with over 31 days — about $31.77/day. You're in good shape.",
+      "message_id": 117,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604843177,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604843177,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604844520,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, okay. So $3,120 total. That sounds right, I think. Um, let me add my electric bill now. That's $120 a month, due on the 10th. Is that good?",
+      "message_id": 118
+    },
+    {
+      "ts": 1777604846010,
+      "dir": "←",
+      "kind": "reply",
+      "text": "_You already have a bill named Electric._",
+      "message_id": 119,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604846011,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604846011,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604847535,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh, I'm sorry — I didn't realize I already added that one. Um, okay. Well, let me try something else then. Can I add my water bill? That's $65 a month, due on the 20th.",
+      "message_id": 120
+    },
+    {
+      "ts": 1777604848805,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You've already got water on the books — $65 monthly, due the 20th. All set there!",
+      "message_id": 121,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604848805,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604848805,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604850243,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh goodness, I'm sorry — I keep trying to add things that are already there. Um, let me check. What bills do I have so far? I want to make sure I didn't miss anything.",
+      "message_id": 122
+    },
+    {
+      "ts": 1777604852295,
+      "dir": "←",
+      "kind": "reply",
+      "text": "No problem! Here's what you've got: Netflix & Hulu ($44.99, due 5/3), Phone ($75, due 5/5), Electric ($120, due 5/10), Water ($65, due 5/20), Mortgage ($1,450, due 6/1), and Property Tax Escrow ($380, due 6/1). That's $2,134.99 total monthly. Anything missing?",
+      "message_id": 123,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604852295,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604852295,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604854535,
+      "dir": "→",
+      "kind": "text",
+      "text": "Wait, that's not quite right. My mortgage is $1,450 but I also have groceries, gas, pharmacy stuff... oh wait, those aren't bills are they? Sorry, I'm getting confused. But also — um — my streaming is actually $44.99 but that's Netflix AND Hulu bundled together. Is that showing up right? And I think I'm missing something but I can't remember what.",
+      "message_id": 124
+    },
+    {
+      "ts": 1777604856272,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You're right — groceries, gas, pharmacy are spends, not bills. Your streaming is showing correctly as Netflix & Hulu at $44.99 (bundled). For the bill you can't remember — take a breath and think, or just tell me when it comes to you and I'll add it!",
+      "message_id": 125,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604856272,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604856272,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604858190,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh! I remember now — property tax escrow. Wait, is that already in there? Let me see... yes, it says $380 due 6/1. Okay good. But hold on, that should be $380 a month, right? Let me think... actually I'm not sure if I'm seeing all of it. Sorry, can you tell me what my total monthly bills add up to again?",
+      "message_id": 126
+    },
+    {
+      "ts": 1777604859596,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Your total monthly bills are $2,134.99: Netflix & Hulu ($44.99), Phone ($75), Electric ($120), Water ($65), Mortgage ($1,450), and Property Tax Escrow ($380). You're all set!",
+      "message_id": 127,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604859596,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604859596,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604861507,
+      "dir": "→",
+      "kind": "text",
+      "text": "Wait, hold on. That's $2,134.99 but... um, I don't think that's right. My mortgage alone is $1,450, and the property tax escrow is $380, so that's already $1,830. Then phone, electric, water... that should be more than $2,134. Let me think. Oh! Did I forget to tell you about something? I feel like there's more.",
+      "message_id": 128
+    },
+    {
+      "ts": 1777604863013,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You're absolutely right — let me add it up: Mortgage ($1,450) + Property Tax Escrow ($380) + Phone ($75) + Electric ($120) + Water ($65) + Netflix & Hulu ($44.99) = $2,134.99. The math checks out! But if you feel like something's missing, trust that feeling — what else do you think there might be?",
+      "message_id": 129,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604863014,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604863014,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604865014,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh! The streaming bundle! I have Netflix and Hulu but I also pay for the bundle — that's the $44.99 you said, right? Wait, no... I think I'm confused. Let me see what I actually have. Did I tell you about all of them? I'm sorry, this is confusing me.",
+      "message_id": 130
+    },
+    {
+      "ts": 1777604867261,
+      "dir": "←",
+      "kind": "reply",
+      "text": "No worries — yes, Netflix & Hulu bundled together is the $44.99 we have on file. You've told me about all six bills (Mortgage, Property Tax Escrow, Phone, Electric, Water, Netflix & Hulu). If you think there's another one, just name it and I'll add it!",
+      "message_id": 131,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604867261,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604867261,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604869290,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh wait, I'm sorry — I think I see it now. The streaming bundle is $44.99, but... hmm, actually that sounds right for Netflix and Hulu together. I'm confusing myself. Let me just... can you show me the full list of bills again? I want to make sure I didn't miss anything before we move on. Thank you for your patience.",
+      "message_id": 132
+    },
+    {
+      "ts": 1777604871237,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Here's your full bill list:\n• Netflix & Hulu: $44.99/month (due 5/3)\n• Phone: $75/month (due 5/5)\n• Electric: $120/month (due 5/10)\n• Water: $65/month (due 5/20)\n• Mortgage: $1,450/month (due 6/1)\n• Property Tax Escrow: $380/month (due 6/1)\n\nTotal: $2,134.99/month. Does that match what you have?",
+      "message_id": 133,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604871237,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604871237,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604873304,
+      "dir": "→",
+      "kind": "text",
+      "text": "Wait, I'm looking at this and... oh no. The mortgage should be $1,450 but the property tax is $380? Let me think... I thought property tax was $380 a month. Yes, that's right. But wait — my mortgage is actually $1,450 a month, not... sorry, I'm reading this wrong. Let me start over. Is the total really just $2,134.99? That seems low compared to what I pay on the 1st.",
+      "message_id": 134
+    },
+    {
+      "ts": 1777604875741,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Let me break it down: on the 1st you pay Mortgage ($1,450) + Property Tax Escrow ($380) = $1,830 just for those two. Then the other bills (Phone $75, Electric $120, Water $65, Netflix $44.99) add another $304.99. That's $2,134.99 total each month. Does that feel right, or is one of these amounts off?",
+      "message_id": 135,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604875741,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604875741,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604878713,
+      "dir": "→",
+      "kind": "text",
+      "text": "Oh yes, okay, that does add up. I was just... I wasn't thinking straight. Thank you for breaking it down like that. So $2,134.99 every month, that's what I owe in bills. I feel better now. Sorry for all the confusion.",
+      "message_id": 136
+    },
+    {
+      "ts": 1777604880345,
+      "dir": "←",
+      "kind": "reply",
+      "text": "No apologies needed — it's easy to lose track with multiple bills! You're all set: $2,134.99/month, and you've got $985 breathing room after they're paid. You're in good shape.",
+      "message_id": 137,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604880345,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604880346,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    },
+    {
+      "ts": 1777604881987,
+      "dir": "→",
+      "kind": "text",
+      "text": "Thank you. That really helps. So I have $3,120 in the bank right now, and after bills I can save a bit each month. I'm trying to get to $5,000 for emergencies. Do you think I'm on track?",
+      "message_id": 138
+    },
+    {
+      "ts": 1777604884178,
+      "dir": "←",
+      "kind": "reply",
+      "text": "You're at $3,120 with $985/month left after bills — so you could hit $5k in about 2 months if you don't spend that cushion. You're on track! I can't manage a savings goal formally yet, but I'll keep flagging your runway and biggest spends so you can stay intentional about it.",
+      "message_id": 139,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    },
+    {
+      "ts": 1777604884178,
+      "dir": "→",
+      "kind": "tap",
+      "text": "Yes",
+      "callback_data": "yes:zggfzrwv0x22",
+      "on_message_id": 114
+    },
+    {
+      "ts": 1777604884178,
+      "dir": "←",
+      "kind": "edit",
+      "text": "That confirm has expired.",
+      "message_id": 114,
+      "inline_keyboard": []
+    }
+  ],
+  "botAiRaw": [
+    {
+      "turn": 4,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Updating your payday to twice monthly — 1st and 15th. You're all set!\",\n  \"intent\": {\n    \"kind\": \"update_payday\",\n    \"params\": {\n      \"payday\": \"2026-06-01\",\n      \"payFrequency\": \"biweekly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 8,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding mortgage — $1,450 monthly, due the 1st.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Mortgage\",\n      \"amountCents\": 145000,\n      \"dueDate\": \"2026-06-01\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 12,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding property tax escrow — $380 monthly, due the 1st.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Property Tax Escrow\",\n      \"amountCents\": 38000,\n      \"dueDate\": \"2026-06-01\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 16,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding electric bill — $120 monthly, due the 10th.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Electric\",\n      \"amountCents\": 12000,\n      \"dueDate\": \"2026-05-10\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 20,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding water bill — $65 monthly, due the 20th.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Water\",\n      \"amountCents\": 6500,\n      \"dueDate\": \"2026-05-20\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 24,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding phone bill — $75 monthly, due the 5th.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Phone\",\n      \"amountCents\": 7500,\n      \"dueDate\": \"2026-05-05\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 28,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding streaming bundle — $44.99 monthly, due the 3rd.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Netflix & Hulu\",\n      \"amountCents\": 4499,\n      \"dueDate\": \"2026-05-03\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 32,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"You're at $3,120.00. After your $2,134.99 in monthly bills, you've got $985.01 to breathe with over 31 days — about $31.77/day. You're in good shape.\"\n}"
+    },
+    {
+      "turn": 36,
+      "raw": "{\n  \"mode\": \"do\",\n  \"message\": \"Adding electric bill — $120 monthly, due the 10th.\",\n  \"intent\": {\n    \"kind\": \"add_bill\",\n    \"params\": {\n      \"name\": \"Electric\",\n      \"amountCents\": 12000,\n      \"dueDate\": \"2026-05-10\",\n      \"recurrence\": \"monthly\"\n    }\n  }\n}"
+    },
+    {
+      "turn": 40,
+      "raw": "You've already got water on the books — $65 monthly, due the 20th. All set there!"
+    },
+    {
+      "turn": 44,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"No problem! Here's what you've got: Netflix & Hulu ($44.99, due 5/3), Phone ($75, due 5/5), Electric ($120, due 5/10), Water ($65, due 5/20), Mortgage ($1,450, due 6/1), and Property Tax Escrow ($380, due 6/1). That's $2,134.99 total monthly. Anything missing?\"\n}"
+    },
+    {
+      "turn": 48,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"You're right — groceries, gas, pharmacy are spends, not bills. Your streaming is showing correctly as Netflix & Hulu at $44.99 (bundled). For the bill you can't remember — take a breath and think, or just tell me when it comes to you and I'll add it!\"\n}"
+    },
+    {
+      "turn": 52,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Your total monthly bills are $2,134.99: Netflix & Hulu ($44.99), Phone ($75), Electric ($120), Water ($65), Mortgage ($1,450), and Property Tax Escrow ($380). You're all set!\"\n}"
+    },
+    {
+      "turn": 56,
+      "raw": "You're absolutely right — let me add it up: Mortgage ($1,450) + Property Tax Escrow ($380) + Phone ($75) + Electric ($120) + Water ($65) + Netflix & Hulu ($44.99) = $2,134.99. The math checks out! But if you feel like something's missing, trust that feeling — what else do you think there might be?"
+    },
+    {
+      "turn": 60,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"No worries — yes, Netflix & Hulu bundled together is the $44.99 we have on file. You've told me about all six bills (Mortgage, Property Tax Escrow, Phone, Electric, Water, Netflix & Hulu). If you think there's another one, just name it and I'll add it!\"\n}"
+    },
+    {
+      "turn": 64,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Here's your full bill list:\\n• Netflix & Hulu: $44.99/month (due 5/3)\\n• Phone: $75/month (due 5/5)\\n• Electric: $120/month (due 5/10)\\n• Water: $65/month (due 5/20)\\n• Mortgage: $1,450/month (due 6/1)\\n• Property Tax Escrow: $380/month (due 6/1)\\n\\nTotal: $2,134.99/month. Does that match what you have?\"\n}"
+    },
+    {
+      "turn": 68,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"Let me break it down: on the 1st you pay Mortgage ($1,450) + Property Tax Escrow ($380) = $1,830 just for those two. Then the other bills (Phone $75, Electric $120, Water $65, Netflix $44.99) add another $304.99. That's $2,134.99 total each month. Does that feel right, or is one of these amounts off?\"\n}"
+    },
+    {
+      "turn": 72,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"No apologies needed — it's easy to lose track with multiple bills! You're all set: $2,134.99/month, and you've got $985 breathing room after they're paid. You're in good shape.\"\n}"
+    },
+    {
+      "turn": 76,
+      "raw": "{\n  \"mode\": \"talk\",\n  \"message\": \"You're at $3,120 with $985/month left after bills — so you could hit $5k in about 2 months if you don't spend that cushion. You're on track! I can't manage a savings goal formally yet, but I'll keep flagging your runway and biggest spends so you can stay intentional about it.\"\n}"
+    }
+  ],
+  "timestamp": "2026-05-01T03:08:04.178Z"
+}

@@ -1,0 +1,6 @@
+◇ injected env (7) from .env // tip: ⌘ override existing { override: true }
+=== Jenna Kowalski (en) — 25 turns ===
+
+[turn 1] persona LLM failed: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."},"request_id":"req_011CabCG8WYbD95R4vp1Da6F"}
+
+→ C:\Users\Hannu\Documents\GitHub\Vera\server\v5\harness\persona-runs\jenna-2026-05-01T04-10-58-452Z

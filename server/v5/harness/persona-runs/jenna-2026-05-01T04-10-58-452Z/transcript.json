@@ -1,0 +1,19 @@
+{
+  "persona": {
+    "id": "jenna",
+    "name": "Jenna Kowalski",
+    "lang": "en"
+  },
+  "turns": 25,
+  "conversation": [],
+  "finalState": {
+    "setup": false,
+    "balanceCents": 0,
+    "bills": [],
+    "transactionCount": 0,
+    "eventCount": 0
+  },
+  "chatTranscript": [],
+  "botAiRaw": [],
+  "timestamp": "2026-05-01T04:10:59.282Z"
+}
