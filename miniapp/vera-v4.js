@@ -135,6 +135,25 @@ function buildNameMap(envelopes) {
 //   - If no note but envelope exists → envelope name is primary,
 //     no secondary.
 //   - Otherwise → "—".
+// Small visual chip rendered next to bill-payment transactions in
+// every list view (today / heatmap day-detail / history). Distinguishes
+// bill payments from discretionary spends so the user reads the list
+// correctly: the "$1,400 rent" row is clearly a bill, not a $1,400
+// today-spend. Bill payments are still listed (they happened today),
+// just visually labeled.
+function billChip() {
+  return h("span", {
+    style: {
+      fontSize: 9, color: C.muted, marginLeft: 6,
+      padding: "1px 5px", border: "1px solid " + C.border,
+      borderRadius: 4, fontWeight: 600,
+      textTransform: "uppercase", letterSpacing: "0.06em",
+      fontFamily: "'Inter',sans-serif",
+      verticalAlign: "1px",
+    },
+  }, "bill");
+}
+
 function txLabel(tx, nameMap) {
   var note = (tx.note || "").trim();
   var envName = tx.envelopeKey && nameMap ? (nameMap[tx.envelopeKey] || null) : null;
@@ -460,10 +479,17 @@ function Heatmap(props) {
 // as the same family of cards). Animates in with fadeIn.
 function DayDetailCard(props) {
   var dayTxs = (props.txs || []).filter(function(tx) { return tx.date === props.date; });
+  // Day total = DISCRETIONARY spend only (matches the heatmap color
+  // calc + view.compute todaySpentCents). Bill payments are obligation
+  // money already reserved out of disposable, so summing them here
+  // would double-book — user paid $1,400 rent + $5 coffee → header
+  // shows "$1,405 spent" but their actual discretionary was $5. The
+  // bill payments still appear in the LIST below with a "bill" chip
+  // so the day's full activity is visible.
   var total = dayTxs.reduce(function(a, tx) {
-    if (tx.kind === "spend" || tx.kind === "bill_payment") return a + tx.amountCents;
+    if (tx.kind === "spend") return a + tx.amountCents;
     if (tx.kind === "refund") return a - Math.abs(tx.amountCents);
-    return a;
+    return a; // skip bill_payment, income, etc.
   }, 0);
   var dateLabel = props.today ? relativeDay(props.date, props.today) : props.date;
   var isEmpty = dayTxs.length === 0;
@@ -500,7 +526,10 @@ function DayDetailCard(props) {
               style: { display: "flex", justifyContent: "space-between", padding: "9px 0", fontSize: 13, borderTop: "1px solid " + C.border, alignItems: "center" },
             },
               h("div", { style: { flex: 1, overflow: "hidden", marginRight: 10 } },
-                h("div", { style: { color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
+                h("div", { style: { color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+                  lbl.primary,
+                  tx.kind === "bill_payment" ? billChip() : null
+                ),
                 lbl.secondary ? h("div", { style: { color: C.muted, fontSize: 11, marginTop: 2 } }, lbl.secondary) : null
               ),
               h("div", { style: { color: tx.kind === "refund" ? C.green : C.text, fontFamily: "'Lora',serif" } },
@@ -658,7 +687,10 @@ function TodayTxList(props) {
           onTouchEnd: function(e) { e.currentTarget.style.background = "transparent"; },
         },
           h("div", { style: { flex: 1, overflow: "hidden" } },
-            h("div", { style: { fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
+            h("div", { style: { fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+              lbl.primary,
+              tx.kind === "bill_payment" ? billChip() : null
+            ),
             h("div", { style: { fontSize: 10, color: C.muted, marginTop: 2, display: "flex", gap: 6 } },
               lbl.secondary ? h("span", null, lbl.secondary) : null,
               lbl.secondary && tx.ts ? h("span", { style: { color: C.muted } }, "·") : null,
@@ -1279,7 +1311,10 @@ function History(props) {
                         },
                       },
                         h("div", { style: { flex: 1, overflow: "hidden", marginRight: 8 } },
-                          h("div", { style: { color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, lbl.primary),
+                          h("div", { style: { color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+                            lbl.primary,
+                            tx.kind === "bill_payment" ? billChip() : null
+                          ),
                           lbl.secondary ? h("div", { style: { color: C.muted, fontSize: 10, marginTop: 1 } }, lbl.secondary) : null
                         ),
                         h("div", { style: { fontFamily: "'Lora',serif", color: tx.kind === "refund" ? C.green : C.text } },
