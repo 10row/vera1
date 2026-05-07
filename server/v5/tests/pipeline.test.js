@@ -520,6 +520,58 @@ test("[pipeline] does NOT auto-inject for present-tense 'today'", async () => {
   assertEq(r.intent.params.date, undefined, "today reference → no inject");
 });
 
+// REGRESSION — AI sometimes emits the literal word "yesterday" as a date.
+// Pre-fix: auto-inject saw a truthy params.date and respected it. Then
+// validator threw "Invalid date format — use YYYY-MM-DD." User reported
+// this bug after writing a 2-spend message where AI emitted both with
+// date:"yesterday" instead of ISO. Tests now lock this in.
+test("[pipeline] auto-inject overrides AI's literal 'yesterday' string with valid ISO", async () => {
+  const s = fullySetUp(500000);
+  s.transactions[0].date = m.addDays(m.today("UTC"), -10);
+  const r = await processMessage(s,
+    "yesterday gym 10 usd and food indian 40 usd",
+    [],
+    {
+      _debugUserId: "junk-date-1",
+      _aiCall: stub({
+        mode: "do",
+        message: "Adding both yesterday.",
+        intents: [
+          { kind: "record_spend", params: { amountCents: 1000, note: "gym", date: "yesterday" } },     // junk
+          { kind: "record_spend", params: { amountCents: 4000, note: "indian food", date: "yesterday" } }, // junk
+        ],
+      }),
+    });
+  // Both intents must have ISO dates after auto-inject.
+  const yesterdayISO = m.addDays(m.today("UTC"), -1);
+  assertEq(r.items[0].intent.params.date, yesterdayISO, "first intent: junk 'yesterday' replaced with ISO");
+  assertEq(r.items[1].intent.params.date, yesterdayISO, "second intent: junk 'yesterday' replaced with ISO");
+  // Both must validate cleanly (not throw "Invalid date format").
+  assertTrue(r.items[0].verdict.ok, "first verdict OK");
+  assertTrue(r.items[1].verdict.ok, "second verdict OK");
+});
+
+test("[pipeline] auto-inject also overrides other malformed date attempts", async () => {
+  const s = fullySetUp(500000);
+  s.transactions[0].date = m.addDays(m.today("UTC"), -10);
+  const malformed = ["yesterday", "last week", "May 6", "2026/05/06", ""];
+  for (const bad of malformed) {
+    const r = await processMessage(s,
+      "yesterday i bought stuff for 5",
+      [],
+      {
+        _debugUserId: "junk-date-loop",
+        _aiCall: stub({
+          mode: "do",
+          message: "Adding.",
+          intent: { kind: "record_spend", params: { amountCents: 500, note: "stuff", date: bad } },
+        }),
+      });
+    const yesterdayISO = m.addDays(m.today("UTC"), -1);
+    assertEq(r.intent.params.date, yesterdayISO, "junk date '" + bad + "' replaced with ISO");
+  }
+});
+
 test("[pipeline] resolves 'N days ago' deterministically", async () => {
   const s = fullySetUp(500000);
   s.transactions[0].date = m.addDays(m.today("UTC"), -10);

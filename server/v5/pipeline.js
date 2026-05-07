@@ -249,7 +249,18 @@ async function processMessage(state, userMessage, history, options) {
       const tryInject = (intent) => {
         if (!intent || !dateableKinds.has(intent.kind)) return false;
         if (!intent.params) intent.params = {};
-        if (intent.params.date) return false; // AI emitted; respect it
+        // CRITICAL: validate the AI's date BEFORE deciding to respect
+        // it. The AI sometimes emits literal strings like "yesterday"
+        // as a date param (verified from a real bug report). A naive
+        // truthiness check ("if (params.date)") would respect the
+        // garbage, then the validator would throw "Invalid date
+        // format — use YYYY-MM-DD."
+        //
+        // New rule: respect the AI's date ONLY if it's a valid ISO
+        // YYYY-MM-DD. Otherwise inject the resolver's date — same
+        // behavior as if the AI had dropped the field entirely.
+        const aiValid = intent.params.date ? m.normalizeDate(intent.params.date) : null;
+        if (aiValid) return false; // AI emitted valid ISO — respect it
         intent.params.date = resolved.date;
         return true;
       };
