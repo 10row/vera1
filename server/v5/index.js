@@ -499,10 +499,24 @@ async function start() {
   try { await prisma.$connect(); console.log("[v5] db connected"); }
   catch (err) { console.error("[v5] db:", err.message); process.exit(1); }
 
-  // Hydrate currency-rate cache from DB + ensure today's rate is
-  // fetched. Best-effort — if it fails, conversion falls back to the
-  // hardcoded rates table in currency.js.
-  await ensureRatesFresh();
+  // Currency-rate cache: hydrate from DB + ensure today's rate.
+  //
+  // CRITICAL: fire-and-forget. Do NOT await this. On first deploy
+  // (or empty rate table) ensureRatesFresh runs a 30-day backfill =
+  // 30 sequential HTTP calls ≈ 5-10s of blocking work. If we await,
+  // Express doesn't start listening until that finishes — every cold-
+  // start (Railway container wake) becomes a ~10s delay before the
+  // bot can answer the user's first tap. (Real bug: user reported
+  // confirm feeling slow, traced to this exact pattern.)
+  //
+  // Backgrounding is safe: convertSubunits already falls back to the
+  // hardcoded RATES_TO_USD table when the cache hasn't loaded yet,
+  // so worst case the first few requests get hardcoded rates (same
+  // behavior as before this feature shipped). By the time the user
+  // is on their second action, the cache is hot.
+  ensureRatesFresh().catch(e => {
+    console.warn("[rates] background init failed (continuing with hardcoded):", e.message);
+  });
   startRateCron();
 
   app.listen(PORT, async () => {
