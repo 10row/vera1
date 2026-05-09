@@ -942,7 +942,8 @@ function attach(prisma) {
       if (p.originalCurrency && Number.isFinite(p.originalAmount) && p.originalAmount > 0) {
         const base = state.currency || "USD";
         const fromSubunits = currency.spokenToSubunits(p.originalAmount, p.originalCurrency);
-        const toSubunits = currency.convertSubunits(fromSubunits, p.originalCurrency, base);
+        // Pass tx.date for historical-rate accuracy on backdated spends.
+        const toSubunits = currency.convertSubunits(fromSubunits, p.originalCurrency, base, p.date || null);
         p.amountCents = toSubunits;
       }
 

@@ -427,12 +427,83 @@ function migrateDb() {
   }
 }
 
+// ── CURRENCY RATES — daily fetch + cache hydrate ──
+// Free public service (Frankfurter, ECB-backed). Cron at 6am UTC
+// fetches today's rates; bot startup hydrates the in-memory cache
+// from the DB. Conversion (currency.convertSubunits) consults the
+// cache by date for historical accuracy on backdated spends.
+async function ensureRatesFresh() {
+  const fetcher = require("./rate-fetcher");
+  const currency = require("./currency");
+  try {
+    // First, hydrate the cache from whatever's already in the DB.
+    const cached = await currency.hydrateRateCache(prisma, 90);
+    console.log("[rates] cache hydrated:", cached, "rows");
+
+    // If cache is empty or doesn't have today's rates, fetch fresh.
+    // Idempotent — upsert means re-fetching the same day is safe.
+    const today = m.today("UTC");
+    const todayCount = await prisma.currencyRate.count({ where: { date: today } });
+    if (todayCount === 0) {
+      console.log("[rates] no rates for", today, "— fetching from Frankfurter");
+      try {
+        await fetcher.fetchToday(prisma);
+        await currency.hydrateRateCache(prisma, 90);
+        console.log("[rates] fetched + re-hydrated");
+      } catch (e) {
+        console.warn("[rates] fetchToday failed:", e.message);
+      }
+    }
+
+    // If cache is still very sparse (first deploy with empty table),
+    // backfill 30 days so backdated spends get historical rates.
+    const totalCount = await prisma.currencyRate.count();
+    if (totalCount < 100) {
+      console.log("[rates] sparse table (" + totalCount + " rows) — backfilling 30 days");
+      try {
+        await fetcher.backfill(prisma, 30);
+        await currency.hydrateRateCache(prisma, 90);
+      } catch (e) {
+        console.warn("[rates] backfill failed:", e.message);
+      }
+    }
+  } catch (e) {
+    console.warn("[rates] ensureRatesFresh failed (continuing with hardcoded):", e.message);
+  }
+}
+
+function startRateCron() {
+  const fetcher = require("./rate-fetcher");
+  const currency = require("./currency");
+  // Every 24 hours, fetch latest + re-hydrate cache. Frankfurter
+  // publishes EU-time, so a 6am UTC fetch catches the day's update.
+  // We use a simple setInterval — accuracy is daily-ish, not minute-
+  // precise, which is fine for FX rates.
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      await fetcher.fetchToday(prisma);
+      await currency.hydrateRateCache(prisma, 90);
+      console.log("[rates] cron: fetched + re-hydrated");
+    } catch (e) {
+      console.warn("[rates] cron fetch failed:", e.message);
+    }
+  }, ONE_DAY).unref(); // unref so it doesn't block process exit in tests
+  console.log("[rates] cron scheduled — every 24h");
+}
+
 // ── STARTUP ───────────────────────────────────────
 async function start() {
   if (process.env.SKIP_MIGRATE !== "1") migrateDb();
 
   try { await prisma.$connect(); console.log("[v5] db connected"); }
   catch (err) { console.error("[v5] db:", err.message); process.exit(1); }
+
+  // Hydrate currency-rate cache from DB + ensure today's rate is
+  // fetched. Best-effort — if it fails, conversion falls back to the
+  // hardcoded rates table in currency.js.
+  await ensureRatesFresh();
+  startRateCron();
 
   app.listen(PORT, async () => {
     console.log("SpendYes v5 listening on :" + PORT);

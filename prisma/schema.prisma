@@ -143,6 +143,29 @@ model Message {
   @@index([userId, createdAt])
 }
 
+// -- Currency Rate Snapshot (one row per currency per day) --
+// Daily mid-market rates fetched from Frankfurter (ECB). Pivot is
+// USD: `ratePerUSD` = how many USD one WHOLE UNIT of `currency` is
+// worth. So a THB row with ratePerUSD=0.0286 means 1 baht ≈ $0.0286.
+//
+// Lookup: given a tx with date=2026-05-06 and currency=THB, find the
+// row matching (date, currency). If absent (weekend / API was down /
+// future date), pipeline falls back to the most-recent earlier row,
+// then to the hardcoded table in code as last resort.
+//
+// Storage scales to ~30 currencies × 365 days = ~11k rows/year. Tiny.
+model CurrencyRate {
+  id          String   @id @default(cuid())
+  date        String   // ISO YYYY-MM-DD — the day this rate applies to
+  currency    String   // ISO 3-letter, uppercase (e.g. "THB", "VND")
+  ratePerUSD  Float    // 1 unit of currency = ratePerUSD USD
+  source      String   @default("frankfurter")
+  fetchedAt   DateTime @default(now())
+
+  @@unique([date, currency])
+  @@index([currency, date])
+}
+
 // -- API Call Log (cost tracking) --
 model ApiLog {
   id            String   @id @default(cuid())

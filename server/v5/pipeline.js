@@ -221,16 +221,27 @@ async function processMessage(state, userMessage, history, options) {
     if (p.originalCurrency && Number.isFinite(originalAmount) && originalAmount > 0) {
       const base = state.currency || "USD";
       const fromSubunits = currency.spokenToSubunits(originalAmount, p.originalCurrency);
-      const toSubunits = currency.convertSubunits(fromSubunits, p.originalCurrency, base);
+      // Pass the tx event date to convertSubunits so backdated spends
+      // get the historical rate from THAT day. If no date on the
+      // intent yet (auto-inject runs AFTER this convert), the rate
+      // function falls back to most-recent live rate, which is fine —
+      // for current-day spends that's correct; for backdates, the
+      // rate is at most a few days off (auto-inject will set the
+      // tx.date on the engine side, but the converted amountCents
+      // is already settled here). Could re-convert on engine apply if
+      // we want perfect historical accuracy on backdates; for now
+      // most-recent rate is the AAA tradeoff.
+      const dateISO = p.date || null;
+      const toSubunits = currency.convertSubunits(fromSubunits, p.originalCurrency, base, dateISO);
       // amountCents in our codebase = base-currency subunits (cents for USD).
       p.amountCents = toSubunits;
     }
     return intent;
   }
-  if (proposal.intent) convertOnce(proposal.intent);
-  if (Array.isArray(proposal.intents)) proposal.intents.forEach(convertOnce);
-
   // ── BACKDATE AUTO-INJECT (deterministic safety net) ──
+  // Runs BEFORE currency conversion so the conversion can use the
+  // historical rate for backdated spends.
+  //
   // Verified empirically: the AI is NON-DETERMINISTIC about emitting
   // the `date` param — same prompt + same message can give date OR no
   // date across consecutive calls. For AAA reliability we inject the
@@ -279,6 +290,9 @@ async function processMessage(state, userMessage, history, options) {
       }
     }
   } catch { /* never block the user-facing flow */ }
+
+  if (proposal.intent) convertOnce(proposal.intent);
+  if (Array.isArray(proposal.intents)) proposal.intents.forEach(convertOnce);
 
   // ── PROMISE-ACTION CHECK ──
   // If AI's text promises an action but no matching intent exists,

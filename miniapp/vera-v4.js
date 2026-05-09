@@ -811,10 +811,14 @@ function TxDetailModal(props) {
           borderRadius: 2, margin: "0 auto 18px",
         },
       }),
-      // Big amount headline
+      // Big amount headline. For foreign-currency txs we show the
+      // original-currency line below + a tiny "mid-market" hint that
+      // sets expectation: this is a daily ECB rate, not the user's
+      // bank-card rate which can differ ~1-3%. Honest signal.
       h("div", { style: { textAlign: "center", marginBottom: foreignLine ? 4 : 18 } },
         h("div", { style: { fontFamily: "'Lora',serif", fontSize: 34, color: tx.kind === "refund" || tx.kind === "income" ? C.green : C.text, fontWeight: 400 } }, bigAmount),
-        foreignLine ? h("div", { style: { fontFamily: "'Lora',serif", fontSize: 14, color: C.muted, marginTop: 4 } }, foreignLine + " · " + tx.originalCurrency) : null
+        foreignLine ? h("div", { style: { fontFamily: "'Lora',serif", fontSize: 14, color: C.muted, marginTop: 4 } }, foreignLine + " · " + tx.originalCurrency) : null,
+        foreignLine ? h("div", { style: { fontSize: 9, color: C.muted, marginTop: 2, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "'Inter',sans-serif", opacity: 0.7 } }, "mid-market rate") : null
       ),
       foreignLine ? h("div", { style: { height: 14 } }) : null,
       // Vendor — primary identifier
