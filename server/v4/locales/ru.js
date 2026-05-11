@@ -138,12 +138,15 @@ module.exports = {
   "miniapp.hero.over": "{amount} больше сегодня",
   "miniapp.hero.tomorrowLess": "≈ {delta}/день меньше до зарплаты",
   "miniapp.hero.tomorrowMore": "≈ {delta}/день больше до зарплаты",
-  // ── NEW HERO (balance-led, polished) ──
+  // ── NEW HERO (today's-left as headline) ──
   "miniapp.hero.inAccount": "на счёте",
+  "miniapp.hero.leftToday": "осталось сегодня",
   "miniapp.hero.subNoBills": "{pace}/день · {days}д до зарплаты",
   "miniapp.hero.subNoBillsSingleDay": "{pace}/день · 1д до зарплаты",
   "miniapp.hero.subWithBills": "{available} доступно · {pace}/день · {days}д",
   "miniapp.hero.subWithBillsSingleDay": "{available} доступно · {pace}/день · 1д",
+  "miniapp.hero.refWithBills": "{available} доступно · {balance} на счёте",
+  "miniapp.hero.refNoBills": "{balance} на счёте",
   "miniapp.hero.reservedFor": "{amount} зарезервировано на счета",
   "miniapp.hero.todayUsage": "Сегодня: {spent} из {pace}",
   "miniapp.hero.overDeficit": "{amount} в минусе",

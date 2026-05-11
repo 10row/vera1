@@ -287,29 +287,26 @@ function relativeDay(dateStr, today) {
 // Decision support ("can I afford X?") lives in chat — the right place
 // for conversation. The hero stays calm.
 // ── HERO ─────────────────────────────────────────────────────
-// AAA polish: lead with BALANCE (the bank number — what the user
-// actually has), then derive the rest through clear adjacency.
+// AAA polish: today's-left as headline (answers "can I afford this
+// right now?" — the single most-asked question). Pace + days as
+// supporting context. Bank balance + available as reference, smallest.
+// Variance and pace-impact chips below for in-the-moment feedback.
 //
-// Layout principles:
-//   1. Status pill ONLY when tight or over (calm = default, no chip).
-//   2. Big balance number, serif, with "in account" label below.
-//   3. Sub-line carries pace + days. If bills exist, prepends
-//      "$X available" so the relationship balance → reservations →
-//      available is visible without explanation.
-//   4. A small "Today: $X of $Y" chip when user has spent today —
-//      replaces the variance + pace-impact chips (which were too
-//      noisy).
-//   5. Over-state: deficit becomes the headline (red), balance + days
-//      move to the sub-line. Different shape because the question
-//      "am I over?" dominates.
+// Hierarchy (size + opacity, top to bottom):
+//   1. Status pill (only when tight or over — calm is silent)
+//   2. BIG serif — today's-left
+//   3. Small label — "left today"
+//   4. Mid context — "$X/day · Nd to payday"
+//   5. Reference (muted) — "$X available · $Y in account"
+//   6. Variance chip — "●$X over today" (only when spent today)
+//   7. Pace-impact line — "≈ $Y/day less rest of cycle" (only when variance ≠ 0)
 //
-// What this REMOVES from the previous hero:
-//   - "free today" / "over for this period" labels (didn't add info)
-//   - Variance chip ("$X under/over today" — replaced by today-chip)
-//   - Pace-impact line ("$X/day less rest of cycle" — too speculative)
+// Over-state has its own shape: deficit becomes the headline.
 //
-// Less noise, more clarity. The user complaint was bank-balance
-// invisibility; the fix is leading with it.
+// The user's question this answers is THE ONLY question that matters
+// in a daily-allowance tool: "Can I spend this right now without
+// breaking later?" Today's-left is the only number that resolves it
+// without the user doing any math.
 function Hero(props) {
   var v = props.view;
   var col = colorForState(v.state);
@@ -329,9 +326,8 @@ function Hero(props) {
     v.state === "over" ? t("status.over") : t("status.tight")
   );
 
-  // OVER STATE — surface the deficit, demote balance to the sub-line.
-  // The user's question in this state is "how bad?", not "how much
-  // do I have?"
+  // OVER STATE — surface the deficit. The user's question in this
+  // state is "how bad?", not "what can I spend today?"
   if (v.state === "over") {
     var overSub = (v.daysToPayday === 1)
       ? t("miniapp.hero.overSubBillsSingleDay", { balance: v.balanceShort || v.balanceFormatted })
@@ -349,37 +345,49 @@ function Hero(props) {
     );
   }
 
-  // CALM / TIGHT STATE — balance is headline.
-  var balanceText = v.balanceFormatted || "";
+  // CALM / TIGHT STATE — today's-left is the headline.
+  var todayLeftText = v.todayRemainingFormatted || "";
   var paceShort = v.dailyPaceShort || v.dailyPaceFormatted || "";
   var availShort = v.disposableShort || v.disposableFormatted || "";
+  var balanceShort = v.balanceShort || v.balanceFormatted || "";
   var hasBills = (v.obligatedCents || 0) > 0;
 
-  // Sub-line: derive from state.
-  // With bills:  "$4,800 available · $128/day · 12d"
-  // Without:     "$128/day · 12d to payday"
-  var subContext;
+  // Pace + days context line (mid tier).
+  var paceLineKey = (v.daysToPayday === 1)
+    ? "miniapp.hero.subNoBillsSingleDay"
+    : "miniapp.hero.subNoBills";
+  var paceDaysContext = t(paceLineKey, { pace: paceShort, days: v.daysToPayday });
+
+  // Reference line (smallest, muted). When bills exist: "$X available ·
+  // $Y in account". When no bills: balance == available, so just show
+  // balance — no redundancy.
+  var refLine;
   if (hasBills) {
-    var bKey = (v.daysToPayday === 1) ? "miniapp.hero.subWithBillsSingleDay" : "miniapp.hero.subWithBills";
-    subContext = t(bKey, { available: availShort, pace: paceShort, days: v.daysToPayday });
+    refLine = t("miniapp.hero.refWithBills", { available: availShort, balance: balanceShort });
   } else {
-    var nKey = (v.daysToPayday === 1) ? "miniapp.hero.subNoBillsSingleDay" : "miniapp.hero.subNoBills";
-    subContext = t(nKey, { pace: paceShort, days: v.daysToPayday });
+    refLine = t("miniapp.hero.refNoBills", { balance: balanceShort });
   }
 
-  // Today usage chip — the single most useful "in the moment" signal.
-  // Replaces the previous variance + pace-impact pair (too noisy).
-  // Color: green if under pace, amber if over. Hidden when no spending
-  // today (calm baseline = no chip).
+  // VARIANCE CHIP — informational ("today vs pace"), passive.
+  // CRITICAL: this does NOT change the headline (pace stays frozen per
+  // Model B; today's-left = pace − todaySpent). It just acknowledges
+  // today's running delta so the user FEELS the win/cost without the
+  // goalpost moving.
+  // Hidden when there's no signal: no pace (over state — handled above),
+  // no spend yet today, or variance is exactly 0 (rare; not worth the row).
+  var varianceCents = v.varianceCents || 0;
   var todaySpent = v.todaySpentCents || 0;
   var paceCents = v.dailyPaceCents || 0;
-  var showToday = todaySpent > 0 && paceCents > 0;
-  var todayChip = null;
-  if (showToday) {
-    var overPace = todaySpent > paceCents;
-    var chipColor = overPace ? C.amber : C.green;
-    var chipBg = overPace ? C.amberSoft : C.greenSoft;
-    todayChip = h("div", {
+  var showVariance = paceCents > 0 && todaySpent > 0 && varianceCents !== 0;
+  var varianceChip = null;
+  if (showVariance) {
+    var isUnder = varianceCents > 0;
+    var chipColor = isUnder ? C.green : C.amber;
+    var chipBg = isUnder ? C.greenSoft : C.amberSoft;
+    var chipText = isUnder
+      ? t("miniapp.hero.under", { amount: v.varianceShort })
+      : t("miniapp.hero.over", { amount: v.varianceShort });
+    varianceChip = h("div", {
       style: {
         display: "inline-flex", alignItems: "center", gap: 6,
         background: chipBg, color: chipColor,
@@ -389,29 +397,53 @@ function Hero(props) {
       },
     },
       h("span", { style: { width: 5, height: 5, borderRadius: "50%", background: chipColor } }),
-      t("miniapp.hero.todayUsage", {
-        spent: v.todaySpentFormatted || "",
-        pace: v.dailyPaceFormatted || "",
-      })
+      chipText
     );
+  }
+
+  // PACE-IMPACT LINE — today's overspend doesn't vanish; it's
+  // redistributed across the remaining days of the cycle (tomorrow's
+  // pace recomputes at day rollover). Without surfacing this, the user
+  // has no signal that today's variance has consequences. With it,
+  // they see the cause-effect chain in one glance. The "tomorrow signal."
+  //
+  // Color matches the variance chip. Hidden when no signal OR when the
+  // per-day delta is 0 (e.g. payday tomorrow → no projection possible).
+  var paceDelta = v.paceDeltaCents || 0;
+  var showPaceImpact = showVariance && paceDelta !== 0;
+  var paceImpactLine = null;
+  if (showPaceImpact) {
+    var deltaShort = v.paceDeltaShort || "";
+    var deltaIsUp = paceDelta > 0; // tomorrow's pace HIGHER → user under-spent
+    var impactColor = deltaIsUp ? C.green : C.amber;
+    var impactKey = deltaIsUp ? "miniapp.hero.tomorrowMore" : "miniapp.hero.tomorrowLess";
+    paceImpactLine = h("div", {
+      style: {
+        fontSize: 10, color: impactColor, marginTop: 6,
+        letterSpacing: "0.02em", opacity: 0.9,
+      },
+    }, t(impactKey, { delta: deltaShort }));
   }
 
   return h("div", { style: { padding: "32px 20px 22px", textAlign: "center" } },
     pill,
-    // BIG: balance
+    // BIG: today's-left (the answer to "can I spend this?")
     h("div", {
       style: {
         fontFamily: "'Lora',serif", fontSize: 60, fontWeight: 500,
         color: col, lineHeight: 1.0, letterSpacing: "-0.02em",
         transition: "color 0.4s ease",
       },
-    }, balanceText),
+    }, todayLeftText),
     // Label
     h("div", { style: { fontSize: 13, color: C.sub, marginTop: 10, letterSpacing: "0.02em" } },
-      t("miniapp.hero.inAccount")),
-    // Sub-line (available + pace + days)
-    h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, subContext),
-    todayChip
+      t("miniapp.hero.leftToday")),
+    // Mid context: pace + days
+    h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, paceDaysContext),
+    // Reference (smallest, dimmest): bank balance + available
+    h("div", { style: { fontSize: 11, color: C.muted, marginTop: 4, opacity: 0.75 } }, refLine),
+    varianceChip,
+    paceImpactLine
   );
 }
 
