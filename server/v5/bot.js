@@ -179,12 +179,20 @@ function buttonLabelsFor(intent, lang) {
   let yesCode = "btnConfirm";
   switch (kind) {
     case "add_bill": {
-      // Recurrence flips the verb: 'once' commits a set-aside (Reserve),
-      // monthly/weekly/biweekly registers a recurring bill (Add bill).
-      const isOnce = !params.recurrence || params.recurrence === "once";
-      yesCode = isOnce ? "btnReserve" : "btnAddBill";
+      // Three flavors:
+      //   kind:"savings" → "Save" button (self-reservation)
+      //   recurrence:"once" → "Reserve" (one-time future commitment)
+      //   recurring → "Add bill" (regular obligation)
+      if (params.kind === "savings") {
+        yesCode = "btnSaveFor";
+      } else {
+        const isOnce = !params.recurrence || params.recurrence === "once";
+        yesCode = isOnce ? "btnReserve" : "btnAddBill";
+      }
       break;
     }
+    case "add_income":          yesCode = "btnAddIncome";     break;
+    case "remove_income":       yesCode = "btnRemoveIncome";  break;
     case "remove_bill":         yesCode = "btnRemoveBill";    break;
     case "record_spend":        yesCode = "btnLogSpend";      break;
     case "record_income":       yesCode = "btnLogIncome";     break;
@@ -306,15 +314,21 @@ function describeIntent(intent, state) {
         ? "Поправить баланс → " + M(p.newBalanceCents)
         : "Set balance to " + M(p.newBalanceCents);
     case "add_bill": {
-      // Unified commitment intent — labels adapt by recurrence:
-      //   once   → "Set aside" (saving-for / one-time future expense)
-      //   weekly/biweekly/monthly → "Add bill" (recurring obligation)
-      // Same engine data, surface label matches the user's mental model.
+      // Unified commitment intent — verb adapts to shape:
+      //   kind:"savings" → "Save for X" (self-reservation)
+      //   recurrence:"once" → "Set aside" (one-time future commitment)
+      //   recurring → "Add bill" (regular obligation)
       const isOnce = p.recurrence === "once" || !p.recurrence;
+      const isSavings = p.kind === "savings";
       const ru = lang === "ru";
-      const verb = isOnce
-        ? (ru ? "Отложить" : "Set aside")
-        : (ru ? "Добавить счёт" : "Add bill");
+      let verb;
+      if (isSavings) {
+        verb = ru ? "Откладывать на" : "Save for";
+      } else if (isOnce) {
+        verb = ru ? "Отложить" : "Set aside";
+      } else {
+        verb = ru ? "Добавить счёт" : "Add bill";
+      }
       const recurrenceTag = isOnce
         ? ""
         : " · " + p.recurrence;
@@ -413,6 +427,19 @@ function describeIntent(intent, state) {
         ? "Доход " + M(p.amountCents) + (p.note ? " · " + E(p.note) : "") + dateBadge
         : "Income " + M(p.amountCents) + (p.note ? " · " + E(p.note) : "") + dateBadge;
     }
+    case "add_income": {
+      // Future positive cashflow — the symmetric twin of add_bill.
+      // "Tracking: Acme — $4,000 · expected May 25"
+      const ru2 = lang === "ru";
+      const verb = ru2 ? "Жду доход" : "Tracking income";
+      const recTag = p.recurrence && p.recurrence !== "once" ? " · " + p.recurrence : "";
+      return verb + " *" + E(p.name || (ru2 ? "доход" : "income")) + "* — " + M(p.amountCents) +
+        " · " + (ru2 ? "к " : "expected ") + p.expectedDate + recTag;
+    }
+    case "remove_income":
+      return lang === "ru"
+        ? "Отменить ожидаемый доход *" + E(p.name || p.id || "") + "*"
+        : "Cancel expected income *" + E(p.name || p.id || "") + "*";
     case "update_payday":
       return lang === "ru"
         ? "Зарплата → " + (p.payday || "?") + (p.payFrequency ? " (" + p.payFrequency + ")" : "")
@@ -936,53 +963,85 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     const u = await db.resolveUser(prisma, "tg_" + telegramId);
     const state = await db.loadState(prisma, u.id);
     const lang = state.language === "ru" ? "ru" : "en";
+    // Beautiful sectioned help with brand voice. Three parts:
+    //   1. The idea (one paragraph — what Spendkitty does and doesn't)
+    //   2. How to talk to me (5 capability blocks with examples)
+    //   3. The numbers + commands (what to glance at, what to type)
+    //
+    // Each section short. Examples in italic. Commands at the bottom.
     const helpText = lang === "ru"
-      ? "*Spendkitty — что я умею:*\n\n" +
-        "💸 *Логировать расходы* — просто напиши:\n" +
-        "  • _\"30 на кофе\"_\n" +
-        "  • _\"500 руб такси домой\"_\n" +
-        "  • _\"вчера купил продукты на 1500\"_\n" +
-        "  • Голосовое — диктуй естественно\n" +
-        "  • Фото чека — пришли картинку\n\n" +
-        "❓ *Спрашивать про деньги:*\n" +
-        "  • _\"сколько на кофе в этом месяце?\"_\n" +
-        "  • _\"где больше всего трачу?\"_\n" +
-        "  • _\"могу ли я позволить себе 200?\"_\n\n" +
-        "📌 *Счета и зарплата:*\n" +
-        "  • _\"аренда 50000 первого числа\"_\n" +
-        "  • _\"зарплата пришла\"_\n\n" +
-        "*Команды:*\n" +
-        "  /today — текущий статус\n" +
-        "  /bills — счета (можно оплатить одним нажатием)\n" +
+      ? "🌱 *Spendkitty*\n\n" +
+        "Я делаю одну вещь: каждый день показываю тебе одно число — *сколько можешь потратить сегодня*. Счета зарезервированы, до зарплаты посчитано. Без бюджетов и категорий.\n\n" +
+        "*С чем ко мне можно прийти:*\n\n" +
+        "💸 *Логировать траты* — просто скажи естественно:\n" +
+        "  · _«5 на кофе»_\n" +
+        "  · _«500 руб такси домой»_\n" +
+        "  · _«вчера купил продукты на 1500»_\n" +
+        "  · 📷 пришли фото чека — разберу сам\n\n" +
+        "💰 *Доход — пришёл или ожидается:*\n" +
+        "  · _«получил зарплату»_ / _«получил 3000»_\n" +
+        "  · _«жду 4000 от Acme в пятницу»_ — учту заранее в твоём дневном числе\n\n" +
+        "🧾 *Счета:*\n" +
+        "  · _«аренда 50000 первого числа»_\n" +
+        "  · _«телефон 800 ежемесячно»_\n" +
+        "  · _«перенеси аренду на 15-е»_ — обновлю существующий счёт\n" +
+        "  · _«оплатил аренду»_ — отмечу как оплаченный\n\n" +
+        "🎯 *Откладывать на что-то:*\n" +
+        "  · _«отложить 200 на поездку друга к пятнице»_\n" +
+        "  · _«копить 100 в месяц на чрезвычайный фонд»_\n\n" +
+        "❓ *Спрашивать «могу ли я?»:*\n" +
+        "  · _«могу ли позволить 200?»_\n" +
+        "  · _«если потрачу 60 на ужин?»_\n\n" +
+        "🔢 *Что показывают цифры:*\n" +
+        "  · *На сегодня* — сколько можно потратить ПРЯМО сейчас\n" +
+        "  · *Дневной темп* — твой стабильный лимит на день\n" +
+        "  · *Доступно* — баланс минус резервы под счета\n" +
+        "  · *На счёте* — что реально в банке\n\n" +
+        "⚡ *Команды:*\n" +
+        "  /today — статус сейчас\n" +
+        "  /bills — счета (одним нажатием оплатить)\n" +
         "  /undo — отменить последнее\n" +
         "  /app — открыть дашборд\n" +
-        "  /privacy — как я обращаюсь с твоими данными\n" +
-        "  /export — выгрузка всех твоих данных (JSON)\n" +
-        "  /reset — сбросить всё"
-      : "*Spendkitty — what I can do:*\n\n" +
-        "💸 *Log spends* — just tell me:\n" +
-        "  • _\"30 on coffee\"_\n" +
-        "  • _\"$50 dinner at Lighthouse\"_\n" +
-        "  • _\"yesterday I forgot to log groceries 80\"_\n" +
-        "  • Voice note — talk naturally\n" +
-        "  • Receipt photo — snap and send\n\n" +
-        "❓ *Ask me about your money:*\n" +
-        "  • _\"how much on coffee this month?\"_\n" +
-        "  • _\"where do I spend most?\"_\n" +
-        "  • _\"can I afford $200?\"_\n" +
-        "  • _\"am I over budget on food?\"_\n\n" +
-        "📌 *Bills and income:*\n" +
-        "  • _\"rent 1400 due the 1st\"_\n" +
-        "  • _\"paid the rent\"_\n" +
-        "  • _\"paycheck arrived\"_\n\n" +
-        "*Commands:*\n" +
+        "  /privacy — что я храню\n" +
+        "  /export — выгрузить все данные (JSON)\n" +
+        "  /reset — стереть всё\n\n" +
+        "_«Математика готова. Ты просто тратишь.»_"
+      : "🌱 *Spendkitty*\n\n" +
+        "I do one thing: every day I tell you *one number — what you can spend today*. Bills are reserved. Days to payday are counted. No budgets, no categories, no homework.\n\n" +
+        "*What you can tell me:*\n\n" +
+        "💸 *Log a spend* — just say it naturally:\n" +
+        "  · _\"5 on coffee\"_\n" +
+        "  · _\"$50 dinner at Lighthouse\"_\n" +
+        "  · _\"yesterday I forgot to log $80 groceries\"_\n" +
+        "  · 📷 send a receipt photo — I'll read it\n\n" +
+        "💰 *Income — landed or coming:*\n" +
+        "  · _\"got paid\"_ / _\"got 3000 paycheck\"_\n" +
+        "  · _\"expecting 4000 from Acme on friday\"_ — I'll work it into today's number\n\n" +
+        "🧾 *Bills:*\n" +
+        "  · _\"rent 1400 due the 1st\"_\n" +
+        "  · _\"phone 80 monthly\"_\n" +
+        "  · _\"move rent to the 15th\"_ — I'll update the existing one\n" +
+        "  · _\"paid the rent\"_ — I'll mark it cleared\n\n" +
+        "🎯 *Save for something:*\n" +
+        "  · _\"save 200 for friend's trip by friday\"_\n" +
+        "  · _\"set aside 100/month for emergency fund\"_\n\n" +
+        "❓ *Ask \"can I?\":*\n" +
+        "  · _\"can I afford 200?\"_\n" +
+        "  · _\"if I spend 60 on dinner?\"_\n\n" +
+        "🔢 *What the numbers mean:*\n" +
+        "  · *To spend today* — what's left RIGHT NOW. Drops as you spend.\n" +
+        "  · *Daily pace* — your steady allowance per day.\n" +
+        "  · *Available* — balance minus reservations for bills.\n" +
+        "  · *In account* — what's literally in your bank.\n\n" +
+        "⚡ *Commands:*\n" +
         "  /today — current status\n" +
         "  /bills — bills (tap to pay)\n" +
         "  /undo — undo last action\n" +
         "  /app — open dashboard\n" +
-        "  /privacy — how I handle your data\n" +
-        "  /export — download all your data (JSON)\n" +
-        "  /reset — wipe everything";
+        "  /privacy — how your data is handled\n" +
+        "  /export — download everything (JSON)\n" +
+        "  /reset — wipe everything\n\n" +
+        "_\"The math is done. You just spend.\"_";
     await safeReply(ctx, helpText, { parse_mode: "Markdown" });
     return;
   }

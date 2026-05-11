@@ -166,11 +166,13 @@ const PAY_FREQS = ["weekly", "biweekly", "monthly", "irregular"];
 const INTENT_KINDS = [
   "setup_account",       // first-run only (engine still rejects on already-setup)
   "adjust_balance",      // correct balance after a mistake
-  "add_bill",            // recurring obligation: rent, phone, etc
+  "add_bill",            // recurring obligation: rent, phone, etc (or a savings goal)
   "update_bill",         // change due date / amount / recurrence on an existing bill
   "remove_bill",
+  "add_income",          // SCHEDULED future income (expected paycheck, invoice clearing, etc.)
+  "remove_income",       // remove a scheduled expected income
   "record_spend",        // money out
-  "record_income",       // money in (paycheck, refund)
+  "record_income",       // money in NOW (paycheck arrived, refund)
   "undo_last",           // pop last event
   "delete_transaction",  // remove a SPECIFIC past tx by id (not just last)
   "reset",               // wipe everything (confirm-gated)
@@ -226,7 +228,8 @@ function createFreshState() {
     timezone: "UTC",
     payday: null,
     payFrequency: null,
-    bills: {},          // keyed by billKey(name): { name, amountCents, dueDate, recurrence, paidThisCycle }
+    bills: {},          // keyed by billKey(name): { name, amountCents, dueDate, recurrence, paidThisCycle, kind?:"bill"|"savings" }
+    expectedIncomes: {}, // keyed by id: { id, name, amountCents, expectedDate, recurrence?, confidence?, createdAt }
     transactions: [],   // { id, ts, kind, amountCents, note, billKey?, date }
     events: [],         // audit log: { id, ts, intent, prevBalance, newBalance, undid? }
     onboardingDraft: null, // { balanceCents? } during the deterministic flow

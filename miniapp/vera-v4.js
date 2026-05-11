@@ -1922,14 +1922,25 @@ function BillsScreen(props) {
   var v = props.view, bills = props.bills || [], budgets = props.budgets || [], goals = props.goals || [];
   var sym = props.sym, sid = props.sid;
 
-  // Three buckets
+  // Four buckets — savings goals get their own section.
+  // The kind:"savings" flag on a bill means user is reserving for THEMSELVES
+  // (trip, emergency fund) vs an obligation to someone else (rent).
   var recurringKinds = { monthly: 1, weekly: 1, biweekly: 1 };
+  var isSavings = function(b) { return b && b.kind === "savings"; };
+  var savings = bills.filter(isSavings);
   var unpaidOnce = bills.filter(function(b) {
-    return !b.paidThisCycle && (!b.recurrence || b.recurrence === "once");
+    return !isSavings(b) && !b.paidThisCycle && (!b.recurrence || b.recurrence === "once");
   });
-  var recurring = bills.filter(function(b) { return recurringKinds[b.recurrence]; });
+  var recurring = bills.filter(function(b) {
+    return !isSavings(b) && recurringKinds[b.recurrence];
+  });
   var paidOnce = bills.filter(function(b) {
-    return b.paidThisCycle && (!b.recurrence || b.recurrence === "once");
+    return !isSavings(b) && b.paidThisCycle && (!b.recurrence || b.recurrence === "once");
+  });
+  // Expected incomes — exposed by the view (state.expectedIncomes)
+  var expectedIncomes = (v && Array.isArray(v.expectedIncomes)) ? v.expectedIncomes.slice() : [];
+  expectedIncomes.sort(function(a, b) {
+    return String(a.expectedDate).localeCompare(String(b.expectedDate));
   });
 
   // Sort within buckets
@@ -1939,6 +1950,10 @@ function BillsScreen(props) {
       || String(a.dueDate).localeCompare(String(b.dueDate));
   });
   paidOnce.sort(function(a, b) { return String(b.dueDate).localeCompare(String(a.dueDate)); });
+  savings.sort(function(a, b) {
+    return (a.paidThisCycle ? 1 : 0) - (b.paidThisCycle ? 1 : 0)
+      || String(a.dueDate).localeCompare(String(b.dueDate));
+  });
 
   return h("div", null,
     // BILLS HERO — matches Today tab visual weight at the top.
@@ -1981,6 +1996,63 @@ function BillsScreen(props) {
       h("div", { style: { padding: "0 16px" } },
         recurring.map(function(e) {
           return h(BillCard, { key: e.key, env: e, sym: sym, sid: sid, onPaid: props.onViewUpdate });
+        }))
+    ) : null,
+    // SECTION: Saving for (self-reservations, kind:"savings")
+    savings.length > 0 ? h("div", null,
+      h(SectionHeader, {
+        icon: "🎯",
+        title: "Saving for",
+        count: savings.length,
+        subtitle: (function() {
+          var total = savings.reduce(function(acc, b) {
+            return acc + (b.paidThisCycle ? 0 : (b.amountCents || 0));
+          }, 0);
+          return total > 0 ? "Set aside: " + sym + (total / 100).toFixed(0) : null;
+        })(),
+      }),
+      h("div", { style: { padding: "0 16px" } },
+        savings.map(function(e) {
+          return h(BillCard, { key: e.key, env: e, sym: sym, sid: sid, onPaid: props.onViewUpdate });
+        }))
+    ) : null,
+    // SECTION: Expected income (scheduled future inflow)
+    expectedIncomes.length > 0 ? h("div", null,
+      h(SectionHeader, {
+        icon: "💰",
+        title: "Expected income",
+        count: expectedIncomes.length,
+        subtitle: (function() {
+          var total = expectedIncomes.reduce(function(acc, ei) { return acc + (ei.amountCents || 0); }, 0);
+          return total > 0 ? "Coming: " + sym + (total / 100).toFixed(0) : null;
+        })(),
+      }),
+      h("div", { style: { padding: "0 16px" } },
+        expectedIncomes.map(function(ei) {
+          // Inline card — simpler than BillCard, no mark-paid (those are
+          // handled when the income actually lands via chat "got paid X").
+          var daysLabel = ei.daysUntilExpected != null
+            ? (ei.daysUntilExpected === 0 ? "today"
+               : ei.daysUntilExpected === 1 ? "tomorrow"
+               : ei.daysUntilExpected < 0 ? "overdue " + Math.abs(ei.daysUntilExpected) + "d"
+               : "in " + ei.daysUntilExpected + "d")
+            : "";
+          return h("div", {
+            key: ei.id,
+            style: {
+              background: C.card, border: "1px solid " + C.border, borderRadius: 12,
+              padding: "12px 14px", marginBottom: 8,
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            },
+          },
+            h("div", null,
+              h("div", { style: { fontSize: 14, fontWeight: 500 } }, ei.name),
+              h("div", { style: { fontSize: 11, color: C.muted, marginTop: 3 } },
+                daysLabel + (ei.recurrence && ei.recurrence !== "once" ? " · " + ei.recurrence : ""))
+            ),
+            h("div", { style: { fontFamily: "'Lora',serif", fontSize: 16, color: C.green } },
+              "+" + ei.amountFormatted)
+          );
         }))
     ) : null,
     // SECTION 3: Paid (one-time only — recurring "paid" just sits in section 2 with a checkmark)
@@ -2176,6 +2248,9 @@ function App() {
   // Discoverability without tutorial: chips tell users what's possible.
   var prefillState = useState("");
   var prefill = prefillState[0], setPrefill = prefillState[1];
+  // Help overlay state — opened by the ? button top-right.
+  var helpOpenState = useState(false);
+  var helpOpen = helpOpenState[0], setHelpOpen = helpOpenState[1];
 
   function openInputWith(text) {
     setPrefill(text || "");
@@ -2190,6 +2265,25 @@ function App() {
     },
   },
     content,
+    // Top-right ? button — opens the help overlay. Only shows once
+    // user is set up (no point on the not-set-up screen).
+    (data && data.view && data.view.setup) ? h("div", {
+      onClick: function() { tapHaptic && tapHaptic(); setHelpOpen(true); },
+      style: {
+        position: "fixed",
+        top: 14, right: 14,
+        width: 30, height: 30, borderRadius: "50%",
+        background: "rgba(31,31,31,0.85)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        color: C.sub, fontSize: 14, fontWeight: 600,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer", userSelect: "none",
+        zIndex: 60,
+        border: "1px solid " + C.border,
+      },
+    }, "?") : null,
+    helpOpen ? h(HelpModal, { onClose: function() { setHelpOpen(false); } }) : null,
     showFab ? h(InputFAB, { onOpen: onFabOpen }) : null,
     inputMode === "text" ? h(InputModal, {
       sid: sid.current,
@@ -2197,6 +2291,167 @@ function App() {
       onClose: function() { setInputMode(null); setPrefill(""); },
       onApplied: function() { setInputMode(null); setPrefill(""); loadView(); },
     }) : null
+  );
+}
+
+// ── HELP MODAL ─────────────────────────────────────────────
+// In-app help. Same content as the Telegram /help command but rendered
+// visually — bigger type, sectioned, icons, scrollable.
+//
+// Structure (mirrors /help):
+//   1. The idea — one paragraph, brand-voiced
+//   2. What you can tell me — 5 capability blocks with examples
+//   3. What the numbers mean — 4-line glossary
+//
+// Opens from the ? button top-right. Esc or backdrop tap closes.
+function HelpModal(props) {
+  useEffect(function() {
+    function onKey(e) { if (e.key === "Escape") props.onClose(); }
+    document.addEventListener("keydown", onKey);
+    return function() { document.removeEventListener("keydown", onKey); };
+  }, []);
+
+  function Section(opts) {
+    return h("div", { style: { marginBottom: 22 } },
+      h("div", {
+        style: {
+          fontSize: 11, color: C.sub,
+          textTransform: "uppercase", letterSpacing: "0.08em",
+          fontWeight: 600, marginBottom: 10,
+        },
+      }, opts.title),
+      opts.children
+    );
+  }
+  function Block(opts) {
+    return h("div", { style: { marginBottom: 14 } },
+      h("div", {
+        style: {
+          fontSize: 14, fontWeight: 500, color: C.text,
+          marginBottom: 6,
+          display: "flex", alignItems: "center", gap: 8,
+        },
+      },
+        h("span", { style: { fontSize: 16 } }, opts.icon),
+        h("span", null, opts.label)
+      ),
+      h("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.6, paddingLeft: 24 } },
+        opts.examples.map(function(ex, i) {
+          return h("div", { key: i, style: { fontStyle: "italic" } }, "· \"" + ex + "\"");
+        })
+      )
+    );
+  }
+  function GlossaryRow(opts) {
+    return h("div", {
+      style: {
+        display: "flex", gap: 10,
+        padding: "8px 0",
+        borderBottom: "1px solid " + C.border,
+        fontSize: 12,
+      },
+    },
+      h("div", { style: { color: C.text, fontWeight: 500, minWidth: 110 } }, opts.term),
+      h("div", { style: { color: C.muted, lineHeight: 1.5, flex: 1 } }, opts.def)
+    );
+  }
+
+  return h("div", {
+    onClick: function(e) { if (e.target === e.currentTarget) props.onClose(); },
+    style: {
+      position: "fixed", inset: 0,
+      background: "rgba(0,0,0,0.72)",
+      zIndex: 1100,
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      animation: "fadeIn 200ms ease",
+    },
+  },
+    h("div", {
+      onClick: function(e) { e.stopPropagation(); },
+      style: {
+        background: "#1a1a1a",
+        borderTopLeftRadius: 22, borderTopRightRadius: 22,
+        width: "100%", maxWidth: 520,
+        maxHeight: "85vh",
+        padding: "22px 22px 32px",
+        overflowY: "auto",
+        boxShadow: "0 -12px 50px rgba(0,0,0,0.6)",
+        animation: "modalIn 320ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+      },
+    },
+      // Drag handle
+      h("div", {
+        style: { width: 38, height: 4, background: "rgba(255,255,255,0.18)", borderRadius: 2, margin: "0 auto 22px" },
+      }),
+      // The idea (lead)
+      h("div", { style: { marginBottom: 24 } },
+        h("div", {
+          style: {
+            fontFamily: "'Lora',serif", fontSize: 28, fontWeight: 500,
+            color: C.text, letterSpacing: "-0.01em", marginBottom: 12,
+          },
+        }, "Spendkitty"),
+        h("div", { style: { fontSize: 13, color: C.sub, lineHeight: 1.6 } },
+          "I do one thing: every day I tell you ",
+          h("strong", { style: { color: C.text } }, "one number — what you can spend today"),
+          ". Bills are reserved. Days to payday are counted. ",
+          h("span", { style: { color: C.muted } }, "No budgets, no categories, no homework.")
+        )
+      ),
+      // Capabilities
+      Section({ title: "What you can tell me", children: h("div", null,
+        Block({ icon: "💸", label: "Log a spend", examples: [
+          "5 on coffee",
+          "$50 dinner at Lighthouse",
+          "yesterday I forgot to log $80 groceries",
+        ] }),
+        Block({ icon: "💰", label: "Income — landed or coming", examples: [
+          "got paid",
+          "got 3000 paycheck",
+          "expecting 4000 from Acme on friday",
+        ] }),
+        Block({ icon: "🧾", label: "Bills", examples: [
+          "rent 1400 due the 1st",
+          "phone 80 monthly",
+          "move rent to the 15th",
+          "paid the rent",
+        ] }),
+        Block({ icon: "🎯", label: "Save for something", examples: [
+          "save 200 for friend's trip by friday",
+          "set aside 100/month for emergency fund",
+        ] }),
+        Block({ icon: "❓", label: "Ask \"can I?\"", examples: [
+          "can I afford 200?",
+          "if I spend 60 on dinner?",
+        ] }),
+      ) }),
+      // Number glossary
+      Section({ title: "What the numbers mean", children: h("div", null,
+        GlossaryRow({ term: "To spend today", def: "What's left RIGHT NOW. Drops as you spend." }),
+        GlossaryRow({ term: "Daily pace", def: "Your steady allowance per day." }),
+        GlossaryRow({ term: "Available", def: "Balance minus reservations for bills." }),
+        GlossaryRow({ term: "In account", def: "What's literally in your bank." }),
+      ) }),
+      // Footer line
+      h("div", {
+        style: {
+          marginTop: 8, padding: "16px 0 0",
+          borderTop: "1px solid " + C.border,
+          fontSize: 11, color: C.muted,
+          fontStyle: "italic", textAlign: "center",
+        },
+      }, "\"The math is done. You just spend.\""),
+      // Close button
+      h("button", {
+        onClick: props.onClose,
+        style: {
+          marginTop: 22, width: "100%", padding: "13px",
+          background: C.text, border: "none", borderRadius: 10,
+          color: "#0F0F0F", fontSize: 13, fontWeight: 600,
+          fontFamily: "'Inter',sans-serif", cursor: "pointer",
+        },
+      }, "Got it")
+    )
   );
 }
 

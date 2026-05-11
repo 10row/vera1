@@ -101,13 +101,14 @@ function eventRefreshesPace(targetIntentKind, targetIntentParams, targetEvent, t
     targetIntentKind === "adjust_balance" ||
     targetIntentKind === "update_payday"
   ) return true;
-  // add_bill / remove_bill / update_bill: apply doesn't refresh today's
-  // pace (today is locked) — therefore undo also doesn't refresh.
-  // Symmetry preserved: pace stays put through the apply+undo round-trip
-  // regardless of which order spends were made.
+  // add_bill / remove_bill / update_bill / add_income / remove_income:
+  // apply doesn't refresh today's pace (today is locked) — therefore
+  // undo also doesn't refresh. Tomorrow's rollover absorbs the change.
   if (targetIntentKind === "add_bill" ||
       targetIntentKind === "remove_bill" ||
-      targetIntentKind === "update_bill") return false;
+      targetIntentKind === "update_bill" ||
+      targetIntentKind === "add_income" ||
+      targetIntentKind === "remove_income") return false;
   if (targetIntentKind === "record_spend" || targetIntentKind === "record_income") {
     // Backdated → refreshes (historical cycle correction)
     if (params.date && params.date !== todayStr) return true;
@@ -264,8 +265,15 @@ function applyIntent(state, intent) {
       if (!dueDate) throwCoded("engineDueDateInvalid", "Need a valid due date");
       const key = m.billKey(name);
       if (next.bills[key]) throwCoded("engineDupBill", "Bill already exists: " + name, { name });
+      // kind: "bill" | "savings" — same primitive, different surface label.
+      // Bills are obligations to others (rent, phone, etc). Savings are
+      // self-reservations (trip, emergency fund). The math is identical
+      // — both carve out from disposable. The UI shows them in
+      // separate sections so the user's mental model stays clear.
+      const billKind = (p.kind === "savings") ? "savings" : "bill";
       next.bills[key] = {
         name, amountCents: amt, dueDate, recurrence,
+        kind: billKind,
         paidThisCycle: false,
         createdAt: Date.now(),
         // Foreign-currency info: preserve original-currency details so the
@@ -339,6 +347,62 @@ function applyIntent(state, intent) {
         billKey: key,
         prevBill: prev,
       });
+      next.events.push(ev);
+      return { state: next, event: ev };
+    }
+
+    // ── EXPECTED INCOME (scheduled future positive cashflow) ──
+    // A user-known future inflow: paycheck, invoice clearing, refund
+    // arriving. Engine stores it; pace math includes it within the
+    // current cycle so the user's daily number reflects known-coming
+    // money. When the user later says "got paid X" or confirms a
+    // landed-income check-in, the matching expected income clears.
+    //
+    // Today is locked — adding expected income mid-day does NOT shift
+    // today's pace. Tomorrow's rollover absorbs it.
+    case "add_income": {
+      if (!next.setup) throwCoded("setupFirst", "Set up first.");
+      const name = String(p.name || "income").trim().slice(0, 60);
+      const amt = Math.round(Number(p.amountCents));
+      if (!Number.isFinite(amt) || amt <= 0) throwCoded("engineInvalidAmount", "Invalid amount");
+      const expectedDate = m.normalizeDate(p.expectedDate || p.dueDate);
+      if (!expectedDate) throwCoded("engineDueDateInvalid", "Need a valid expected date");
+      const recurrence = m.RECURRENCES.includes(p.recurrence) ? p.recurrence : "once";
+      const confidence = (p.confidence === "firm" || p.confidence === "expected") ? p.confidence : "expected";
+      if (!next.expectedIncomes || typeof next.expectedIncomes !== "object") next.expectedIncomes = {};
+      const id = m.uid();
+      next.expectedIncomes[id] = {
+        id, name, amountCents: amt, expectedDate,
+        recurrence, confidence,
+        createdAt: Date.now(),
+      };
+      const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents, expectedIncomeId: id });
+      next.events.push(ev);
+      return { state: next, event: ev };
+    }
+
+    case "remove_income": {
+      if (!next.setup) throwCoded("setupFirst", "Set up first.");
+      const id = String(p.id || "").trim();
+      const byName = String(p.name || "").trim().toLowerCase();
+      if (!next.expectedIncomes || typeof next.expectedIncomes !== "object") next.expectedIncomes = {};
+      let found = null;
+      if (id && next.expectedIncomes[id]) {
+        found = next.expectedIncomes[id];
+        delete next.expectedIncomes[id];
+      } else if (byName) {
+        // Match by name (case-insensitive). If multiple, remove ALL —
+        // matches "cancel my expected client payments" sort of usage.
+        for (const k of Object.keys(next.expectedIncomes)) {
+          if (String(next.expectedIncomes[k].name || "").toLowerCase() === byName) {
+            found = next.expectedIncomes[k];
+            delete next.expectedIncomes[k];
+            break;
+          }
+        }
+      }
+      if (!found) throwCoded("engineNoSuchBill", "No expected income matching that name/id", { name: p.name || p.id });
+      const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents, removed: found });
       next.events.push(ev);
       return { state: next, event: ev };
     }
@@ -548,6 +612,56 @@ function applyIntent(state, intent) {
         kind: "income", amountCents: amt, note,
         date: txDate,
       });
+
+      // EXPECTED-INCOME MATCHING — if user previously scheduled an
+      // expected income that matches (by name or by being the
+      // earliest-due), clear it. Snapshot for undo.
+      // Match strategy: explicit p.expectedIncomeId (programmatic) >
+      // name fuzzy match (case-insensitive contains either way) >
+      // first expected income whose date is within ±7 days of today.
+      let clearedExpected = null;
+      if (next.expectedIncomes && typeof next.expectedIncomes === "object") {
+        const keys = Object.keys(next.expectedIncomes);
+        if (p.expectedIncomeId && next.expectedIncomes[p.expectedIncomeId]) {
+          clearedExpected = next.expectedIncomes[p.expectedIncomeId];
+        } else if (note) {
+          const noteLower = note.toLowerCase();
+          for (const k of keys) {
+            const ei = next.expectedIncomes[k];
+            const eiNameLower = String(ei.name || "").toLowerCase();
+            if (!eiNameLower) continue;
+            if (noteLower.includes(eiNameLower) || eiNameLower.includes(noteLower)) {
+              clearedExpected = ei;
+              break;
+            }
+          }
+        }
+        // Fall back to nearest-due expected income (within ±7 days)
+        // if no name match. Tightens noise vs. matching anything.
+        if (!clearedExpected) {
+          let nearest = null;
+          let bestDist = 8 * 24 * 60 * 60 * 1000;
+          for (const k of keys) {
+            const ei = next.expectedIncomes[k];
+            if (!ei.expectedDate) continue;
+            const dt = new Date(ei.expectedDate + "T12:00:00Z").getTime();
+            const dist = Math.abs(Date.now() - dt);
+            if (dist < bestDist) { nearest = ei; bestDist = dist; }
+          }
+          if (nearest) clearedExpected = nearest;
+        }
+        if (clearedExpected) {
+          // For recurring expected incomes (weekly paycheck, monthly
+          // freelancer retainer), advance the expectedDate by one
+          // cycle rather than deleting. One-time ones get deleted.
+          if (clearedExpected.recurrence && clearedExpected.recurrence !== "once") {
+            clearedExpected.expectedDate = m.addBillCycle(clearedExpected.expectedDate, clearedExpected.recurrence);
+          } else {
+            delete next.expectedIncomes[clearedExpected.id];
+          }
+        }
+      }
+
       // If user got their paycheck, advance payday automatically.
       const prevPaydayForCycle = next.payday;
       if (next.payday && next.payFrequency && next.payFrequency !== "irregular") {
@@ -567,9 +681,22 @@ function applyIntent(state, intent) {
       // (so it can refresh pace symmetrically). Without this, undoing a
       // paycheck wouldn't refresh, leaving today's pace at a stale
       // post-paycheck value.
+      // Also snapshot which expected income was cleared (if any) so undo
+      // can restore it. Snapshot includes pre-update fields if recurring.
       const ev = makeEvent(intent, prevBalance, {
         newBalance: next.balanceCents,
         advancedPayday,
+        clearedExpectedIncome: clearedExpected ? {
+          id: clearedExpected.id,
+          name: clearedExpected.name,
+          amountCents: clearedExpected.amountCents,
+          expectedDate: clearedExpected.expectedDate,
+          recurrence: clearedExpected.recurrence,
+          confidence: clearedExpected.confidence,
+          createdAt: clearedExpected.createdAt,
+          // pre-update date (in case of recurring advance)
+          prevExpectedDate: clearedExpected.recurrence !== "once" && p.date ? null : clearedExpected.expectedDate,
+        } : null,
       });
       next.events.push(ev);
       return { state: next, event: ev };
@@ -699,15 +826,6 @@ function applyIntent(state, intent) {
           // If this was a bill payment that advanced a bill, restore the
           // bill EXACTLY (both paidThisCycle AND dueDate) from the
           // snapshot we now persist on the event.
-          //
-          // CRITICAL FIX: prior code only reset paidThisCycle and left
-          // dueDate stuck at the advanced value. Same bug as
-          // delete_transaction had — bill silently slipped to next
-          // cycle and engine reservation lost the bill amount.
-          //
-          // Backward-compat: events from before prevBill existed have
-          // no snapshot. We fall back to the old "just reset
-          // paidThisCycle" behavior so historic undos still work.
           if (target.intent.params && target.intent.params.billKey) {
             const k = m.billKey(target.intent.params.billKey);
             if (next.bills[k]) {
@@ -718,6 +836,22 @@ function applyIntent(state, intent) {
                 next.bills[k].paidThisCycle = false;
               }
             }
+          }
+          // If this record_income CLEARED an expected income, restore it.
+          // For one-time: re-add it. For recurring: rewind the
+          // expectedDate to its pre-advance value.
+          if (target.clearedExpectedIncome) {
+            if (!next.expectedIncomes || typeof next.expectedIncomes !== "object") next.expectedIncomes = {};
+            const e = target.clearedExpectedIncome;
+            next.expectedIncomes[e.id] = {
+              id: e.id,
+              name: e.name,
+              amountCents: e.amountCents,
+              expectedDate: e.expectedDate,
+              recurrence: e.recurrence,
+              confidence: e.confidence,
+              createdAt: e.createdAt,
+            };
           }
           break;
         case "add_bill": {
@@ -739,6 +873,22 @@ function applyIntent(state, intent) {
             if (target.prevBill.amountCents != null) next.bills[k].amountCents = target.prevBill.amountCents;
             if (target.prevBill.dueDate != null) next.bills[k].dueDate = target.prevBill.dueDate;
             if (target.prevBill.recurrence != null) next.bills[k].recurrence = target.prevBill.recurrence;
+          }
+          break;
+        }
+        case "add_income": {
+          // Undo creating an expected income — remove the entry.
+          const id = target.expectedIncomeId;
+          if (id && next.expectedIncomes && next.expectedIncomes[id]) {
+            delete next.expectedIncomes[id];
+          }
+          break;
+        }
+        case "remove_income": {
+          // Undo removing an expected income — put it back.
+          if (target.removed) {
+            if (!next.expectedIncomes || typeof next.expectedIncomes !== "object") next.expectedIncomes = {};
+            next.expectedIncomes[target.removed.id] = target.removed;
           }
           break;
         }

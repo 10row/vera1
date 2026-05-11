@@ -183,6 +183,110 @@ test("[validator] update_bill with past dueDate REJECTED", () => {
   assertEq(v.ok, false);
 });
 
+// ── add_income / remove_income (expected future income) ──
+test("[validator] add_income with past expectedDate REJECTED", () => {
+  const v = validateIntent(setup(500000), {
+    kind: "add_income",
+    params: { name: "Client X", amountCents: 200000, expectedDate: "2020-01-01" },
+  }, TODAY);
+  assertEq(v.ok, false);
+});
+
+test("[validator] add_income with no expectedDate → CLARIFY", () => {
+  const v = validateIntent(setup(500000), {
+    kind: "add_income",
+    params: { name: "Client X", amountCents: 200000 },
+  }, TODAY);
+  assertEq(v.ok, false);
+  assertTrue(!!v.clarify, "missing expectedDate should soft-clarify");
+  assertEq(v.clarify.field, "expectedDate");
+});
+
+test("[validator] add_income with valid params PASSES", () => {
+  const futureDate = m.addDays(m.today("UTC"), 7);
+  const v = validateIntent(setup(500000), {
+    kind: "add_income",
+    params: { name: "Client X", amountCents: 200000, expectedDate: futureDate },
+  }, m.today("UTC"));
+  assertEq(v.ok, true);
+});
+
+test("[engine] add_income stores the expected income", () => {
+  let s = setup(500000);
+  const futureDate = m.addDays(m.today("UTC"), 7);
+  s = applyIntent(s, {
+    kind: "add_income",
+    params: { name: "Acme invoice", amountCents: 400000, expectedDate: futureDate, confidence: "firm" },
+  }).state;
+  const incomes = Object.values(s.expectedIncomes || {});
+  assertEq(incomes.length, 1);
+  assertEq(incomes[0].name, "Acme invoice");
+  assertEq(incomes[0].amountCents, 400000);
+  assertEq(incomes[0].confidence, "firm");
+});
+
+test("[view] pace includes expected income within cycle", () => {
+  const m_ = require("../model");
+  const { compute } = require("../view");
+  // Use a FUTURE payday so the cycle window covers the expected income.
+  // The shared `setup()` helper above hard-codes a 2025 payday which
+  // would be in the past for current-year tests; bypass it here.
+  const futurePayday = m_.addDays(m_.today("UTC"), 30);
+  let s = m_.createFreshState();
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 100000, payday: futurePayday, payFrequency: "monthly" },
+  }).state;
+  const futureDate = m_.addDays(m_.today("UTC"), 7);
+  s = applyIntent(s, {
+    kind: "add_income",
+    params: { name: "Refund", amountCents: 50000, expectedDate: futureDate },
+  }).state;
+  const v = compute(s);
+  // Without expected income: disposable=$1,000. With: $1,500.
+  assertEq(v.expectedIncomeInCycleCents, 50000, "expected income surfaced");
+  assertTrue(v.disposableCents >= 100000, "disposable reflects expected income");
+});
+
+test("[engine] record_income matching by name clears the expected income", () => {
+  let s = setup(500000);
+  const futureDate = m.addDays(m.today("UTC"), 7);
+  s = applyIntent(s, {
+    kind: "add_income",
+    params: { name: "Acme", amountCents: 400000, expectedDate: futureDate },
+  }).state;
+  assertEq(Object.keys(s.expectedIncomes).length, 1);
+  // Now record the actual income with a note matching the name.
+  s = applyIntent(s, {
+    kind: "record_income",
+    params: { amountCents: 400000, note: "Acme invoice paid" },
+  }).state;
+  assertEq(Object.keys(s.expectedIncomes).length, 0, "expected income should be cleared");
+});
+
+// ── savings goal (add_bill with kind:'savings') ──
+test("[engine] add_bill with kind:'savings' tags the bill correctly", () => {
+  let s = setup(500000);
+  const futureDate = m.addDays(m.today("UTC"), 30);
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Tokyo trip", amountCents: 200000, dueDate: futureDate, recurrence: "once", kind: "savings" },
+  }).state;
+  const key = m.billKey("Tokyo trip");
+  assertEq(s.bills[key].kind, "savings", "savings flag stored on the bill");
+});
+
+test("[engine] add_bill without kind defaults to 'bill'", () => {
+  let s = setup(500000);
+  const futureDate = m.addDays(m.today("UTC"), 30);
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 100000, dueDate: futureDate, recurrence: "monthly" },
+  }).state;
+  const key = m.billKey("Rent");
+  assertEq(s.bills[key].kind, "bill", "default kind is 'bill'");
+});
+
 test("[engine] update_bill changes the bill in place + preserves snapshot for undo", () => {
   let s = setup();
   s = applyIntent(s, { kind: "add_bill", params: { name: "Rent", amountCents: 100000, dueDate: "2025-05-01", recurrence: "monthly" } }).state;

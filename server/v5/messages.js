@@ -50,6 +50,12 @@ const MESSAGES = {
   noBillMatch:     { en: "No bill matching {name}.",                         ru: "Нет счёта, похожего на «{name}»." },
   updateBillNoChange: { en: "Tell me what to change — date, amount, or recurrence.",
                        ru: "Скажи что менять — дату, сумму или периодичность." },
+  expectedIncomePastDate: { en: "Expected income date is in the past — use \"got paid X\" to log money that already landed.",
+                            ru: "Дата дохода в прошлом — напиши «получил X», чтобы записать уже пришедшие деньги." },
+  noExpectedIncomeMatch: { en: "No expected income by that name.",
+                           ru: "Нет ожидаемого дохода с таким названием." },
+  clarifyExpectedIncomeDate: { en: "When do you expect it? (a date — \"friday\", \"the 25th\", \"in 2 weeks\")",
+                               ru: "Когда ожидаешь? («в пятницу», «к 25-му», «через 2 недели»)" },
 
   // ── spend / income ──
   needValidAmount: { en: "Need a valid amount.",                             ru: "Нужна корректная сумма." },
@@ -109,6 +115,9 @@ const MESSAGES = {
   // \"Yes the answer is yes.\" Per-intent verbs are unambiguous.
   btnReserve:            { en: "Reserve",                                    ru: "Отложить" },
   btnAddBill:            { en: "Add bill",                                   ru: "Добавить" },
+  btnSaveFor:            { en: "Save for",                                   ru: "Откладывать" },
+  btnAddIncome:          { en: "Track income",                               ru: "Жду доход" },
+  btnRemoveIncome:       { en: "Cancel income",                              ru: "Отменить" },
   btnRemoveBill:         { en: "Remove",                                     ru: "Удалить" },
   btnLogSpend:           { en: "Log it",                                     ru: "Записать" },
   btnLogIncome:          { en: "Log income",                                 ru: "Записать доход" },

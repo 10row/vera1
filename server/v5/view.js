@@ -46,8 +46,33 @@ function compute(state) {
     else if (daysUntilDue <= 14) upcoming.push(item);
   }
 
-  const disposable = Math.max(0, balance - obligated);
-  const deficit = Math.max(0, obligated - balance);
+  // ── EXPECTED INCOME within current cycle ──
+  // Sum future positive cashflows whose date falls within the cycle
+  // (today → payday, OR rolling 30-day window for irregular). Pace
+  // includes them so the user's daily number reflects known-coming
+  // money — closes the contractor "I know $4k is coming Friday but
+  // pace says I'm tight all week" anxiety.
+  //
+  // Confidence flag: "firm" included always; "expected" also included
+  // for now (math optimistic by default — bot will recheck on the
+  // expected date and recompute downward if it doesn't land).
+  const cycleEndDate = (state.payday && state.payFrequency !== "irregular")
+    ? state.payday
+    : m.addDays(todayStr, 30);
+  let expectedIncomeInCycle = 0;
+  for (const id of Object.keys(state.expectedIncomes || {})) {
+    const ei = state.expectedIncomes[id];
+    if (!ei || !ei.expectedDate || !Number.isFinite(ei.amountCents)) continue;
+    if (ei.expectedDate < todayStr) continue; // past — should auto-clear
+    if (ei.expectedDate > cycleEndDate) continue; // beyond cycle
+    expectedIncomeInCycle += ei.amountCents;
+  }
+
+  // Disposable now includes expected-income-in-cycle. The daily number
+  // therefore reflects what the user will actually have to spend over
+  // the cycle, not just what's literally in the bank right now.
+  const disposable = Math.max(0, balance + expectedIncomeInCycle - obligated);
+  const deficit = Math.max(0, obligated - balance - expectedIncomeInCycle);
   // Daily pace per user's mental model: FROZEN within the day. Recomputes
   // only on cycle events + at first event of a new day. State stores
   // `dailyPaceCents` and `dailyPaceComputedDate`; engine writes both.
@@ -125,7 +150,21 @@ function compute(state) {
       daysUntilDue: m.daysBetween(todayStr, b.dueDate),
       paidThisCycle: !!b.paidThisCycle,
       recurrence: b.recurrence,
+      kind: b.kind || "bill",
     })),
+    // Expected (scheduled future) incomes. Empty array if none.
+    expectedIncomes: Object.values(state.expectedIncomes || {}).map(ei => ({
+      id: ei.id,
+      name: ei.name,
+      amountCents: ei.amountCents,
+      amountFormatted: m.toMoney(ei.amountCents, sym),
+      expectedDate: ei.expectedDate,
+      daysUntilExpected: m.daysBetween(todayStr, ei.expectedDate),
+      recurrence: ei.recurrence,
+      confidence: ei.confidence || "expected",
+    })),
+    expectedIncomeInCycleCents: expectedIncomeInCycle,
+    expectedIncomeInCycleFormatted: m.toMoney(expectedIncomeInCycle, sym),
     dueNow,
     upcoming,
     invariantOk: balance === obligated + disposable - deficit + (deficit > 0 ? deficit - (deficit - 0) : 0) || true,

@@ -112,6 +112,35 @@ function validateIntent(state, intent, todayStr, lang) {
       return ok();
     }
 
+    case "add_income": {
+      if (!state.setup) return reject(M(L, "setupFirst"));
+      const amt = Math.round(Number(p.amountCents));
+      if (!Number.isFinite(amt) || amt <= 0) return reject(M(L, "needValidAmount"));
+      const ed = m.normalizeDate(p.expectedDate || p.dueDate);
+      if (!ed) {
+        return clarify("clarifyExpectedIncomeDate", "expectedDate",
+          M(L, "clarifyExpectedIncomeDate"));
+      }
+      if (ed < todayStr) return reject(M(L, "expectedIncomePastDate"));
+      const recurrence = p.recurrence;
+      if (recurrence && !m.RECURRENCES.includes(recurrence)) return reject(M(L, "badRecurrence"));
+      return ok();
+    }
+
+    case "remove_income": {
+      if (!state.setup) return reject(M(L, "setupFirst"));
+      const id = String(p.id || "").trim();
+      const name = String(p.name || "").trim().toLowerCase();
+      if (!id && !name) return reject(M(L, "noExpectedIncomeMatch"));
+      const ei = state.expectedIncomes || {};
+      let matched = id && ei[id];
+      if (!matched && name) {
+        matched = Object.values(ei).find(e => String(e.name || "").toLowerCase() === name);
+      }
+      if (!matched) return reject(M(L, "noExpectedIncomeMatch"));
+      return ok();
+    }
+
     case "update_bill": {
       if (!state.setup) return reject(M(L, "setupFirst"));
       const key = m.billKey(p.name || p.key);
