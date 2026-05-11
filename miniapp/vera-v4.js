@@ -78,11 +78,26 @@ var C = {
 };
 
 // ── HELPERS ──────────────────────────────────────────────────
+// Browser timezone — sent on every API request so the server can show
+// dates in the user's actual local time, not UTC. Previously the server
+// always used UTC for "today", which meant users in +N timezones saw
+// yesterday's date in the mini app any time between midnight UTC and
+// midnight-local. The fix is unintrusive: just send the IANA tz string
+// in a custom header on every request; server saves it on first request
+// when state.timezone is unset.
+function browserTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch { return ""; }
+}
+
 function authHeaders() {
   var initData = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp.initData : "";
   if (!initData && window.TG_INIT_DATA) initData = window.TG_INIT_DATA;
   var headers = { "Content-Type": "application/json" };
   if (initData) headers["X-Telegram-Init-Data"] = initData;
+  var tz = browserTimezone();
+  if (tz) headers["X-User-Timezone"] = tz;
   return headers;
 }
 

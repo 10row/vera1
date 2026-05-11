@@ -66,10 +66,35 @@ function requireTelegramAuth(req, res, next) {
       req.params.sid = "tg_" + String(user.id);
     }
     req.tgUser = user;
+    // Capture the user's IANA timezone (sent by the mini app on every
+    // request). Persisted via maybeUpdateUserTimezone() in the routes
+    // that touch state. Without this, "today" was always UTC — users
+    // in +N timezones saw yesterday's date for many hours.
+    const tz = req.headers["x-user-timezone"];
+    if (tz && typeof tz === "string" && tz.length < 64) {
+      req.userTimezone = tz.trim();
+    }
     return next();
   }
   if (sid && sid.startsWith("tg_")) return res.status(401).json({ error: "Missing Telegram auth" });
   next();
+}
+
+// Save the user's reported timezone to their state if it's missing or
+// stale. Called from any route that loads state for a confirmed user.
+// Returns true if state was mutated (caller should saveState).
+function maybeUpdateUserTimezone(state, reportedTz) {
+  if (!reportedTz || !state) return false;
+  // Validate the timezone is a real IANA zone the runtime knows.
+  try { Intl.DateTimeFormat("en", { timeZone: reportedTz }).format(0); }
+  catch { return false; }
+  // Update if: never set, or set to UTC (the default) and user is not
+  // actually in UTC.
+  if (!state.timezone || (state.timezone === "UTC" && reportedTz !== "UTC")) {
+    state.timezone = reportedTz;
+    return true;
+  }
+  return false;
 }
 
 // ── RATE LIMITING ─────────────────────────────────
@@ -429,6 +454,13 @@ app.get("/api/v4/view/:sid", requireTelegramAuth, async (req, res) => {
   try {
     const u = await db.resolveUser(prisma, req.params.sid);
     const state = await db.loadState(prisma, u.id);
+    // First-visit timezone capture: if the mini app reports a real IANA
+    // timezone and state doesn't have one (or has the default "UTC" with
+    // a non-UTC user), update + save. All subsequent date math uses the
+    // user's local "today" instead of UTC.
+    if (req.userTimezone && maybeUpdateUserTimezone(state, req.userTimezone)) {
+      await db.saveState(prisma, u.id, state);
+    }
     const view = v5ToV4View(state);
     res.json({
       view,
@@ -511,6 +543,9 @@ app.get("/api/v5/view/:sid", requireTelegramAuth, rateLimit("default"), async (r
   try {
     const u = await db.resolveUser(prisma, req.params.sid);
     const state = await db.loadState(prisma, u.id);
+    if (req.userTimezone && maybeUpdateUserTimezone(state, req.userTimezone)) {
+      await db.saveState(prisma, u.id, state);
+    }
     const view = compute(state);
     res.json({ view, hero: heroLine(state, state.language) });
   } catch (e) {

@@ -321,9 +321,14 @@ function renderForPrompt(graph) {
   lines.push("- last 30d spend: " + graph.summary.spendLast30);
   lines.push("- monthly bills load: " + graph.summary.billsMonthlyEstimate);
   if (graph.summary.postBillsBalance && graph.summary.daysToPayday > 0) {
+    // NOTE: no "/day" suffix here. The user's "daily" number lives on
+    // STATE.daily_pace (the canonical, frozen-per-day value the bot
+    // uses everywhere). Exposing a SECOND daily figure here led the
+    // AI to compute weeklySpend/7 and quote that as "daily" — wrong
+    // concept (historical velocity vs allowance). Single source of
+    // truth: state.daily_pace.
     lines.push("- after bills runway: " + graph.summary.postBillsBalance
-      + " for " + graph.summary.daysToPayday + " days"
-      + (graph.summary.postBillsDailyMin ? " (" + graph.summary.postBillsDailyMin + "/day)" : ""));
+      + " for " + graph.summary.daysToPayday + " days");
   }
   if (graph.summary.topCategories.length) {
     lines.push("- top categories last 30d: " + graph.summary.topCategories
