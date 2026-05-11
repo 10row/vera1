@@ -80,11 +80,16 @@ const PACE_HISTORY_MAX_DAYS = 400;
 // THE RULE (used by undo_last + delete_transaction):
 //   refresh IFF the underlying event WAS one that originally refreshed
 //   pace when applied. Specifically:
-//     - setup_account, adjust_balance, add_bill, remove_bill, update_payday  → always
-//     - record_spend / record_income with date < today (backdated)          → yes
-//     - record_spend with billKey (bill_payment changes obligation state)   → yes
-//     - record_income that advanced payday (paycheck)                       → yes
-//     - Today-dated discretionary record_spend / record_income              → NO
+//     - setup_account                                          → always (initial baseline)
+//     - adjust_balance (balance correction)                    → always (math premise changed)
+//     - update_payday (changes days-to-payday denominator)     → always
+//     - record_spend / record_income with date < today         → yes (historical correction)
+//     - record_spend with billKey (bill_payment)               → yes (obligation flips)
+//     - record_income that advanced payday (paycheck)          → yes (new cycle)
+//     - add_bill / remove_bill                                 → NO (today is locked,
+//                                                                  tomorrow's rollover
+//                                                                  absorbs the change)
+//     - Today-dated discretionary record_spend / record_income → NO
 //   For delete_transaction: gate on the deleted tx's kind + date.
 //
 // The rule is the SYMMETRY of refreshPace on apply. Auditable by
@@ -94,15 +99,22 @@ function eventRefreshesPace(targetIntentKind, targetIntentParams, targetEvent, t
   if (
     targetIntentKind === "setup_account" ||
     targetIntentKind === "adjust_balance" ||
-    targetIntentKind === "add_bill" ||
-    targetIntentKind === "remove_bill" ||
     targetIntentKind === "update_payday"
   ) return true;
+  // add_bill / remove_bill: apply doesn't refresh today's pace
+  // (today is locked) — therefore undo also doesn't refresh.
+  // Symmetry preserved: pace stays put through the apply+undo round-trip
+  // regardless of which order spends were made.
+  if (targetIntentKind === "add_bill" || targetIntentKind === "remove_bill") return false;
   if (targetIntentKind === "record_spend" || targetIntentKind === "record_income") {
-    // Backdated → refreshes
+    // Backdated → refreshes (historical cycle correction)
     if (params.date && params.date !== todayStr) return true;
-    // Bill payment (today-dated bill_payment changes obligation when undone)
-    if (targetIntentKind === "record_spend" && params.billKey) return true;
+    // Bill payment (today-dated) — does NOT refresh. The bill_payment
+    // apply doesn't refresh (Model B) AND today is locked, so undo
+    // also doesn't refresh. Pure symmetry: today's pace stays put
+    // through apply+undo of any same-day intent. The obligation flips
+    // back to unpaid (correctly) but the headline pace is locked
+    // for today. Tomorrow's rollover absorbs the change.
     // Paycheck (income that advanced payday)
     if (targetIntentKind === "record_income" && targetEvent && targetEvent.advancedPayday) return true;
     // Legacy events without advancedPayday flag: be conservative for
@@ -119,12 +131,14 @@ function eventRefreshesPace(targetIntentKind, targetIntentParams, targetEvent, t
 // For delete_transaction: gate on the tx's kind + date.
 function txDeleteRefreshesPace(tx, todayStr) {
   if (!tx) return false;
-  // Backdated → cycle correction
+  // Backdated → cycle correction (rewriting history)
   if (tx.date && tx.date !== todayStr) return true;
-  // Bill payment → obligation comes back when bill flips to unpaid
-  if (tx.kind === "bill_payment") return true;
   // Adjust-balance "correction" tx (balance baseline change)
   if (tx.kind === "correction") return true;
+  // Bill payment — NO refresh. Apply doesn't refresh (Model B); pure
+  // symmetry means delete doesn't either. Today's pace stays locked;
+  // the bill flips back to unpaid but the headline pace doesn't shift.
+  // Tomorrow's rollover absorbs the change.
   // Income that originally advanced payday — can't tell from the tx
   // alone (no advancedPayday flag on the tx itself). Conservative for
   // income only.
@@ -260,8 +274,18 @@ function applyIntent(state, intent) {
             ? { originalAmount: p.originalAmount, originalCurrency: p.originalCurrency }
             : {}),
       };
-      // CYCLE EVENT: a new bill changes "obligated" → re-baseline pace.
-      refreshPace(next, todayStr);
+      // ── TODAY IS LOCKED ──
+      // Adding a bill mid-day does NOT change today's pace. The day's
+      // allowance is set at morning rollover and stays put until tomorrow.
+      // The new obligation is absorbed when pace recomputes at the next
+      // day rollover. This restores the "today is locked" promise that
+      // Model B documented but the old code violated (it called
+      // refreshPace on every cycle event, shifting today's number when
+      // the user added a bill at 2pm).
+      //
+      // The confirm card preview (simulateAddBill in view.js) still
+      // shows the user the projected pace AFTER tomorrow — they see
+      // the full impact before tapping Reserve.
       const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents, billKey: key });
       next.events.push(ev);
       return { state: next, event: ev };
@@ -273,8 +297,9 @@ function applyIntent(state, intent) {
       if (!next.bills[key]) throwCoded("engineNoSuchBill", "No such bill: " + (p.name || p.key), { name: p.name || p.key });
       const removed = next.bills[key];
       delete next.bills[key];
-      // CYCLE EVENT: removing a bill changes "obligated" → re-baseline.
-      refreshPace(next, todayStr);
+      // TODAY IS LOCKED — same rule as add_bill. Removing a bill frees
+      // up obligated money but today's pace stays at the morning value.
+      // Tomorrow's rollover refresh absorbs the change.
       const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents, removed });
       next.events.push(ev);
       return { state: next, event: ev };

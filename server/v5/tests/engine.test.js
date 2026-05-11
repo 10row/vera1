@@ -506,49 +506,54 @@ test("[engine] undo bill_payment restores bill dueDate (same regression class)",
   assertEq(s.balanceCents, 500000, "balance restored");
 });
 
-test("[engine] delete bill_payment refreshes pace (not stale)", () => {
-  // Setup: $5,000 balance, payday 23 days out, $1,400 rent due in 5 days.
-  // Expected pace before payment: ($5,000 - $1,400) / 23 = $156.52
+// ── TODAY-IS-LOCKED MODEL ──────────────────────────────────
+// add_bill / remove_bill / bill_payment do NOT refresh today's pace.
+// The morning value is the user's locked allowance for the day; new
+// commitments and their reversals don't shift it. Tomorrow's rollover
+// absorbs the change. These tests lock that behavior in.
+
+test("[engine] delete bill_payment does NOT refresh pace (today is locked)", () => {
   let s = setupWithPayday(500000, 23);
   const today = m.today("UTC");
+  const setupPace = s.dailyPaceCents; // pace was set at setup_account
+
   s = applyIntent(s, {
     kind: "add_bill",
     params: { name: "Rent", amountCents: 140000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
   }).state;
+  // add_bill does NOT refresh today's pace anymore — today is locked.
+  assertEq(s.dailyPaceCents, setupPace, "add_bill leaves today's pace untouched");
 
-  const paceAfterAdd = s.dailyPaceCents;
-  assertTrue(paceAfterAdd > 0, "pace computed after add_bill");
-
-  // Pay the bill. Per Model B, pace stays frozen on record_spend.
   s = applyIntent(s, {
     kind: "record_spend",
     params: { amountCents: 140000, billKey: "Rent" },
   }).state;
-  assertEq(s.dailyPaceCents, paceAfterAdd, "pace stays frozen on record_spend (Model B)");
+  // bill_payment apply doesn't refresh (Model B).
+  assertEq(s.dailyPaceCents, setupPace, "bill_payment apply leaves pace untouched");
 
-  // Delete the payment. Pace MUST refresh — bill flips back to this-cycle,
-  // balance restored. Stale pace would silently mis-reserve.
+  // Delete the payment. By pure symmetry (apply didn't refresh →
+  // delete doesn't either), pace stays locked. Today is locked through
+  // the entire apply+delete round-trip.
   const paymentTx = s.transactions.find(t => t.kind === "bill_payment");
   s = applyIntent(s, { kind: "delete_transaction", params: { id: paymentTx.id } }).state;
-  assertEq(s.dailyPaceCents, paceAfterAdd, "after delete, pace must match the original (bill is fully back in cycle)");
-  assertEq(s.dailyPaceComputedDate, today, "pace was just refreshed today");
+  assertEq(s.dailyPaceCents, setupPace, "delete bill_payment leaves today's pace locked");
 });
 
-test("[engine] undo bill_payment refreshes pace", () => {
+test("[engine] undo bill_payment does NOT refresh pace (pure symmetry with apply)", () => {
   let s = setupWithPayday(500000, 23);
   const today = m.today("UTC");
+  const setupPace = s.dailyPaceCents;
   s = applyIntent(s, {
     kind: "add_bill",
     params: { name: "Rent", amountCents: 140000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
   }).state;
-  const paceAfterAdd = s.dailyPaceCents;
   s = applyIntent(s, {
     kind: "record_spend",
     params: { amountCents: 140000, billKey: "Rent" },
   }).state;
   s = applyIntent(s, { kind: "undo_last", params: {} }).state;
-  assertEq(s.dailyPaceCents, paceAfterAdd, "after undo, pace must match pre-payment baseline");
-  assertEq(s.dailyPaceComputedDate, today, "pace freshly refreshed");
+  assertEq(s.dailyPaceCents, setupPace,
+    "after undo of bill_payment, today's pace stays locked (apply didn't refresh → undo doesn't either)");
 });
 
 test("[engine] paying a recurring bill EARLY advances dueDate by one cycle (was no-op bug)", () => {
@@ -897,31 +902,38 @@ test("[engine] FAILSAFE: delete today's regular spend does NOT refresh pace", ()
     "FAILSAFE: deleting today's spend must NOT refresh pace");
 });
 
-test("[engine] SYMMETRY: undo bill_payment DOES refresh (obligation flips back to unpaid)", () => {
+test("[engine] SYMMETRY: undo bill_payment does NOT refresh — today-is-locked", () => {
+  // Pure symmetry rule: undo refreshes IFF apply did. Bill_payment apply
+  // doesn't refresh (Model B preserved); today is locked. Therefore
+  // undo of bill_payment also doesn't refresh. Today's pace stays put
+  // through the entire apply+undo round-trip. Tomorrow's rollover
+  // absorbs the change (bill goes back to obligated for tomorrow's
+  // pace computation).
   let s = m.createFreshState();
   const today = m.today("UTC");
   s = applyIntent(s, {
     kind: "setup_account",
     params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
   }).state;
+  const morningPace = s.dailyPaceCents;
   s = applyIntent(s, {
     kind: "add_bill",
     params: { name: "Rent", amountCents: 140000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
   }).state;
-  const paceWithBillObligated = s.dailyPaceCents;
+  // add_bill no longer refreshes — today is locked.
+  assertEq(s.dailyPaceCents, morningPace, "add_bill leaves pace locked");
 
-  // Pay the bill (today-dated bill_payment).
   s = applyIntent(s, {
     kind: "record_spend",
     params: { amountCents: 140000, billKey: "Rent" },
   }).state;
-  // Per Model B, today's bill_payment doesn't refresh pace.
-  assertEq(s.dailyPaceCents, paceWithBillObligated);
+  // Model B: bill_payment apply doesn't refresh.
+  assertEq(s.dailyPaceCents, morningPace, "bill_payment apply leaves pace locked");
 
-  // Undo it — bill goes back to obligated. Pace MUST refresh.
+  // Undo. Per symmetry: no refresh.
   s = applyIntent(s, { kind: "undo_last", params: {} }).state;
-  assertEq(s.dailyPaceCents, paceWithBillObligated,
-    "bill_payment undo refreshes — bill back in obligation math");
+  assertEq(s.dailyPaceCents, morningPace,
+    "bill_payment undo leaves pace locked (pure symmetry with apply)");
 });
 
 test("[engine] SYMMETRY: undo BACKDATED spend DOES refresh (matches apply-side refresh)", () => {
@@ -974,12 +986,16 @@ test("[engine] FAILSAFE: chain of today's spends + middle undo = stable pace", (
   s = applyIntent(s, { kind: "undo_last", params: {} }).state;
   assertEq(s.dailyPaceCents, morningPace, "after 2nd undo: pace untouched");
 
-  // Now an add_bill (cycle event) → pace MUST refresh.
+  // add_bill now respects "today is locked" — pace does NOT refresh
+  // mid-day. The new commitment is absorbed at tomorrow's rollover.
+  // Confirms the new contract: nothing the user does mid-day shifts
+  // today's headline pace except a true balance correction
+  // (adjust_balance / update_payday / paycheck income).
   s = applyIntent(s, {
     kind: "add_bill",
     params: { name: "Phone", amountCents: 20000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
   }).state;
-  assertTrue(s.dailyPaceCents < morningPace, "add_bill refreshed (cycle event)");
+  assertEq(s.dailyPaceCents, morningPace, "add_bill does NOT refresh (today is locked)");
 });
 
 // ── paceHistory — per-day pace snapshots for accurate heatmap colors
@@ -995,7 +1011,12 @@ test("[engine] refreshPace writes today's pace into paceHistory", () => {
   assertEq(s.paceHistory[today], s.dailyPaceCents, "today's pace written");
 });
 
-test("[engine] paceHistory updates on every cycle event (adjust/add_bill/etc.)", () => {
+test("[engine] paceHistory updates on TRUE cycle events (adjust_balance, update_payday)", () => {
+  // After the "today is locked" model, only events that change the
+  // FUNDAMENTAL math premise (balance correction, days-to-payday
+  // change, paycheck) refresh today's pace + write paceHistory.
+  // add_bill / remove_bill no longer count — they're commitments that
+  // affect TOMORROW onwards, not today.
   let s = m.createFreshState();
   const today = m.today("UTC");
   s = applyIntent(s, {
@@ -1004,19 +1025,85 @@ test("[engine] paceHistory updates on every cycle event (adjust/add_bill/etc.)",
   }).state;
   const paceA = s.paceHistory[today];
 
-  // adjust_balance is a cycle event → paceHistory updates
+  // adjust_balance IS a cycle event (bank correction → math premise changed).
   s = applyIntent(s, { kind: "adjust_balance", params: { newBalanceCents: 400000 } }).state;
   const paceB = s.paceHistory[today];
   assertTrue(paceB !== paceA, "pace updated after adjust_balance");
   assertEq(paceB, s.dailyPaceCents);
 
-  // add_bill is a cycle event → paceHistory updates
+  // add_bill is NO LONGER a cycle event (today is locked, tomorrow
+  // absorbs). paceHistory stays put.
   s = applyIntent(s, {
     kind: "add_bill",
     params: { name: "Rent", amountCents: 100000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
   }).state;
   const paceC = s.paceHistory[today];
-  assertTrue(paceC !== paceB, "pace updated after add_bill");
+  assertEq(paceC, paceB, "add_bill does NOT update paceHistory (today is locked)");
+});
+
+// ── TODAY-IS-LOCKED INVARIANT (the contract surfaced in mid-day UX) ──
+// These tests document the user-visible promise: "today's allowance
+// is set in the morning and doesn't shift mid-day, regardless of what
+// you do with bills." The invariant they protect against: a user
+// reserves $200 for a friend at 2pm and watches today's pace silently
+// drop, eating into the lunch they already spent today.
+
+test("[today-locked] add_bill mid-day does NOT shift today's pace", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 14), payFrequency: "monthly" },
+  }).state;
+  const morningPace = s.dailyPaceCents;
+  // User spends a normal lunch.
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 1500, note: "lunch" } }).state;
+  assertEq(s.dailyPaceCents, morningPace, "regular spend doesn't shift (Model B)");
+  // User reserves €200 for a friend.
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Friend trip", amountCents: 20000, dueDate: m.addDays(today, 7), recurrence: "once" },
+  }).state;
+  assertEq(s.dailyPaceCents, morningPace,
+    "add_bill at 2pm doesn't shift today's pace — the lunch the user already had stays in the budget");
+});
+
+test("[today-locked] remove_bill mid-day does NOT shift today's pace", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 14), payFrequency: "monthly" },
+  }).state;
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 100000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
+  }).state;
+  const paceAfterAdd = s.dailyPaceCents;
+  s = applyIntent(s, { kind: "remove_bill", params: { name: "Rent" } }).state;
+  assertEq(s.dailyPaceCents, paceAfterAdd, "remove_bill leaves today's pace untouched");
+});
+
+test("[today-locked] simulateAddBill still PREVIEWS the post-rollover pace (so user sees impact)", () => {
+  // The confirm card shows "Pace: $X/day → $Y/day" — the projected
+  // pace AFTER the bill is added. The actual apply doesn't change
+  // today's pace (locked), but the projection is what tomorrow morning
+  // will look like. Lets the user make an informed decision.
+  const { simulateAddBill } = require("../view");
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 14), payFrequency: "monthly" },
+  }).state;
+  const sim = simulateAddBill(s, {
+    name: "Friend trip", amountCents: 20000,
+    dueDate: m.addDays(today, 7), recurrence: "once",
+  });
+  // The projected pace should be lower than current — the bill DOES
+  // affect tomorrow's pace. The confirm card surfaces this.
+  assertTrue(sim.projected.dailyPaceCents < s.dailyPaceCents,
+    "simulator previews the future-pace impact even though today stays locked");
 });
 
 test("[engine] paceHistory does NOT update on today-dated record_spend (Model B)", () => {

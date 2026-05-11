@@ -1797,6 +1797,72 @@ function PulseScreen(props) {
 //   2. RECURRING — monthly/weekly/biweekly bills. Each can be marked
 //      paid for the current cycle (engine auto-advances dueDate).
 //   3. PAID THIS CYCLE — done. Collapsed-style, no action button.
+// ── BILLS HERO ─────────────────────────────────────────────
+// AAA visual anchor at the top of the Bills tab — matches the Today
+// tab's hero weight (big serif + label + sub-line). Shows the
+// bills-level summary so the user has a single number to glance at:
+// "how much is locked up this cycle?"
+//
+// Layout:
+//   $187                       ← BIG (sum of unpaid this cycle = obligated)
+//   reserved this cycle        ← small label
+//   $340 paid · $130 next cycle    ← sub-line (conditional bits)
+//
+// When everything's clear (no bills active): hidden — empty state
+// component handles the "no bills" case.
+function BillsHero(props) {
+  var v = props.view;
+  var sym = props.sym || "$";
+  var bills = props.bills || [];
+
+  // Aggregate from the envelope list (already enriched server-side).
+  var unpaidThisCycle = 0;
+  var paidThisCycle = 0;
+  var nextCycle = 0;
+  for (var i = 0; i < bills.length; i++) {
+    var b = bills[i];
+    if (b.paidThisCycle) {
+      paidThisCycle += b.amountCents || 0;
+    } else if (b.cycleStatus === "next") {
+      nextCycle += b.amountCents || 0;
+    } else {
+      unpaidThisCycle += b.amountCents || 0;
+    }
+  }
+  // If nothing exists, return null (empty state renders elsewhere).
+  if (unpaidThisCycle === 0 && paidThisCycle === 0 && nextCycle === 0) return null;
+
+  var bigAmount = fmtMoney(unpaidThisCycle, sym);
+  // Sub-line: paid + next-cycle pieces, joined by " · ". Skip pieces
+  // that are zero so the line doesn't say "$0 paid · $0 next cycle".
+  var subPieces = [];
+  if (paidThisCycle > 0) subPieces.push(fmtMoney(paidThisCycle, sym) + " paid");
+  if (nextCycle > 0) subPieces.push(fmtMoney(nextCycle, sym) + " next cycle");
+  var subLine = subPieces.length > 0 ? subPieces.join(" · ") : "";
+
+  // Label adapts to state. If unpaidThisCycle is 0 but paid > 0,
+  // headline is "$0" + "all clear this cycle" — celebratory.
+  var label;
+  if (unpaidThisCycle === 0 && paidThisCycle > 0) {
+    label = "all clear this cycle";
+  } else {
+    label = "reserved this cycle";
+  }
+
+  return h("div", { style: { padding: "32px 20px 18px", textAlign: "center" } },
+    h("div", {
+      style: {
+        fontFamily: "'Lora',serif", fontSize: 60, fontWeight: 500,
+        color: C.text, lineHeight: 1.0, letterSpacing: "-0.02em",
+      },
+    }, bigAmount),
+    h("div", { style: { fontSize: 13, color: C.sub, marginTop: 10, letterSpacing: "0.02em" } }, label),
+    subLine
+      ? h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, subLine)
+      : null
+  );
+}
+
 function BillsScreen(props) {
   var v = props.view, bills = props.bills || [], budgets = props.budgets || [], goals = props.goals || [];
   var sym = props.sym, sid = props.sid;
@@ -1819,12 +1885,14 @@ function BillsScreen(props) {
   });
   paidOnce.sort(function(a, b) { return String(b.dueDate).localeCompare(String(a.dueDate)); });
 
-  return h("div", { style: { paddingTop: 22 } },
-    h(AnticipationStrip, { envelopes: bills, sym: sym }),
+  return h("div", null,
+    // BILLS HERO — matches Today tab visual weight at the top.
+    h(BillsHero, { view: v, bills: bills, sym: sym }),
     bills.length === 0 ? h("div", { style: { padding: "24px 16px", textAlign: "center", color: C.muted, fontSize: 13 } },
-      "No bills set up. Tell the bot in chat: \"Rent 1400 on the 1st\" — or tap + below to add one."
+      "No bills set up. Tell the bot in chat: \"Rent 1400 on the 1st\" — or tap S below to add one."
     ) : null,
-    // Due banner (top of page when something is due/overdue today)
+    // Coming-up strip (next bills due within 7d) + Due banner (today/overdue)
+    bills.length > 0 ? h(AnticipationStrip, { envelopes: bills, sym: sym }) : null,
     bills.length > 0 ? h(DueBanner, { envelopes: bills, sym: sym }) : null,
     // SECTION 1: Unpaid one-time
     unpaidOnce.length > 0 ? h("div", null,

@@ -61,6 +61,13 @@ function compute(state) {
   } else {
     dailyPace = daysToPayday > 0 ? Math.floor(disposable / daysToPayday) : disposable;
   }
+  // OVER-STATE OVERRIDE: when bills now exceed balance, the cached pace
+  // (set when balance was healthy) is meaningless. Force to 0 so the
+  // hero / status / heatmap all show the over-state coherently. The
+  // user sees the deficit number, not a phantom positive pace.
+  // Also clamps any accidental negative cached value to 0.
+  if (dailyPace < 0) dailyPace = 0;
+  if (obligated > balance) dailyPace = 0;
 
   // Today / this week DISCRETIONARY spend. CRITICAL: this is NOT "all
   // money out today" — it's only kind === "spend" (the daily-pace
