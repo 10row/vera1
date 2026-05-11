@@ -12,8 +12,21 @@ const m = require("./model");
 const { compute, simulateSpend, heroLine, projectPaceImpact } = require("./view");
 const { applyIntent } = require("./engine");
 const { validateIntent } = require("./validator");
+const { M } = require("./messages");
 const db = require("./db");
 const { bot, attach } = require("./bot");
+
+// Mirror of bot.js translateErr — translate engine error codes for
+// the API response to the Mini App. Mini App renders error strings
+// directly to the user.
+function translateErrLocal(e, lang) {
+  if (!e) return "";
+  if (e.code) {
+    const t = M(lang, e.code, e.params);
+    if (t && t !== e.code) return t;
+  }
+  return e.message || String(e);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -343,7 +356,8 @@ app.post("/api/v4/action/:sid", requireTelegramAuth, async (req, res) => {
           },
         };
       }
-      const v = validateIntent(state, translated, m.today(state.timezone || "UTC"));
+      const lang = state.language || "en";
+      const v = validateIntent(state, translated, m.today(state.timezone || "UTC"), lang);
       if (!v.ok) { result = { ok: false, error: v.reason }; return; }
       try {
         const r = applyIntent(state, translated);
@@ -355,7 +369,7 @@ app.post("/api/v4/action/:sid", requireTelegramAuth, async (req, res) => {
           heatmap: buildHeatmap(r.state),
         };
       } catch (e) {
-        result = { ok: false, error: e.message };
+        result = { ok: false, error: translateErrLocal(e, lang) };
       }
     });
     res.json(result);
@@ -401,7 +415,8 @@ app.post("/api/v5/action/:sid", requireTelegramAuth, async (req, res) => {
     let result;
     await db.withUserLock(u.id, async () => {
       const state = await db.loadState(prisma, u.id);
-      const verdict = validateIntent(state, intent, m.today(state.timezone || "UTC"));
+      const lang = state.language || "en";
+      const verdict = validateIntent(state, intent, m.today(state.timezone || "UTC"), lang);
       if (!verdict.ok) {
         result = { ok: false, error: verdict.reason };
         return;
@@ -411,7 +426,7 @@ app.post("/api/v5/action/:sid", requireTelegramAuth, async (req, res) => {
         await db.saveState(prisma, u.id, r.state);
         result = { ok: true, view: compute(r.state) };
       } catch (e) {
-        result = { ok: false, error: e.message };
+        result = { ok: false, error: translateErrLocal(e, lang) };
       }
     });
     res.json(result);
@@ -456,18 +471,19 @@ app.post("/api/v5/apply/:sid", requireTelegramAuth, async (req, res) => {
     let result;
     await db.withUserLock(u.id, async () => {
       let state = await db.loadState(prisma, u.id);
+      const lang = state.language || "en";
       const todayStr = m.today(state.timezone || "UTC");
       const applied = [];
       const failed = [];
       for (const it of list) {
-        const verdict = validateIntent(state, it, todayStr);
+        const verdict = validateIntent(state, it, todayStr, lang);
         if (!verdict.ok) { failed.push({ intent: it, reason: verdict.reason }); continue; }
         try {
           const r = applyIntent(state, it);
           state = r.state;
           applied.push(it);
         } catch (e) {
-          failed.push({ intent: it, reason: e.message });
+          failed.push({ intent: it, reason: translateErrLocal(e, lang) });
         }
       }
       if (applied.length > 0) await db.saveState(prisma, u.id, state);

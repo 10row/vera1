@@ -9,7 +9,23 @@ const m = require("./model");
 const { applyIntent } = require("./engine");
 const { compute, heroLine, heroLineWithInsight, simulateSpend } = require("./view");
 const { processMessage } = require("./pipeline");
+const { M } = require("./messages");
 const db = require("./db");
+
+// translateErr — convert engine/validator errors to the user's language.
+// Engine throws errors with .code set (engineDupBill, setupFirst, etc.);
+// validator returns reject() with reason already translated. For raw
+// errors without a code, fall back to e.message (English) — better than
+// crashing or showing nothing. ALL user-facing catch sites should pass
+// through this helper rather than dumping e.message directly.
+function translateErr(e, lang) {
+  if (!e) return "";
+  if (e.code) {
+    const translated = M(lang, e.code, e.params);
+    if (translated && translated !== e.code) return translated;
+  }
+  return e.message || String(e);
+}
 
 // normalizeLang — accepts Telegram language_code values like "en-US", "ru",
 // "ru-RU" and reduces them to the supported set. We support en + ru today;
@@ -676,7 +692,7 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
         const head = lang === "ru" ? "Отменено" : "Undone";
         await safeReply(ctx, head + (what ? ": " + what : "") + "\n" + heroLine(r.state, lang), { parse_mode: "Markdown" });
       } catch (e) {
-        await safeReply(ctx, "_" + m.escapeMd(e.message) + "_", { parse_mode: "Markdown" });
+        await safeReply(ctx, "_" + m.escapeMd(translateErr(e, lang)) + "_", { parse_mode: "Markdown" });
       }
     });
     return;
@@ -704,10 +720,13 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     return;
   }
   if (command === "app") {
+    const u = await db.resolveUser(prisma, "tg_" + telegramId);
+    const state = await db.loadState(prisma, u.id);
+    const lang = state.language === "ru" ? "ru" : "en";
     const url = process.env.MINIAPP_URL;
-    if (!url) { await safeReply(ctx, "Mini app not configured."); return; }
-    await safeReply(ctx, "Open the mini app:", {
-      reply_markup: { inline_keyboard: [[{ text: "Open", web_app: { url } }]] },
+    if (!url) { await safeReply(ctx, M(lang, "miniAppNotConfigured")); return; }
+    await safeReply(ctx, M(lang, "miniAppOpen"), {
+      reply_markup: { inline_keyboard: [[{ text: lang === "ru" ? "Открыть" : "Open", web_app: { url } }]] },
     });
     return;
   }
@@ -760,7 +779,7 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
         await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
         await safeReply(ctx, (lang === "ru" ? "Отменено.\n" : "Undone.\n") + heroLine(r.state, lang), { parse_mode: "Markdown" });
       } catch (e) {
-        await safeReply(ctx, "_" + m.escapeMd(e.message) + "_", { parse_mode: "Markdown" });
+        await safeReply(ctx, "_" + m.escapeMd(translateErr(e, lang)) + "_", { parse_mode: "Markdown" });
       }
     });
     return;
@@ -812,14 +831,14 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
         // Re-validate against the CURRENT state — applying intent N may
         // have changed conditions for intent N+1 (e.g. balance check).
         const todayStr = m.today(state.timezone || "UTC");
-        const v = require("./validator").validateIntent(state, intent, todayStr);
+        const v = require("./validator").validateIntent(state, intent, todayStr, lang);
         if (!v.ok) { failed.push({ intent, reason: v.reason }); continue; }
         try {
           const r = applyIntent(state, intent);
           state = r.state;
           applied.push(intent);
         } catch (e) {
-          failed.push({ intent, reason: e.message });
+          failed.push({ intent, reason: translateErr(e, lang) });
         }
       }
       if (applied.length > 0) await db.saveState(prisma, u.id, state);
@@ -894,7 +913,7 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
       await safeReply(ctx, heroLine(state, lang), { parse_mode: "Markdown" });
     } catch (e) {
       console.error("[v5 confirm apply]", e);
-      await safeEdit(ctx, "_" + m.escapeMd(e.message) + "_", Object.assign({ parse_mode: "Markdown" }, clearButtons));
+      await safeEdit(ctx, "_" + m.escapeMd(translateErr(e, lang)) + "_", Object.assign({ parse_mode: "Markdown" }, clearButtons));
     }
   });
 }

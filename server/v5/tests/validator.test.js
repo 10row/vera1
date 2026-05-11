@@ -83,3 +83,72 @@ test("[validator] record_income with valid backdate PASSES", () => {
   const v = validateIntent(s, { kind: "record_income", params: { amountCents: 50000, date: "2025-04-26" } }, TODAY);
   assertEq(v.ok, true);
 });
+
+// ── LOCALIZATION (the Russian-user-got-English-error bug) ──
+// User reported a screenshot showing 6 lines of "You already have a
+// bill named X" in English to a Russian-only user. The validator was
+// hardcoded EN. These tests lock the lang-aware behavior in.
+
+test("[validator] returns RUSSIAN message when lang=ru (dup bill)", () => {
+  const s = setup(500000);
+  // Use m.billKey to compute the correct storage key (lowercase + slug).
+  s.bills = {};
+  s.bills[m.billKey("Аренда")] = { name: "Аренда", amountCents: 100000, dueDate: "2025-05-01", paidThisCycle: false, recurrence: "monthly" };
+  const v = validateIntent(s,
+    { kind: "add_bill", params: { name: "Аренда", amountCents: 100000, dueDate: "2025-06-01", recurrence: "monthly" } },
+    TODAY, "ru"
+  );
+  assertEq(v.ok, false);
+  assertTrue(/уже есть|Счёт/.test(v.reason), "Russian message expected, got: " + v.reason);
+});
+
+test("[validator] returns ENGLISH message when lang=en", () => {
+  const s = setup(500000);
+  s.bills = {};
+  s.bills[m.billKey("Rent")] = { name: "Rent", amountCents: 100000, dueDate: "2025-05-01", paidThisCycle: false, recurrence: "monthly" };
+  const v = validateIntent(s,
+    { kind: "add_bill", params: { name: "Rent", amountCents: 100000, dueDate: "2025-06-01", recurrence: "monthly" } },
+    TODAY, "en"
+  );
+  assertEq(v.ok, false);
+  assertTrue(/already have a bill/i.test(v.reason));
+});
+
+test("[validator] lang inferred from state.language when not explicit", () => {
+  const s = setup(500000);
+  s.language = "ru";
+  s.bills = {};
+  s.bills[m.billKey("Аренда")] = { name: "Аренда", amountCents: 100000, dueDate: "2025-05-01", paidThisCycle: false, recurrence: "monthly" };
+  const v = validateIntent(s,
+    { kind: "add_bill", params: { name: "Аренда", amountCents: 100000, dueDate: "2025-06-01", recurrence: "monthly" } },
+    TODAY
+  );
+  assertEq(v.ok, false);
+  assertTrue(/уже есть/.test(v.reason), "should infer Russian from state.language");
+});
+
+test("[validator] every reject message has both EN and RU translations available", () => {
+  const { MESSAGES } = require("../messages");
+  // Loosely check that every defined message has both en + ru — guards
+  // against partial translations leaking English to Russian users.
+  for (const code of Object.keys(MESSAGES)) {
+    assertTrue(typeof MESSAGES[code].en === "string" && MESSAGES[code].en.length > 0,
+               "missing en for " + code);
+    assertTrue(typeof MESSAGES[code].ru === "string" && MESSAGES[code].ru.length > 0,
+               "missing ru for " + code);
+  }
+});
+
+test("[engine] thrown errors carry .code for caller translation", () => {
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
+  // Add bill, then try to add same name again → engine should throw with .code
+  s = applyIntent(s, { kind: "add_bill", params: { name: "Rent", amountCents: 100000, dueDate: "2025-06-15", recurrence: "monthly" } }).state;
+  let caught = null;
+  try {
+    applyIntent(s, { kind: "add_bill", params: { name: "Rent", amountCents: 100000, dueDate: "2025-06-15", recurrence: "monthly" } });
+  } catch (e) { caught = e; }
+  assertTrue(!!caught, "engine should throw on dup bill");
+  assertEq(caught.code, "engineDupBill", "thrown error should carry the code");
+  assertEq(caught.params && caught.params.name, "Rent");
+});

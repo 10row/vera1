@@ -12,6 +12,19 @@ const m = require("./model");
 
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
+// throwCoded — emit an error whose .code lets callers translate via
+// M(lang, code, params). The english message stays as a fallback for
+// log readability + cases where the catcher doesn't translate.
+//
+// Pattern: throwCoded("alreadySetUp", "Already set up. Use adjust_balance.");
+// Callers: M(lang, err.code, err.params) || err.message
+function throwCoded(code, fallbackMsg, params) {
+  const err = new Error(fallbackMsg);
+  err.code = code;
+  if (params) err.params = params;
+  throw err;
+}
+
 function makeEvent(intent, prevBalance, extra) {
   return Object.assign({
     id: m.uid(),
@@ -99,10 +112,10 @@ function applyIntent(state, intent) {
   switch (intent.kind) {
     // ── SETUP ──────────────────────────────────────
     case "setup_account": {
-      if (next.setup) throw new Error("Already set up. Use adjust_balance or update_payday.");
+      if (next.setup) throwCoded("engineSetupAlready", "Already set up. Use adjust_balance or update_payday.");
       const bal = Math.round(Number(p.balanceCents) || 0);
-      if (!Number.isFinite(bal) || bal < 0) throw new Error("Invalid balance");
-      if (bal > 100_000_000_00) throw new Error("Balance too large");
+      if (!Number.isFinite(bal) || bal < 0) throwCoded("engineInvalidBalance", "Invalid balance");
+      if (bal > 100_000_000_00) throwCoded("engineBalanceTooLarge", "Balance too large");
 
       next.setup = true;
       next.balanceCents = bal;
@@ -135,9 +148,9 @@ function applyIntent(state, intent) {
 
     // ── ADJUST BALANCE ─────────────────────────────
     case "adjust_balance": {
-      if (!next.setup) throw new Error("Set up first.");
+      if (!next.setup) throwCoded("setupFirst", "Set up first.");
       const newBal = Math.round(Number(p.newBalanceCents));
-      if (!Number.isFinite(newBal) || newBal < 0) throw new Error("Invalid balance");
+      if (!Number.isFinite(newBal) || newBal < 0) throwCoded("engineInvalidBalance", "Invalid balance");
       const delta = newBal - next.balanceCents;
       next.balanceCents = newBal;
       next.transactions.push({
@@ -155,16 +168,16 @@ function applyIntent(state, intent) {
 
     // ── BILLS ──────────────────────────────────────
     case "add_bill": {
-      if (!next.setup) throw new Error("Set up first.");
+      if (!next.setup) throwCoded("setupFirst", "Set up first.");
       const name = String(p.name || "").trim().slice(0, 60);
-      if (!name) throw new Error("Bill needs a name");
+      if (!name) throwCoded("engineBillNameRequired", "Bill needs a name");
       const amt = Math.round(Number(p.amountCents));
-      if (!Number.isFinite(amt) || amt <= 0) throw new Error("Invalid amount");
+      if (!Number.isFinite(amt) || amt <= 0) throwCoded("engineInvalidAmount", "Invalid amount");
       const recurrence = m.RECURRENCES.includes(p.recurrence) ? p.recurrence : "monthly";
       const dueDate = m.normalizeDate(p.dueDate);
-      if (!dueDate) throw new Error("Need a valid due date");
+      if (!dueDate) throwCoded("engineDueDateInvalid", "Need a valid due date");
       const key = m.billKey(name);
-      if (next.bills[key]) throw new Error("Bill already exists: " + name);
+      if (next.bills[key]) throwCoded("engineDupBill", "Bill already exists: " + name, { name });
       next.bills[key] = {
         name, amountCents: amt, dueDate, recurrence,
         paidThisCycle: false,
@@ -178,9 +191,9 @@ function applyIntent(state, intent) {
     }
 
     case "remove_bill": {
-      if (!next.setup) throw new Error("Set up first.");
+      if (!next.setup) throwCoded("setupFirst", "Set up first.");
       const key = m.billKey(p.name || p.key);
-      if (!next.bills[key]) throw new Error("No such bill: " + (p.name || p.key));
+      if (!next.bills[key]) throwCoded("engineNoSuchBill", "No such bill: " + (p.name || p.key), { name: p.name || p.key });
       const removed = next.bills[key];
       delete next.bills[key];
       // CYCLE EVENT: removing a bill changes "obligated" → re-baseline.
@@ -192,9 +205,9 @@ function applyIntent(state, intent) {
 
     // ── SPEND / INCOME ─────────────────────────────
     case "record_spend": {
-      if (!next.setup) throw new Error("Set up first.");
+      if (!next.setup) throwCoded("setupFirst", "Set up first.");
       const amt = Math.round(Number(p.amountCents));
-      if (!Number.isFinite(amt) || amt <= 0) throw new Error("Invalid amount");
+      if (!Number.isFinite(amt) || amt <= 0) throwCoded("engineInvalidAmount", "Invalid amount");
       const note = String(p.note || "").trim().slice(0, 120);
       const billKeyP = p.billKey ? m.billKey(p.billKey) : null;
       const isBillPayment = billKeyP && next.bills[billKeyP];
@@ -378,9 +391,9 @@ function applyIntent(state, intent) {
     }
 
     case "record_income": {
-      if (!next.setup) throw new Error("Set up first.");
+      if (!next.setup) throwCoded("setupFirst", "Set up first.");
       const amt = Math.round(Number(p.amountCents));
-      if (!Number.isFinite(amt) || amt <= 0) throw new Error("Invalid amount");
+      if (!Number.isFinite(amt) || amt <= 0) throwCoded("engineInvalidAmount", "Invalid amount");
       const note = String(p.note || "").trim().slice(0, 120);
 
       // Resolve EVENT date (paycheck might've actually landed yesterday).
@@ -416,12 +429,12 @@ function applyIntent(state, intent) {
 
     // ── SETTINGS ───────────────────────────────────
     case "update_payday": {
-      if (!next.setup) throw new Error("Set up first.");
+      if (!next.setup) throwCoded("setupFirst", "Set up first.");
       const prevPayday = next.payday;
       const prevFreq = next.payFrequency;
       if (p.payday) {
         const d = m.normalizeDate(p.payday);
-        if (!d) throw new Error("Invalid date");
+        if (!d) throwCoded("engineDateInvalid", "Invalid date");
         next.payday = d;
       }
       if (p.payFrequency && m.PAY_FREQS.includes(p.payFrequency)) {
@@ -447,13 +460,13 @@ function applyIntent(state, intent) {
     // state are reversed via a delete_transaction event that captures
     // pre-delete snapshots so undo can restore everything cleanly.
     case "delete_transaction": {
-      if (!next.setup) throw new Error("Set up first.");
+      if (!next.setup) throwCoded("setupFirst", "Set up first.");
       const txId = String(p.id || "").trim();
-      if (!txId) throw new Error("Need a transaction id");
+      if (!txId) throwCoded("txIdRequired", "Need a transaction id");
       const tx = next.transactions.find(t => t.id === txId);
-      if (!tx) throw new Error("Transaction not found");
-      if (tx.deletedAt) throw new Error("Already deleted");
-      if (tx.kind === "setup") throw new Error("Cannot delete the starting balance");
+      if (!tx) throwCoded("txNotFound", "Transaction not found");
+      if (tx.deletedAt) throwCoded("txAlreadyDeleted", "Already deleted");
+      if (tx.kind === "setup") throwCoded("cantDeleteSetup", "Cannot delete the starting balance");
 
       // Reverse balance impact based on tx kind.
       // amountCents convention: negative for spend/bill_payment, positive
@@ -506,7 +519,7 @@ function applyIntent(state, intent) {
 
     // ── UNDO / RESET ───────────────────────────────
     case "undo_last": {
-      if (!next.events || next.events.length === 0) throw new Error("Nothing to undo");
+      if (!next.events || next.events.length === 0) throwCoded("nothingToUndo", "Nothing to undo");
       // Walk backwards to find the most recent NON-undone, NON-undo event.
       // Skipping undone events lets us chain "undo, undo, undo" through
       // multiple prior actions in reverse order.
@@ -514,9 +527,9 @@ function applyIntent(state, intent) {
       while (idx >= 0 && (next.events[idx].undone || (next.events[idx].intent && next.events[idx].intent.kind === "undo_last"))) {
         idx--;
       }
-      if (idx < 0) throw new Error("Nothing to undo");
+      if (idx < 0) throwCoded("nothingToUndo", "Nothing to undo");
       const target = next.events[idx];
-      if (target.intent.kind === "setup_account") throw new Error("Can't undo setup. Use reset.");
+      if (target.intent.kind === "setup_account") throwCoded("cantUndoSetup", "Can't undo setup. Use reset.");
 
       // Reverse the effects.
       switch (target.intent.kind) {
@@ -584,7 +597,7 @@ function applyIntent(state, intent) {
           break;
         }
         default:
-          throw new Error("Can't undo " + target.intent.kind);
+          throwCoded("cantUndoKind", "Can't undo " + target.intent.kind, { kind: target.intent.kind });
       }
       // Mark the original event as undone.
       next.events[idx].undone = true;

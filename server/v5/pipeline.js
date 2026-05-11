@@ -319,7 +319,7 @@ async function processMessage(state, userMessage, history, options) {
 
   if (proposal.mode === "do" && proposal.intent) {
     const todayStr = m.today((state && state.timezone) || "UTC");
-    const verdict = validateIntent(state, proposal.intent, todayStr);
+    const verdict = validateIntent(state, proposal.intent, todayStr, lang);
     return {
       kind: "do",
       message: proposal.message,
@@ -335,7 +335,7 @@ async function processMessage(state, userMessage, history, options) {
     const todayStr = m.today((state && state.timezone) || "UTC");
     const items = proposal.intents.map(intent => ({
       intent,
-      verdict: validateIntent(state, intent, todayStr),
+      verdict: validateIntent(state, intent, todayStr, lang),
     }));
     return {
       kind: "do_batch",
