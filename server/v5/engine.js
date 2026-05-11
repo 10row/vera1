@@ -63,6 +63,76 @@ function computePaceFor(state, todayStr) {
 // use, prevents state JSON from growing unbounded.
 const PACE_HISTORY_MAX_DAYS = 400;
 
+// ── PACE-REFRESH SYMMETRY (the FAILSAFE rule) ─────────────────
+// THE INVARIANT: if applying event E didn't refresh pace, undoing or
+// deleting E shouldn't refresh pace either. Refresh is reserved for
+// state changes that ACTUALLY shift the cycle math (bills, balance
+// baseline, payday, backdated corrections). Today's discretionary
+// record_spend / record_income does NOT shift pace per Model B —
+// reversing it should also NOT shift pace.
+//
+// Previously buggy: undo_last and delete_transaction called refreshPace
+// unconditionally. Result: user spends $X coffee + $Y dinner today
+// (frozen pace stays); undoes a single event; refresh recomputes from
+// current state which has $X+$Y baked in; pace silently shifts.
+// That's a "Model B violation by way of undo." Trust-killer.
+//
+// THE RULE (used by undo_last + delete_transaction):
+//   refresh IFF the underlying event WAS one that originally refreshed
+//   pace when applied. Specifically:
+//     - setup_account, adjust_balance, add_bill, remove_bill, update_payday  → always
+//     - record_spend / record_income with date < today (backdated)          → yes
+//     - record_spend with billKey (bill_payment changes obligation state)   → yes
+//     - record_income that advanced payday (paycheck)                       → yes
+//     - Today-dated discretionary record_spend / record_income              → NO
+//   For delete_transaction: gate on the deleted tx's kind + date.
+//
+// The rule is the SYMMETRY of refreshPace on apply. Auditable by
+// inspection. Test-locked.
+function eventRefreshesPace(targetIntentKind, targetIntentParams, targetEvent, todayStr) {
+  const params = targetIntentParams || {};
+  if (
+    targetIntentKind === "setup_account" ||
+    targetIntentKind === "adjust_balance" ||
+    targetIntentKind === "add_bill" ||
+    targetIntentKind === "remove_bill" ||
+    targetIntentKind === "update_payday"
+  ) return true;
+  if (targetIntentKind === "record_spend" || targetIntentKind === "record_income") {
+    // Backdated → refreshes
+    if (params.date && params.date !== todayStr) return true;
+    // Bill payment (today-dated bill_payment changes obligation when undone)
+    if (targetIntentKind === "record_spend" && params.billKey) return true;
+    // Paycheck (income that advanced payday)
+    if (targetIntentKind === "record_income" && targetEvent && targetEvent.advancedPayday) return true;
+    // Legacy events without advancedPayday flag: be conservative for
+    // record_income only (we can't tell — refresh to be safe). Today-
+    // dated record_spend without billKey is unambiguously a no-refresh.
+    if (targetIntentKind === "record_income" && targetEvent && targetEvent.advancedPayday === undefined) return true;
+    return false;
+  }
+  // delete_transaction undo — handled separately by undo_last (needs
+  // access to the restored tx to decide).
+  return false;
+}
+
+// For delete_transaction: gate on the tx's kind + date.
+function txDeleteRefreshesPace(tx, todayStr) {
+  if (!tx) return false;
+  // Backdated → cycle correction
+  if (tx.date && tx.date !== todayStr) return true;
+  // Bill payment → obligation comes back when bill flips to unpaid
+  if (tx.kind === "bill_payment") return true;
+  // Adjust-balance "correction" tx (balance baseline change)
+  if (tx.kind === "correction") return true;
+  // Income that originally advanced payday — can't tell from the tx
+  // alone (no advancedPayday flag on the tx itself). Conservative for
+  // income only.
+  if (tx.kind === "income") return true;
+  // Today-dated regular spend → DO NOT refresh
+  return false;
+}
+
 function refreshPace(state, todayStr) {
   const pace = computePaceFor(state, todayStr);
   state.dailyPaceCents = pace;
@@ -419,10 +489,18 @@ function applyIntent(state, intent) {
       // Today-dated mid-cycle income leaves pace alone (next day rollover
       // picks up the new balance naturally).
       const isBackdated = txDate !== todayStr;
-      if (next.payday !== prevPaydayForCycle || isBackdated) {
+      const advancedPayday = next.payday !== prevPaydayForCycle;
+      if (advancedPayday || isBackdated) {
         refreshPace(next, todayStr);
       }
-      const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents });
+      // Persist whether THIS event advanced payday — undo needs to know
+      // (so it can refresh pace symmetrically). Without this, undoing a
+      // paycheck wouldn't refresh, leaving today's pace at a stale
+      // post-paycheck value.
+      const ev = makeEvent(intent, prevBalance, {
+        newBalance: next.balanceCents,
+        advancedPayday,
+      });
       next.events.push(ev);
       return { state: next, event: ev };
     }
@@ -502,11 +580,17 @@ function applyIntent(state, intent) {
       // Mark deleted (journaling — never destroy data).
       tx.deletedAt = Date.now();
 
-      // CYCLE EVENT: deleting a bill_payment changes obligation
-      // (bill flips back to this-cycle when dueDate restores). Even
-      // for non-bill spends, balance changes — refresh so pace stays
-      // consistent with state instead of waiting for day-rollover.
-      refreshPace(next, todayStr);
+      // GATED CYCLE EVENT — refresh ONLY if the deleted tx was one
+      // that originally refreshed pace (bill_payment, backdated spend,
+      // correction, income). Today's discretionary spend delete does
+      // NOT refresh — Model B symmetry.
+      //
+      // BEFORE this fix: refreshPace fired unconditionally. Result —
+      // delete today's $30 coffee, and pace silently shifted because
+      // recompute pulled in OTHER today's-spending. Model B violation.
+      if (txDeleteRefreshesPace(tx, todayStr)) {
+        refreshPace(next, todayStr);
+      }
 
       const ev = makeEvent(intent, prevBalance, {
         newBalance: next.balanceCents,
@@ -602,11 +686,34 @@ function applyIntent(state, intent) {
       // Mark the original event as undone.
       next.events[idx].undone = true;
 
-      // CYCLE EVENT: undoing changes balance and (for bill events)
-      // obligation. Refresh pace so it stays consistent with the
-      // post-undo state, otherwise frozen pace can carry stale
-      // assumptions about bills/balance until day rollover.
-      refreshPace(next, todayStr);
+      // GATED CYCLE EVENT — refresh ONLY if the undone event was one
+      // that originally refreshed pace. THE FAILSAFE INVARIANT:
+      //   "undo of event E refreshes pace IFF applying E refreshed pace."
+      //
+      // BEFORE this fix: refreshPace fired unconditionally after every
+      // undo. Result — user spends $X coffee + $Y dinner today (frozen
+      // pace stays per Model B), then undoes the dinner; refresh
+      // recompute pulls in the unrelated coffee, pace silently shifts.
+      // Model B violation through the back door.
+      let shouldRefresh = false;
+      if (target.intent.kind === "delete_transaction") {
+        // Undoing a delete = restoring the tx. Gate on the restored
+        // tx's kind/date (same logic as delete itself).
+        const restoredTx = target.deletedTxId
+          ? next.transactions.find(t => t.id === target.deletedTxId)
+          : null;
+        shouldRefresh = txDeleteRefreshesPace(restoredTx, todayStr);
+      } else {
+        shouldRefresh = eventRefreshesPace(
+          target.intent.kind,
+          target.intent.params,
+          target,
+          todayStr
+        );
+      }
+      if (shouldRefresh) {
+        refreshPace(next, todayStr);
+      }
 
       const ev = makeEvent(intent, prevBalance, {
         newBalance: next.balanceCents,

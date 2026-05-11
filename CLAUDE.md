@@ -286,24 +286,58 @@ it three.
 
 ### Cycle events (when frozen pace MUST refresh)
 
+ALWAYS refreshes:
 ```
-setup_account · adjust_balance · add_bill · remove_bill ·
-update_payday · delete_transaction · undo_last
+setup_account · adjust_balance · add_bill · remove_bill · update_payday
 + first event of a new day (rollover)
-+ BACKDATED record_spend (date < today) — historical correction
++ BACKDATED record_spend (date < today)  — historical correction
 + BACKDATED record_income (date < today) — historical correction
 + record_income that advances payday (paycheck arrival)
++ record_spend with billKey, ONLY when reversed (delete/undo of bill_payment)
 ```
 
-NOT cycle events (pace stays frozen — Model B):
+NEVER refreshes (pace stays frozen — Model B):
 ```
-TODAY-dated record_spend (including TODAY-dated bill_payment)
-TODAY-dated record_income (when payday hasn't advanced)
+TODAY-dated record_spend (regular)
+TODAY-dated record_spend with billKey (bill_payment) — Model B for the apply
+TODAY-dated record_income that doesn't advance payday
 ```
 
-**The mental rule:** a CORRECTION (delete / undo / backdated record_*)
-or a CYCLE BOUNDARY (setup / payday change / paycheck) refreshes
-pace. A NORMAL TODAY ACTION doesn't.
+### THE SYMMETRY INVARIANT (failsafe rule, enforced in code)
+
+> **`undo_last` or `delete_transaction` refreshes pace IFF the underlying
+> event was one that originally refreshed pace when applied.**
+
+Concretely, an undo/delete refreshes pace if AND ONLY IF the underlying
+intent/tx satisfies one of:
+- kind ∈ {setup_account, adjust_balance, add_bill, remove_bill, update_payday}
+- record_spend / record_income with `date < today` (backdated)
+- record_spend with `billKey` (bill_payment — obligation flips on reverse)
+- record_income event with `advancedPayday: true` (paycheck)
+- delete_transaction of a tx that satisfies any of the above
+
+Otherwise: do NOT call refreshPace. Pace stays frozen.
+
+**Why this rule exists** — without it, a user who spends $X coffee +
+$Y dinner today (frozen pace stays), then logs $Z and undoes it,
+sees pace SILENTLY SHIFT by (X+Y)/days_to_payday because refreshPace
+recomputed from current balance which already had X+Y baked in.
+Reversing one event leaked the cumulative effect of unrelated events.
+That's a Model B violation through the back door.
+
+The invariant fixes it. Refresh ONLY fires when the underlying state
+change is one that ACTUALLY affected pace originally. Audit-friendly,
+test-locked (see `engine.test.js` "FAILSAFE" + "SYMMETRY" suite).
+
+**Implementation:** `engine.js` defines `eventRefreshesPace()` and
+`txDeleteRefreshesPace()`. Both `undo_last` and `delete_transaction`
+gate their `refreshPace()` calls on these helpers. Test suite asserts
+the rule across 5 scenarios:
+1. Today's regular spend undo → no refresh
+2. Today's regular spend delete → no refresh
+3. bill_payment undo → refresh (bill flips back)
+4. Backdated spend undo → refresh (historical correction symmetry)
+5. Chain of today spends + middle undo + add_bill → only add_bill refreshes
 
 ### Bill payment lifecycle (the trickiest path)
 

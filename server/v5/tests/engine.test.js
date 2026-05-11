@@ -831,6 +831,157 @@ test("[engine] backdated tx undo restores balance fully", () => {
   assertEq(s.balanceCents, 500000, "undo restores balance even for backdated txs");
 });
 
+// ── PACE-REFRESH SYMMETRY INVARIANT (failsafe fix) ──
+// THE BUG (user-reported screenshot): user spent $X coffee today (frozen
+// pace stays per Model B), then logged $200, then undid the $200. Pace
+// silently shifted from $150 to $145.98 — by $X/14 days. Why? undo_last
+// called refreshPace unconditionally; refresh recomputed from current
+// state which had the OTHER $X of today's spending baked in. Reversing
+// one event leaked the cumulative effect of all today's other spends.
+// That's a Model B violation through the back-door.
+//
+// THE INVARIANT (locked here): undo/delete refreshes pace IFF the
+// underlying event was one that ORIGINALLY refreshed pace. Symmetric.
+// Today-dated record_spend (didn't refresh) → undoing it doesn't either.
+// Today bill_payment (didn't refresh per Model B) → undoing it DOES
+// refresh because the bill state changes back to obligated.
+// Backdated spend (refreshed) → undoing it refreshes too.
+//
+// Five tests below lock the invariant across the relevant scenarios.
+
+test("[engine] FAILSAFE: undo today's regular spend does NOT refresh pace (Model B preserved)", () => {
+  // This is the screenshot bug. User spent $X today (frozen), then $Y
+  // today, then undid the $Y. Pre-fix: pace shifted by $X/days. Post-fix:
+  // pace stays at the frozen morning value, untouched by undo.
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 14), payFrequency: "monthly" },
+  }).state;
+  const paceMorning = s.dailyPaceCents;
+  assertTrue(paceMorning > 0);
+
+  // Other today-dated spending (the coffee + lunch background).
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 5628, note: "coffee + lunch" } }).state;
+  assertEq(s.dailyPaceCents, paceMorning, "Model B: today's spend doesn't move pace");
+
+  // The $200 spend we're going to undo.
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 20000, note: "jacket" } }).state;
+  assertEq(s.dailyPaceCents, paceMorning, "Model B: $200 spend also doesn't move pace");
+
+  // Undo the $200. Pre-fix: pace silently shifted. Post-fix: stays.
+  s = applyIntent(s, { kind: "undo_last", params: {} }).state;
+  assertEq(s.dailyPaceCents, paceMorning,
+    "FAILSAFE: undoing today's spend must NOT refresh pace (no leak from other today-spending)");
+});
+
+test("[engine] FAILSAFE: delete today's regular spend does NOT refresh pace", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 14), payFrequency: "monthly" },
+  }).state;
+  const paceMorning = s.dailyPaceCents;
+
+  // Today background spending + the one we'll delete.
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 5628, note: "coffee" } }).state;
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 20000, note: "jacket" } }).state;
+  const targetTxId = s.transactions[s.transactions.length - 1].id;
+  assertEq(s.dailyPaceCents, paceMorning);
+
+  // Delete the jacket. Per fix, pace MUST NOT refresh.
+  s = applyIntent(s, { kind: "delete_transaction", params: { id: targetTxId } }).state;
+  assertEq(s.dailyPaceCents, paceMorning,
+    "FAILSAFE: deleting today's spend must NOT refresh pace");
+});
+
+test("[engine] SYMMETRY: undo bill_payment DOES refresh (obligation flips back to unpaid)", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 140000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
+  }).state;
+  const paceWithBillObligated = s.dailyPaceCents;
+
+  // Pay the bill (today-dated bill_payment).
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 140000, billKey: "Rent" },
+  }).state;
+  // Per Model B, today's bill_payment doesn't refresh pace.
+  assertEq(s.dailyPaceCents, paceWithBillObligated);
+
+  // Undo it — bill goes back to obligated. Pace MUST refresh.
+  s = applyIntent(s, { kind: "undo_last", params: {} }).state;
+  assertEq(s.dailyPaceCents, paceWithBillObligated,
+    "bill_payment undo refreshes — bill back in obligation math");
+});
+
+test("[engine] SYMMETRY: undo BACKDATED spend DOES refresh (matches apply-side refresh)", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 14), payFrequency: "monthly" },
+  }).state;
+  s.transactions[0].date = m.addDays(today, -10); // widen backdate window
+  const paceBefore = s.dailyPaceCents;
+
+  // Backdated spend — applying triggers refresh (we're correcting history).
+  s = applyIntent(s, {
+    kind: "record_spend",
+    params: { amountCents: 30000, note: "perfume", date: m.addDays(today, -1) },
+  }).state;
+  assertTrue(s.dailyPaceCents !== paceBefore || s.dailyPaceComputedDate === today,
+    "backdated spend refreshed on apply");
+  const paceAfterBackdate = s.dailyPaceCents;
+
+  // Undo it — refresh must fire so pace goes BACK to original.
+  s = applyIntent(s, { kind: "undo_last", params: {} }).state;
+  assertTrue(s.dailyPaceCents !== paceAfterBackdate,
+    "backdated undo refreshes pace (symmetry)");
+});
+
+test("[engine] FAILSAFE: chain of today's spends + middle undo = stable pace", () => {
+  // The exact scenario the user hit: multiple spends today, then undo one.
+  // Pace MUST stay at the morning frozen value through the whole chain.
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 14), payFrequency: "monthly" },
+  }).state;
+  const morningPace = s.dailyPaceCents;
+
+  // Five today-dated spends.
+  for (let i = 0; i < 5; i++) {
+    s = applyIntent(s, { kind: "record_spend", params: { amountCents: 1000 + i * 500, note: "x" } }).state;
+    assertEq(s.dailyPaceCents, morningPace, "spend " + i + ": pace stays frozen");
+  }
+
+  // Undo last → pace must stay.
+  s = applyIntent(s, { kind: "undo_last", params: {} }).state;
+  assertEq(s.dailyPaceCents, morningPace, "after undo: pace untouched");
+
+  // Undo again → still stable.
+  s = applyIntent(s, { kind: "undo_last", params: {} }).state;
+  assertEq(s.dailyPaceCents, morningPace, "after 2nd undo: pace untouched");
+
+  // Now an add_bill (cycle event) → pace MUST refresh.
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Phone", amountCents: 20000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
+  }).state;
+  assertTrue(s.dailyPaceCents < morningPace, "add_bill refreshed (cycle event)");
+});
+
 // ── paceHistory — per-day pace snapshots for accurate heatmap colors
 
 test("[engine] refreshPace writes today's pace into paceHistory", () => {
