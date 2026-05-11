@@ -19,11 +19,11 @@ test("[dna] empty state → empty graph", () => {
   assertEq(g.summary.setup, false);
 });
 
-test("[dna] categorize: 'Starbucks latte' → coffee", () => {
-  assertEq(dna.categorize("Starbucks latte"), "coffee");
+test("[dna] categorize: 'Starbucks latte' → food (was 'coffee' in 14-bucket era)", () => {
+  assertEq(dna.categorize("Starbucks latte"), "food");
 });
-test("[dna] categorize: 'Trader Joe groceries' → groceries", () => {
-  assertEq(dna.categorize("Trader Joe groceries"), "groceries");
+test("[dna] categorize: 'Trader Joe groceries' → food (was 'groceries' pre-collapse)", () => {
+  assertEq(dna.categorize("Trader Joe groceries"), "food");
 });
 test("[dna] categorize: 'Uber to airport' → transport", () => {
   assertEq(dna.categorize("Uber to airport"), "transport");
@@ -35,15 +35,15 @@ test("[dna] categorize: empty → other", () => {
   assertEq(dna.categorize(""), "other");
 });
 
-test("[dna] graph: 5 coffees → coffee category with 5 txs", () => {
+test("[dna] graph: 5 coffees → food category with 5 txs (post-collapse)", () => {
   let s = setup();
   for (let i = 0; i < 5; i++) {
     s = applyIntent(s, { kind: "record_spend", params: { amountCents: 500, note: "coffee" } }).state;
   }
   const g = dna.compute(s);
-  const coffee = g.nodes.find(n => n.id === "cat:coffee");
-  assertTrue(!!coffee, "coffee category exists");
-  assertEq(coffee.transactions, 5);
+  const food = g.nodes.find(n => n.id === "cat:food");
+  assertTrue(!!food, "food category exists (coffee rolls up into food)");
+  assertEq(food.transactions, 5);
 });
 
 test("[dna] graph: bill node appears for added bill", () => {
@@ -71,7 +71,9 @@ test("[dna] renderForPrompt: produces compact summary", () => {
   const text = dna.renderForPrompt(dna.compute(s));
   assertTrue(text.includes("DNA SUMMARY"));
   assertTrue(text.includes("CATEGORIES"));
-  assertTrue(/coffee/i.test(text));
+  // Post-collapse: coffee + groceries both fall into "food". The prompt
+  // surfaces the bucket name, not the keyword.
+  assertTrue(/food/i.test(text));
   // Should be under 1KB even with 5 categories.
   assertTrue(text.length < 1500, "DNA prompt too large: " + text.length + " chars");
 });

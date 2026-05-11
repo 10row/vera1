@@ -1243,6 +1243,12 @@ function History(props) {
   var open = openState[0], setOpen = openState[1];
   var filterState = useState("all");
   var filter = filterState[0], setFilter = filterState[1];
+  // Fuzzy search across vendor + note + category + tags + context. ONE
+  // input replaces the need for taxonomy precision: type "juice" → see
+  // every juice spend regardless of category. Type "lighthouse" → see
+  // every Lighthouse visit. Type "vietnam" → see trip-tagged spends.
+  var queryState = useState("");
+  var query = queryState[0], setQuery = queryState[1];
   var nameMap = props.nameMap || {};
 
   var allTxs = (props.txs || []).filter(function(tx) {
@@ -1262,7 +1268,28 @@ function History(props) {
     return txs;
   }
 
-  var filtered = applyFilter(allTxs);
+  // Fuzzy match: lowercase substring search across all human-readable
+  // fields. Tag arrays are flattened. Stays performant for thousands
+  // of txs (string compare in a flat array).
+  function applyQuery(txs, q) {
+    if (!q) return txs;
+    var needle = q.toLowerCase().trim();
+    if (!needle) return txs;
+    return txs.filter(function(tx) {
+      var hay = "";
+      if (tx.vendor) hay += " " + tx.vendor;
+      if (tx.note) hay += " " + tx.note;
+      if (tx.category) hay += " " + tx.category;
+      if (tx.context) hay += " " + tx.context;
+      if (tx.originalCurrency) hay += " " + tx.originalCurrency;
+      if (Array.isArray(tx.tags)) hay += " " + tx.tags.join(" ");
+      // Envelope name (bill name) — pull from nameMap if present.
+      if (tx.envelopeKey && nameMap[tx.envelopeKey]) hay += " " + nameMap[tx.envelopeKey];
+      return hay.toLowerCase().indexOf(needle) !== -1;
+    });
+  }
+
+  var filtered = applyQuery(applyFilter(allTxs), query);
 
   // Group by date
   var groups = [];
@@ -1290,6 +1317,33 @@ function History(props) {
               onClick: function() { setOpen(false); },
               style: { fontSize: 11, color: C.sub, cursor: "pointer", padding: "2px 8px" },
             }, t("miniapp.history.close"))
+          ),
+          // Search bar — fuzzy match across vendor/note/category/tags/context.
+          h("div", { style: { marginBottom: 10, position: "relative" } },
+            h("input", {
+              type: "text",
+              value: query,
+              placeholder: "Search vendor, note, category…",
+              onChange: function(e) { setQuery(e.target.value); },
+              style: {
+                width: "100%", boxSizing: "border-box",
+                background: C.card, border: "1px solid " + C.border,
+                borderRadius: 10, color: C.text,
+                padding: "9px 32px 9px 12px",
+                fontSize: 13, fontFamily: "'Inter',sans-serif",
+                outline: "none",
+              },
+            }),
+            query
+              ? h("span", {
+                  onClick: function() { setQuery(""); },
+                  style: {
+                    position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                    fontSize: 14, color: C.muted, cursor: "pointer",
+                    padding: "2px 6px", lineHeight: 1,
+                  },
+                }, "×")
+              : null
           ),
           // Chips
           h("div", { style: { display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" } },
@@ -1349,7 +1403,7 @@ function Skeleton() {
     backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite", borderRadius: 12,
   };
   return h("div", { style: { padding: 20 } },
-    h("style", null, "@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }"),
+    h("style", null, "@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } } @keyframes fabIn { 0% { opacity: 0; transform: translateY(20px) scale(0.5); } 60% { opacity: 1; } 100% { opacity: 1; transform: translateY(0) scale(1); } }"),
     h("div", { style: Object.assign({}, sh, { width: 80, height: 22, margin: "20px auto", borderRadius: 999 }) }),
     h("div", { style: Object.assign({}, sh, { width: "60%", height: 56, margin: "0 auto 8px" }) }),
     h("div", { style: Object.assign({}, sh, { width: "40%", height: 14, margin: "0 auto 24px" }) }),
@@ -1645,12 +1699,199 @@ function App() {
     },
   });
 
+  // FAB visible only when fully set up + dashboard rendered. Avoids
+  // overlay on Skeleton / Error / NotSetUp screens.
+  var showFab = data && data.view && data.view.setup;
   return h("div", {
     style: {
       display: "flex", flexDirection: "column", minHeight: "100vh",
       background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", fontSize: 14,
     },
-  }, content);
+  }, content, showFab ? h(InputFAB, null) : null);
+}
+
+// ── INPUT FAB ──────────────────────────────────────────────
+// Wolt-style floating action button. Draggable (long-press → drag,
+// snaps to edges). Tap → expands radial sub-options (voice / photo /
+// type / quick repeat). Each sub-option closes the Mini App with a
+// haptic + signals user to use Telegram chat for input.
+//
+// Physics: CSS transitions with spring-like cubic-bezier curves.
+// `transform` is GPU-accelerated so it stays smooth on mobile.
+// Tap targets are large (56px FAB, 48px sub-buttons) for thumb use.
+//
+// Why this matters for the upcoming standalone app: the FAB IS the
+// daily-habit primitive. From any screen, 1 tap to log. Reduces
+// friction from ~5 taps (open chat → keyboard → type → send) to 2.
+function InputFAB() {
+  // Position state — bottom-right by default. Persisted to localStorage
+  // so the user's choice survives sessions.
+  var initial = (function() {
+    try {
+      var raw = localStorage.getItem("fabPos");
+      if (raw) {
+        var p = JSON.parse(raw);
+        if (typeof p.x === "number" && typeof p.y === "number") return p;
+      }
+    } catch {}
+    return { x: window.innerWidth - 80, y: window.innerHeight - 120 };
+  })();
+  var posState = useState(initial);
+  var pos = posState[0], setPos = posState[1];
+  var openState = useState(false);
+  var open = openState[0], setOpen = openState[1];
+  var draggingState = useState(false);
+  var dragging = draggingState[0], setDragging = draggingState[1];
+
+  // Drag refs — track start position + offset to keep finger anchored.
+  var dragRef = useRef({ active: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0, moved: false });
+
+  // Persist position when it stabilizes (after a drag).
+  useEffect(function() {
+    try { localStorage.setItem("fabPos", JSON.stringify(pos)); } catch {}
+  }, [pos.x, pos.y]);
+
+  function snapToEdge(x) {
+    var midX = window.innerWidth / 2;
+    var fabSize = 56;
+    var pad = 16;
+    return x < midX ? pad : window.innerWidth - fabSize - pad;
+  }
+
+  function clampY(y) {
+    var fabSize = 56;
+    var pad = 80;
+    var maxY = window.innerHeight - fabSize - pad;
+    var minY = pad;
+    if (y < minY) return minY;
+    if (y > maxY) return maxY;
+    return y;
+  }
+
+  function onDragStart(e) {
+    var touch = e.touches ? e.touches[0] : e;
+    dragRef.current = {
+      active: true,
+      startX: touch.clientX, startY: touch.clientY,
+      offsetX: touch.clientX - pos.x, offsetY: touch.clientY - pos.y,
+      moved: false,
+    };
+    // Don't open the panel mid-drag. Close if open.
+    if (open) setOpen(false);
+  }
+
+  function onDragMove(e) {
+    if (!dragRef.current.active) return;
+    var touch = e.touches ? e.touches[0] : e;
+    var dx = Math.abs(touch.clientX - dragRef.current.startX);
+    var dy = Math.abs(touch.clientY - dragRef.current.startY);
+    if (dx + dy > 6) {
+      dragRef.current.moved = true;
+      setDragging(true);
+    }
+    if (dragRef.current.moved) {
+      setPos({
+        x: touch.clientX - dragRef.current.offsetX,
+        y: clampY(touch.clientY - dragRef.current.offsetY),
+      });
+      e.preventDefault();
+    }
+  }
+
+  function onDragEnd() {
+    var wasMoved = dragRef.current.moved;
+    dragRef.current.active = false;
+    if (wasMoved) {
+      // Snap to nearest edge with spring-y transition.
+      setPos(function(p) { return { x: snapToEdge(p.x), y: clampY(p.y) }; });
+      setTimeout(function() { setDragging(false); }, 220);
+    } else {
+      // Tap — toggle the radial menu.
+      setDragging(false);
+      tapHaptic && tapHaptic();
+      setOpen(function(v) { return !v; });
+    }
+  }
+
+  // Sub-button action: haptic + close Mini App so the user lands in
+  // Telegram chat ready to send. We can't send a message on the
+  // user's behalf from a Mini App (security), but closing the panel
+  // and bringing them to the chat is one-tap-to-input.
+  function pickInput(_kind) {
+    tapHaptic && tapHaptic();
+    setOpen(false);
+    try {
+      if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.close === "function") {
+        window.Telegram.WebApp.close();
+      }
+    } catch {}
+  }
+
+  // Render. Three pieces:
+  //   1. Backdrop dimmer (fade in/out) — taps elsewhere close panel
+  //   2. Sub-buttons (animated radial expand)
+  //   3. Main FAB circle
+  var fabSize = 56;
+  var leftSide = pos.x < window.innerWidth / 2;
+  // Sub-buttons line up vertically above the FAB.
+  var subs = [
+    { icon: "🎤", label: "Voice", kind: "voice" },
+    { icon: "📷", label: "Photo", kind: "photo" },
+    { icon: "✍️", label: "Type",  kind: "text" },
+  ];
+  return h("div", null,
+    // Backdrop
+    open ? h("div", {
+      onClick: function() { setOpen(false); },
+      style: {
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+        zIndex: 998,
+        animation: "fadeIn 150ms ease",
+      },
+    }) : null,
+    // Sub-buttons
+    open ? subs.map(function(s, i) {
+      var offset = (i + 1) * 64;
+      return h("div", {
+        key: s.kind,
+        onClick: function() { pickInput(s.kind); },
+        style: {
+          position: "fixed",
+          left: pos.x + "px",
+          top: (pos.y - offset) + "px",
+          width: fabSize, height: fabSize, borderRadius: "50%",
+          background: C.card, border: "1px solid " + C.border,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          fontSize: 20, color: C.text,
+          zIndex: 999, cursor: "pointer",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+          animation: "fabIn " + (180 + i * 40) + "ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+        },
+      },
+        h("span", null, s.icon),
+        h("span", { style: { fontSize: 8, color: C.muted, marginTop: 2, letterSpacing: "0.04em", textTransform: "uppercase" } }, s.label)
+      );
+    }) : null,
+    // Main FAB
+    h("div", {
+      onMouseDown: onDragStart, onMouseMove: onDragMove, onMouseUp: onDragEnd, onMouseLeave: onDragEnd,
+      onTouchStart: onDragStart, onTouchMove: onDragMove, onTouchEnd: onDragEnd,
+      style: {
+        position: "fixed",
+        left: pos.x + "px", top: pos.y + "px",
+        width: fabSize, height: fabSize, borderRadius: "50%",
+        background: C.text, color: "#0F0F0F",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 26, fontWeight: 400,
+        cursor: dragging ? "grabbing" : "pointer",
+        zIndex: 1000,
+        boxShadow: "0 6px 16px rgba(0,0,0,0.45)",
+        userSelect: "none", touchAction: "none",
+        transition: dragging ? "none" : "left 220ms cubic-bezier(0.34, 1.56, 0.64, 1), top 220ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 150ms ease",
+        transform: open ? "rotate(45deg) scale(1.08)" : "rotate(0deg) scale(1)",
+      },
+    }, "+")
+  );
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(h(App, null));

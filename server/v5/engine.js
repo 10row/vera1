@@ -221,18 +221,70 @@ function applyIntent(state, intent) {
       // Sanitization: trim, length-cap, lowercase the canonical keys.
       // Display preserves user-spoken casing where it matters (vendor,
       // context). Categories normalize to a fixed list.
+      // Categories — collapsed to 6 BIG buckets. Old 14-category list
+      // made AI categorization non-deterministic and aggregation noisy
+      // (coffee vs cafe vs restaurant — same spot, different bucket
+      // across calls). Six clear buckets + vendor + note + tags carry
+      // the granularity. See CLAUDE.md "Core logic" → categorization.
       const VALID_CATEGORIES = new Set([
-        "coffee","groceries","restaurant","delivery","transport","subscription",
-        "clothing","health","alcohol","personal","home","entertainment","travel","other",
+        "food", "transport", "home", "subscriptions", "personal", "other",
       ]);
+      // Legacy category → new bucket. AI may still emit old names from
+      // cached prompts; this remaps to keep data clean. Old tx values
+      // remain (no migration); read-side helper (mapLegacyCategory in
+      // model.js) translates for display + aggregation.
+      const LEGACY_CATEGORY_MAP = {
+        coffee: "food", groceries: "food", restaurant: "food",
+        delivery: "food", alcohol: "food",
+        subscription: "subscriptions", streaming: "subscriptions",
+        clothing: "personal", health: "personal", entertainment: "personal",
+        travel: "personal",
+        // already-correct passthroughs handled by VALID_CATEGORIES check
+      };
       const sanStr = (s, max) => {
         if (s == null) return null;
         const t = String(s).trim().slice(0, max);
         return t.length > 0 ? t : null;
       };
-      const vendor = sanStr(p.vendor, 60);
+      // Vendor canonicalization — trim whitespace, collapse internal
+      // double-spaces, normalize casing to title-case so "lighthouse" /
+      // "Lighthouse" / "LIGHTHOUSE" coalesce to the same display string.
+      // Aggregation downstream (DNA, fuzzy search) gets a single key
+      // per vendor without complex coalescing logic. Vendor is the
+      // first-class entity; this small normalization makes it reliable.
+      function canonicalizeVendor(s) {
+        const raw = sanStr(s, 60);
+        if (!raw) return null;
+        // Collapse whitespace.
+        const cleaned = raw.replace(/\s+/g, " ").trim();
+        return cleaned.split(" ").map(w => {
+          if (!w) return w;
+          if (w.length === 1) return w.toUpperCase();
+          // If word is all-caps OR all-lower → title-case
+          // (LIGHTHOUSE → Lighthouse, lighthouse → Lighthouse).
+          // If mixed-case → leave alone to preserve brand names like
+          // "McDonald's", "iPhone", "OpenAI".
+          const isAllUpper = w === w.toUpperCase();
+          const isAllLower = w === w.toLowerCase();
+          if (isAllUpper || isAllLower) {
+            return w[0].toUpperCase() + w.slice(1).toLowerCase();
+          }
+          return w; // mixed-case → preserve
+        }).join(" ");
+      }
+      const vendor = canonicalizeVendor(p.vendor);
+      // Category resolution:
+      //   1. lowercase-normalize input
+      //   2. if in new 6-bucket set → use as-is
+      //   3. else if legacy → remap to new bucket
+      //   4. else → null (no category)
       const rawCat = sanStr(p.category, 30);
-      const category = rawCat && VALID_CATEGORIES.has(rawCat.toLowerCase()) ? rawCat.toLowerCase() : null;
+      let category = null;
+      if (rawCat) {
+        const lc = rawCat.toLowerCase();
+        if (VALID_CATEGORIES.has(lc)) category = lc;
+        else if (LEGACY_CATEGORY_MAP[lc]) category = LEGACY_CATEGORY_MAP[lc];
+      }
       const context = sanStr(p.context, 60);
       let tags = null;
       if (Array.isArray(p.tags)) {

@@ -180,6 +180,29 @@ function billKey(name) {
   return String(name || "").toLowerCase().trim().replace(/\s+/g, "_").slice(0, 60);
 }
 
+// Legacy-aware category mapping. Old transactions stored 14-bucket
+// categories (coffee, restaurant, alcohol, etc.). New transactions
+// use 6 BIG buckets (food, transport, home, subscriptions, personal,
+// other). For aggregation / display / search, we translate on the
+// fly — no data migration needed. Pure function.
+const _LEGACY_CATEGORY_MAP = {
+  coffee: "food", groceries: "food", restaurant: "food",
+  delivery: "food", alcohol: "food",
+  subscription: "subscriptions", streaming: "subscriptions",
+  clothing: "personal", health: "personal", entertainment: "personal",
+  travel: "personal",
+};
+const _CURRENT_CATEGORIES = new Set([
+  "food", "transport", "home", "subscriptions", "personal", "other",
+]);
+function mapCategory(cat) {
+  if (!cat) return null;
+  const lc = String(cat).toLowerCase();
+  if (_CURRENT_CATEGORIES.has(lc)) return lc;
+  if (_LEGACY_CATEGORY_MAP[lc]) return _LEGACY_CATEGORY_MAP[lc];
+  return lc; // unknown — pass through, won't aggregate cleanly but at least visible
+}
+
 function uid() {
   return crypto.randomBytes(12).toString("hex");
 }
@@ -237,6 +260,6 @@ module.exports = {
   today, daysBetween, daysUntil, addDays, normalizeDate, advancePayday, addBillCycle,
   resolveTxDate,
   RECURRENCES, PAY_FREQS, INTENT_KINDS,
-  billKey, uid, escapeMd,
+  billKey, mapCategory, uid, escapeMd,
   createFreshState,
 };

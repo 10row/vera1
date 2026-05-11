@@ -31,23 +31,32 @@
 
 const m = require("./model");
 
-// Keyword → canonical category. Lowercase exact-substring match.
-// Order matters: more-specific keywords first.
+// Keyword → 6-bucket category. Lowercase exact-substring match.
+// Buckets: food / transport / home / subscriptions / personal / other.
+// Order matters: more-specific keywords first. Kept the long keyword
+// list so legacy categorization stays accurate; just collapsed to the
+// new bucket on the LEFT.
 const CATEGORY_KEYWORDS = [
-  ["coffee",     ["coffee", "latte", "cappuccino", "espresso", "starbucks", "tims", "tim hortons", "dunkin", "blue bottle"]],
-  ["groceries",  ["groceries", "grocery", "supermarket", "trader joe", "whole foods", "tesco", "lidl", "kroger", "walmart food", "вкусвилл", "пятёрочка", "ашан"]],
-  ["restaurant", ["restaurant", "dinner out", "lunch out", "brunch", "thai", "sushi", "burger", "ramen", "tacos", "pizza"]],
-  ["delivery",   ["uber eats", "ubereats", "doordash", "grubhub", "deliveroo", "wolt", "delivery", "yandex eats", "яндекс еда", "delivery club"]],
-  ["transport", ["uber", "lyft", "taxi", "gas", "petrol", "fuel", "metro", "subway ride", "bus", "train", "parking"]],
-  ["subscription", ["netflix", "spotify", "apple music", "youtube premium", "icloud", "google drive", "patreon", "subscription"]],
-  ["clothing",   ["clothes", "shirt", "shoes", "jacket", "jeans", "dress", "h&m", "zara", "uniqlo", "nike"]],
-  ["health",     ["pharmacy", "doctor", "dentist", "gym", "yoga", "vitamins", "supplements"]],
-  ["alcohol",    ["beer", "wine", "vodka", "whiskey", "cocktail", "bar tab", "pub"]],
-  ["personal",   ["haircut", "barber", "salon", "manicure", "spa"]],
-  ["home",       ["furniture", "ikea", "home depot", "amazon basics", "household"]],
-  ["entertainment", ["movie", "cinema", "concert", "ticket", "show"]],
-  ["travel",     ["flight", "hotel", "airbnb", "booking.com", "trip"]],
-  ["other",      []],
+  // food — everything edible/drinkable
+  ["food", ["coffee", "latte", "cappuccino", "espresso", "starbucks", "tims", "tim hortons", "dunkin", "blue bottle",
+            "groceries", "grocery", "supermarket", "trader joe", "whole foods", "tesco", "lidl", "kroger", "walmart food", "вкусвилл", "пятёрочка", "ашан",
+            "restaurant", "dinner out", "lunch out", "brunch", "thai", "sushi", "burger", "ramen", "tacos", "pizza",
+            "uber eats", "ubereats", "doordash", "grubhub", "deliveroo", "wolt", "delivery", "yandex eats", "яндекс еда", "delivery club",
+            "beer", "wine", "vodka", "whiskey", "cocktail", "bar tab", "pub",
+            "juice", "smoothie", "snack"]],
+  // transport — anything that moves you
+  ["transport", ["uber", "lyft", "taxi", "gas", "petrol", "fuel", "metro", "subway ride", "bus", "train", "parking",
+                 "flight", "airbnb", "booking.com", "hotel"]],
+  // subscriptions — recurring services
+  ["subscriptions", ["netflix", "spotify", "apple music", "youtube premium", "icloud", "google drive", "patreon", "subscription"]],
+  // home — rent/utilities/household
+  ["home", ["rent", "utilities", "electricity", "water bill", "internet bill", "furniture", "ikea", "home depot", "amazon basics", "household"]],
+  // personal — everything else (clothing/health/entertainment/fun)
+  ["personal", ["clothes", "shirt", "shoes", "jacket", "jeans", "dress", "h&m", "zara", "uniqlo", "nike",
+                "pharmacy", "doctor", "dentist", "gym", "yoga", "vitamins", "supplements",
+                "haircut", "barber", "salon", "manicure", "spa",
+                "movie", "cinema", "concert", "ticket", "show"]],
+  ["other", []],
 ];
 
 // Categorize a transaction. Prefers the AI-stored `category` field
@@ -56,9 +65,11 @@ const CATEGORY_KEYWORDS = [
 function categorize(noteOrTx) {
   // Backward-compat: callers historically passed a note string. Now also
   // accepts a transaction object { note, category }.
+  // Legacy category remap: old 14-bucket categories (coffee, alcohol, etc.)
+  // are translated to the new 6-bucket vocab via m.mapCategory.
   if (noteOrTx && typeof noteOrTx === "object") {
     if (noteOrTx.category && typeof noteOrTx.category === "string") {
-      return noteOrTx.category.toLowerCase();
+      return m.mapCategory(noteOrTx.category);
     }
     return categorizeNote(noteOrTx.note);
   }

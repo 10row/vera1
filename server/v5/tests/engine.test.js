@@ -153,17 +153,61 @@ test("[engine] missing intent throws", () => {
 // Backward-compat: older transactions without these fields must still
 // work. Field validation: category must be from the fixed list.
 
-test("[graph] record_spend stores vendor when provided", () => {
+test("[graph] record_spend stores canonicalized vendor + remapped legacy category", () => {
   let s = m.createFreshState();
   s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
   const r = applyIntent(s, {
     kind: "record_spend",
-    params: { amountCents: 2500, note: "coffee at Lighthouse", vendor: "Lighthouse", category: "coffee" },
+    params: { amountCents: 2500, note: "coffee at Lighthouse", vendor: "lighthouse", category: "coffee" },
   });
   const tx = r.state.transactions[r.state.transactions.length - 1];
+  // Vendor canonicalized to title-case (was "lighthouse" → "Lighthouse")
   assertEq(tx.vendor, "Lighthouse");
-  assertEq(tx.category, "coffee");
+  // Legacy "coffee" category remapped to new 6-bucket "food"
+  assertEq(tx.category, "food");
   assertEq(tx.note, "coffee at Lighthouse");
+});
+
+test("[graph] vendor canonicalization — variants coalesce to same display", () => {
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
+  // Three casings should normalize identically.
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 500, note: "a", vendor: "lighthouse" } }).state;
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 500, note: "b", vendor: "LIGHTHOUSE" } }).state;
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 500, note: "c", vendor: "  Lighthouse  " } }).state;
+  const vendors = s.transactions.filter(t => t.vendor).map(t => t.vendor);
+  assertTrue(vendors.length === 3);
+  // All three display identically.
+  assertEq(vendors[0], "Lighthouse");
+  assertEq(vendors[1], "Lighthouse");
+  assertEq(vendors[2], "Lighthouse");
+});
+
+test("[graph] category collapse: 14 legacy buckets map to 6 new ones", () => {
+  let s = m.createFreshState();
+  s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 1000000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
+  const cases = [
+    { in: "coffee", out: "food" },
+    { in: "groceries", out: "food" },
+    { in: "restaurant", out: "food" },
+    { in: "delivery", out: "food" },
+    { in: "alcohol", out: "food" },
+    { in: "subscription", out: "subscriptions" },
+    { in: "clothing", out: "personal" },
+    { in: "health", out: "personal" },
+    { in: "entertainment", out: "personal" },
+    { in: "travel", out: "personal" },
+    { in: "food", out: "food" },     // already-new passthrough
+    { in: "transport", out: "transport" },
+    { in: "home", out: "home" },
+    { in: "personal", out: "personal" },
+    { in: "other", out: "other" },
+  ];
+  for (const c of cases) {
+    s = applyIntent(s, { kind: "record_spend", params: { amountCents: 100, note: "x", category: c.in } }).state;
+    const tx = s.transactions[s.transactions.length - 1];
+    assertEq(tx.category, c.out, "category '" + c.in + "' should map to '" + c.out + "' got '" + tx.category + "'");
+  }
 });
 
 test("[graph] record_spend with no graph fields still works (backward-compat)", () => {
@@ -222,21 +266,19 @@ test("[graph] foreign currency + graph fields: both preserved correctly", () => 
   assertEq(tx.category, "transport");
 });
 
-test("[graph] DNA categorize prefers stored category over keyword inference", () => {
+test("[graph] DNA categorize prefers stored category over keyword inference (legacy-aware)", () => {
   const { compute } = require("../dna");
   let s = m.createFreshState();
   s = applyIntent(s, { kind: "setup_account", params: { balanceCents: 500000, payday: "2025-06-01", payFrequency: "monthly" } }).state;
-  // Stored category="alcohol" but note is just "30 at the bar" — keyword
-  // inference would also say alcohol due to "bar". Use a note where they
-  // diverge: note="random expense", stored category="entertainment".
+  // Stored category="entertainment" (legacy 14-bucket) is remapped to
+  // "personal" by engine on insert. DNA must aggregate as "personal".
   s = applyIntent(s, {
     kind: "record_spend",
     params: { amountCents: 5000, note: "random expense", category: "entertainment" },
   }).state;
   const graph = compute(s);
-  // Find the entertainment node — should exist because we stored that category.
-  const entCat = graph.summary.topCategories && graph.summary.topCategories.find(c => c.name === "entertainment");
-  assertTrue(!!entCat, "DNA should aggregate the stored category, not infer from note");
+  const personalCat = graph.summary.topCategories && graph.summary.topCategories.find(c => c.name === "personal");
+  assertTrue(!!personalCat, "DNA aggregates into the new bucket after legacy remap");
 });
 
 // ── DELETE TRANSACTION (the user's "didn't get the cat" bug) ──
