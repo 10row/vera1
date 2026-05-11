@@ -1565,14 +1565,25 @@ function App() {
         var v = d.view || { setup: false };
         // Load matching locale before showing the dashboard for the first
         // time. On subsequent refreshes the locale is already cached.
+        //
+        // CRITICAL: loadLocale is async (fetches a JSON file). Previously
+        // we kicked it off and returned synchronously, then the terminal
+        // .then() set loading=false BEFORE setData fired — opening a
+        // 50-200ms gap where (loading=false, data=null) caused the
+        // NotSetUpState screen to flash. Fix: wrap loadLocale in a
+        // Promise so the chain WAITS for setData before the terminal
+        // .then() runs.
         var lang = (v && v.language) || "en";
-        loadLocale(lang, function() {
-          setData({
-            view: v,
-            txs: d.recentTransactions || [],
-            heatmap: d.heatmap || [],
+        return new Promise(function(resolve) {
+          loadLocale(lang, function() {
+            setData({
+              view: v,
+              txs: d.recentTransactions || [],
+              heatmap: d.heatmap || [],
+            });
+            setError(false);
+            resolve();
           });
-          setError(false);
         });
       })
       .catch(function(e) {
@@ -1612,10 +1623,18 @@ function App() {
     return function() { document.removeEventListener("visibilitychange", onVis); };
   }, [loadView]);
 
+  // Render branches, ordered most-specific to most-general.
+  //
+  // The "no data yet" check is independent of the `loading` flag —
+  // even if loading flipped to false for any reason (race, async ordering,
+  // future code path), as long as data hasn't arrived we treat it as
+  // still loading. This is the AAA defensive layer that closes the
+  // "NotSetUpState flashes before Dashboard" bug at the render level,
+  // independent of the loadView ordering fix above. Belt + suspenders.
   var content;
-  if (loading && !data) content = h(Skeleton, null);
-  else if (error && !data) content = h(ErrorState, { onRetry: loadView, errMsg: lastErr });
-  else if (!data || !data.view || !data.view.setup) content = h(NotSetUpState, null);
+  if (!data && !error) content = h(Skeleton, null);
+  else if (!data && error) content = h(ErrorState, { onRetry: loadView, errMsg: lastErr });
+  else if (!data.view || !data.view.setup) content = h(NotSetUpState, null);
   else content = h(Dashboard, {
     view: data.view, txs: data.txs, heatmap: data.heatmap, sid: sid.current,
     // After a successful Mark-Paid action, swap in the fresh view immediately
