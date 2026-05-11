@@ -531,6 +531,17 @@ async function parseProposal(state, userMessage, history, options) {
     { role: "user", content: String(userMessage || "") },
   ];
 
+  // Record the attempt PRE-CALL so /debug always shows that an AI call
+  // happened — even if the call itself crashes and we lose the response.
+  // The post-call record (with the real response or <ERROR>) replaces
+  // this placeholder.
+  if (opts._debugUserId != null) {
+    try {
+      const preview = String(userMessage || "").slice(0, 80);
+      require("./ai-debug").recordAiRaw(opts._debugUserId, "<PENDING> user msg: \"" + preview + "\"");
+    } catch {}
+  }
+  console.log("[v5 parseProposal] AI call start, user msg len:", (userMessage || "").length);
   let raw = "";
   try {
     raw = await aiCall(msgs);
