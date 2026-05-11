@@ -4,7 +4,7 @@
 
 module.exports = {
   // ── Welcome / onboarding ─────────────────────────────
-  "welcome.identity": "Hi 👋 I'm SpendYes — your money friend on Telegram.",
+  "welcome.identity": "Hi 👋 I'm Spendkitty — your money friend on Telegram.",
   "welcome.value": "Just talk to me about your money — I'll work out what you can freely spend each day.",
   "welcome.askBalance": "What's roughly in your account today?",
   "welcome.afterReset": "Fresh start. What's roughly in your account today?",
@@ -145,6 +145,7 @@ module.exports = {
   // is steady context. Bank balance + available is reference info.
   "miniapp.hero.inAccount": "in account",
   "miniapp.hero.leftToday": "left today",
+  "miniapp.hero.overToday": "over today",
   "miniapp.hero.subNoBills": "{pace}/day · {days}d to payday",
   "miniapp.hero.subNoBillsSingleDay": "{pace}/day · 1d to payday",
   "miniapp.hero.subWithBills": "{available} available · {pace}/day · {days}d",

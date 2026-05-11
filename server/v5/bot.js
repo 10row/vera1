@@ -797,7 +797,7 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     const state = await db.loadState(prisma, u.id);
     const lang = state.language === "ru" ? "ru" : "en";
     const helpText = lang === "ru"
-      ? "*SpendYes — что я умею:*\n\n" +
+      ? "*Spendkitty — что я умею:*\n\n" +
         "💸 *Логировать расходы* — просто напиши:\n" +
         "  • _\"30 на кофе\"_\n" +
         "  • _\"500 руб такси домой\"_\n" +
@@ -817,7 +817,7 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
         "  /undo — отменить последнее\n" +
         "  /app — открыть дашборд\n" +
         "  /reset — сбросить всё"
-      : "*SpendYes — what I can do:*\n\n" +
+      : "*Spendkitty — what I can do:*\n\n" +
         "💸 *Log spends* — just tell me:\n" +
         "  • _\"30 on coffee\"_\n" +
         "  • _\"$50 dinner at Lighthouse\"_\n" +
@@ -1324,8 +1324,8 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
         // disorienting (user reported feeling lost mid-flow). Two-line
         // intro then the same balance ask as fresh onboarding.
         const welcome = lang === "ru"
-          ? "Сброшено ✅\n\nПривет, я *SpendYes* — твой денежный приятель. Я помогу следить за тратами, счетами и тем, сколько у тебя свободного времени до зарплаты.\n\nДавай начнём с начала: сколько примерно сейчас на счёте?"
-          : "Reset ✅\n\nHi, I'm *SpendYes* — your money buddy. I'll help you keep tabs on spending, bills, and how much daily wiggle-room you have until payday.\n\nLet's start from scratch: what's roughly in your account?";
+          ? "Сброшено ✅\n\nПривет, я *Spendkitty* — твой денежный приятель. Я помогу следить за тратами, счетами и тем, сколько у тебя свободного времени до зарплаты.\n\nДавай начнём с начала: сколько примерно сейчас на счёте?"
+          : "Reset ✅\n\nHi, I'm *Spendkitty* — your money buddy. I'll help you keep tabs on spending, bills, and how much daily wiggle-room you have until payday.\n\nLet's start from scratch: what's roughly in your account?";
         await safeReply(ctx, welcome, { parse_mode: "Markdown" });
         return;
       }

@@ -39,8 +39,9 @@ test("[i18n] t() falls back to en when key missing in target locale", () => {
   // Make sure ru doesn't accidentally have an unknown key fallback
   const r = t("welcome.identity", "ru");
   assertTrue(r.length > 0);
-  // Should be the Russian one
-  assertTrue(r.includes("SpendYes"));
+  // Should be the Russian one — contains the brand name in either form
+  // (the rebrand from SpendYes to Spendkitty changed the literal).
+  assertTrue(r.includes("Spendkitty") || r.includes("SpendYes"));
 });
 
 // ── normalizeLang ─────────────────────────────────────

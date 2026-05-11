@@ -346,7 +346,17 @@ function Hero(props) {
   }
 
   // CALM / TIGHT STATE — today's-left is the headline.
+  var todayRemCents = (typeof v.todayRemainingCents === "number") ? v.todayRemainingCents : 0;
+  var todayOver = todayRemCents < 0;
+  // The big number reflects reality: positive = left to spend, negative
+  // = went over today's pace. Color shifts to amber when over (gentle
+  // warning, not punishing red — red is reserved for cycle-level over).
+  // Label adapts to match the sign so the user reads it correctly.
   var todayLeftText = v.todayRemainingFormatted || "";
+  var todayLabel = todayOver
+    ? t("miniapp.hero.overToday")
+    : t("miniapp.hero.leftToday");
+  var todayHeroColor = todayOver ? C.amber : col;
   var paceShort = v.dailyPaceShort || v.dailyPaceFormatted || "";
   var availShort = v.disposableShort || v.disposableFormatted || "";
   var balanceShort = v.balanceShort || v.balanceFormatted || "";
@@ -431,13 +441,13 @@ function Hero(props) {
     h("div", {
       style: {
         fontFamily: "'Lora',serif", fontSize: 60, fontWeight: 500,
-        color: col, lineHeight: 1.0, letterSpacing: "-0.02em",
+        color: todayHeroColor, lineHeight: 1.0, letterSpacing: "-0.02em",
         transition: "color 0.4s ease",
       },
     }, todayLeftText),
-    // Label
+    // Label (adapts to sign: "left today" vs "over today")
     h("div", { style: { fontSize: 13, color: C.sub, marginTop: 10, letterSpacing: "0.02em" } },
-      t("miniapp.hero.leftToday")),
+      todayLabel),
     // Mid context: pace + days
     h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, paceDaysContext),
     // Reference (smallest, dimmest): bank balance + available

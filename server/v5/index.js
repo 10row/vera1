@@ -155,7 +155,11 @@ function v5ToV4View(state) {
   }
 
   // Today's remaining = dailyPace - what they've spent today.
-  const todayRem = Math.max(0, view.dailyPaceCents - view.todaySpentCents);
+  // SIGNED: can go negative when the user overspends today. The hero
+  // surfaces this in amber so the user sees the truth, not a clamped
+  // "$0 calm" lie. (Previous clamp made an overspend day look fine
+  // — exactly the anti-pattern the tool exists to avoid.)
+  const todayRem = view.dailyPaceCents - view.todaySpentCents;
 
   // Variance = today's spend vs today's pace.
   // Positive = under pace (saved). Negative = over pace.

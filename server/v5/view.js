@@ -168,13 +168,15 @@ function heroLine(state, lang) {
       : "🔴 Short " + m.toMoney(v.deficitCents, sym) + " before payday";
   }
 
-  // "Left today" piece — only when there's been a spend today.
-  const todayRem = Math.max(0, (v.dailyPaceCents || 0) - (v.todaySpentCents || 0));
+  // "Left today" piece — only when there's been a spend today. Goes
+  // SIGNED (negative when over today's pace) so the chat hero matches
+  // the mini app: an overspent day shows the deficit, not a clamped $0.
+  const todayRem = (v.dailyPaceCents || 0) - (v.todaySpentCents || 0);
   const showLeftToday = (v.todaySpentCents || 0) > 0 && (v.dailyPaceCents || 0) > 0;
   const leftTodayPiece = showLeftToday
     ? (L === "ru"
-        ? m.toMoney(todayRem, sym) + " на сегодня · "
-        : m.toMoney(todayRem, sym) + " left today · ")
+        ? m.toMoney(todayRem, sym) + (todayRem < 0 ? " сегодня · " : " на сегодня · ")
+        : m.toMoney(todayRem, sym) + (todayRem < 0 ? " over today · " : " left today · "))
     : "";
 
   // Yellow dot conveys "tight" — no word needed.

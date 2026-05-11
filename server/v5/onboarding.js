@@ -342,8 +342,8 @@ function handle(state, text, todayStr) {
 const copy = {
   askBalance(L) {
     return L === "ru"
-      ? "Привет 👋 Я SpendYes — помогу следить за деньгами без хлопот.\n\nСколько сейчас на основном счёте — примерно? Просто число."
-      : "Hey 👋 I'm SpendYes — your money buddy.\n\nLet's start simple: what's roughly in your main account right now? A ballpark number is fine.";
+      ? "Привет 👋 Я Spendkitty — помогу следить за деньгами без хлопот.\n\nСколько сейчас на основном счёте — примерно? Просто число."
+      : "Hey 👋 I'm Spendkitty — your money buddy.\n\nLet's start simple: what's roughly in your main account right now? A ballpark number is fine.";
   },
   // First miss — explain the why, then re-ask gently. Many users dodge
   // because they don't trust the bot yet. Give them the value prop.

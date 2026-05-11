@@ -3,7 +3,7 @@
 
 module.exports = {
   // ── Welcome / onboarding ─────────────────────────────
-  "welcome.identity": "Привет 👋 Я SpendYes — твой денежный друг в Telegram.",
+  "welcome.identity": "Привет 👋 Я Spendkitty — твой денежный друг в Telegram.",
   "welcome.value": "Просто рассказывай мне про деньги — я подсчитаю, сколько ты можешь свободно тратить каждый день.",
   "welcome.askBalance": "Сколько примерно у тебя сейчас на счёте?",
   "welcome.afterReset": "Начинаем с чистого листа. Сколько примерно у тебя на счёте?",
@@ -141,6 +141,7 @@ module.exports = {
   // ── NEW HERO (today's-left as headline) ──
   "miniapp.hero.inAccount": "на счёте",
   "miniapp.hero.leftToday": "осталось сегодня",
+  "miniapp.hero.overToday": "перерасход сегодня",
   "miniapp.hero.subNoBills": "{pace}/день · {days}д до зарплаты",
   "miniapp.hero.subNoBillsSingleDay": "{pace}/день · 1д до зарплаты",
   "miniapp.hero.subWithBills": "{available} доступно · {pace}/день · {days}д",
