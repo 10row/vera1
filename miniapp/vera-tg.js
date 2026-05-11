@@ -1054,4 +1054,28 @@ function App() {
   var content;
   if (loading && !pic) {
     content = h(Skeleton, null);
-  } else if (error && !p
+  } else if (error && !pic) {
+    content = h(ErrorState, { onRetry: function() { loadPicture(); }, errMsg: lastErr });
+  } else if (!pic || !pic.setup) {
+    content = h(NotSetUpState, null);
+  } else {
+    content = h(Dashboard, { pic: pic, lastUpdated: lastUpdated });
+  }
+
+  return h("div", { style: S.page },
+    h(RefreshBar, { show: refreshing }),
+    h("div", {
+      ref: scrollRef,
+      style: Object.assign({}, S.scroll, {
+        transform: pullDist > 0 ? "translateY(" + pullDist + "px)" : "none",
+        transition: pullDist > 0 ? "none" : "transform 0.3s ease",
+      }),
+    },
+      h(PullIndicator, { dist: pullDist }),
+      content
+    )
+  );
+}
+
+// ── MOUNT ───────────────────────────────────────────────────────
+ReactDOM.createRoot(document.getElementById("root")).render(h(App, null));
