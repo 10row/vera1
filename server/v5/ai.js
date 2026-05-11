@@ -539,10 +539,28 @@ async function parseProposal(state, userMessage, history, options) {
       try { require("./ai-debug").recordAiRaw(opts._debugUserId, raw); } catch {}
     }
   } catch (e) {
+    // DIAGNOSTIC: surface the actual failure so production issues
+    // (network, rate-limit, missing key, schema rejection) are
+    // debuggable. Three channels:
+    //   1. Railway console (stderr) — readable via `railway logs`.
+    //   2. ai-debug ring buffer — readable via `/debug` in chat.
+    //   3. warnings field on the returned proposal (harness-visible).
+    // The user-facing message stays unchanged — generic apology.
+    const errMsg = (e && (e.message || e.toString())) || "unknown";
+    const errStatus = e && (e.status || (e.response && e.response.status));
+    const errCode = e && e.code;
+    const fullErr = "ai_call_failed: " + errMsg
+      + (errStatus ? " (status=" + errStatus + ")" : "")
+      + (errCode ? " (code=" + errCode + ")" : "");
+    console.error("[v5 parseProposal]", fullErr, e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : "");
+    if (opts._debugUserId != null) {
+      try { require("./ai-debug").recordWarning(opts._debugUserId, "⚠ " + fullErr); } catch {}
+      try { require("./ai-debug").recordAiRaw(opts._debugUserId, "<ERROR> " + fullErr); } catch {}
+    }
     return {
       mode: "talk",
       message: state.language === "ru" ? "Что-то пошло не так — попробуй ещё раз?" : "Sorry, brain blip — try that again?",
-      warnings: ["ai_call_failed: " + e.message],
+      warnings: [fullErr],
     };
   }
 
