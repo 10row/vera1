@@ -561,6 +561,15 @@ async function processMessage(state, userMessage, history, options) {
       message: cleanedMessage,
       amountCents: proposal.amountCents,
       simulate: sim,
+      // Preserve the "what" so the bot's [Log it] button can create a
+      // record_spend with a meaningful note instead of an empty one.
+      // "Can I afford 200 for a jacket?" → tap Log → record_spend
+      // includes note="jacket", category="personal", vendor=... if AI
+      // captured them. Without this, every logged afford-check is a
+      // noteless spend in history.
+      note: proposal.note || undefined,
+      vendor: proposal.vendor || undefined,
+      category: proposal.category || undefined,
     };
   }
 

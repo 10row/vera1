@@ -110,7 +110,7 @@ function buildSystemPrompt(state) {
     '   { "mode":"do",   "message":"reply text", "intent":{"kind":"...","params":{...}} }                         (single action)',
     '   { "mode":"do",   "message":"reply text", "intents":[ {"kind":"...","params":{...}}, ... ] }              (brain-dump: 2-5 actions)',
     '   { "mode":"talk", "message":"reply text" }',
-    '   { "mode":"ask_simulate", "message":"reply text", "amountCents":N }',
+    '   { "mode":"ask_simulate", "message":"reply text", "amountCents":N, "note":"...", "vendor":"...", "category":"..." }',
     "3. NEVER calculate. Quote numbers from STATE / DNA SUMMARY only. Don't add daily pace + days; that's the bot's job.",
     "4. EXTRACT EVERY ACTION the user mentions. If they brain-dump multiple things in one message (income + bill + budget) — including long voice notes with 8-10 figures — emit them all as an `intents` array (up to 10 items). Bot will show one combined confirm card with a single 'Yes, all N' button. NEVER drop intents on the floor — that's the worst failure mode. Prefer extracting all 9 over guessing which 5 are 'most important.'",
     "5. Keep replies SHORT — 1-2 sentences. No paragraphs.",
@@ -146,7 +146,19 @@ function buildSystemPrompt(state) {
     "  user: \"am i over budget on food?\"",
     "    → { \"mode\":\"talk\", \"message\":\"Food is $743 this month vs your usual $620 — about 20% over.\" }",
     "  user: \"can i afford 200 for a jacket?\"  (this is ask_simulate — separate flow)",
-    "    → { \"mode\":\"ask_simulate\", \"message\":\"Yes — manageable.\", \"amountCents\":20000 }",
+    "    → { \"mode\":\"ask_simulate\", \"message\":\"Yes — manageable.\", \"amountCents\":20000, \"note\":\"jacket\", \"category\":\"personal\" }",
+    "  user: \"if i spend 60 on dinner?\"",
+    "    → { \"mode\":\"ask_simulate\", \"message\":\"Tight, but doable.\", \"amountCents\":6000, \"note\":\"dinner\", \"category\":\"food\" }",
+    "  user: \"can i afford 300?\" (no purpose given)",
+    "    → { \"mode\":\"ask_simulate\", \"message\":\"Yes — fine.\", \"amountCents\":30000 }   ← no note when user didn't mention one",
+    "",
+    "  ★ ask_simulate CAPTURES THE PURPOSE ★",
+    "  When the user mentions WHAT they want to buy (\"for a jacket\", \"on dinner\",",
+    "  \"to upgrade\", \"a Lighthouse coffee\"), include note + category + vendor in",
+    "  the ask_simulate output. The bot's confirm card carries these through, so",
+    "  if the user taps [Log it] the resulting record_spend includes the purpose.",
+    "  Without this, every afford-check that gets logged looks like a noteless",
+    "  spend in history — bad UX.",
     "",
     "  ★★★ HARD RULE FOR ask_simulate ★★★",
     "  Your `message` field in ask_simulate MUST NOT contain ANY projection",
@@ -209,6 +221,20 @@ function buildSystemPrompt(state) {
     '  adjust_balance  — { newBalanceCents:N }              // "actually I have $X now" / balance correction',
     '  add_bill        — { name:"Rent", amountCents:N, dueDate:"YYYY-MM-DD", recurrence:"monthly"|"weekly"|"biweekly"|"once" }',
     '  remove_bill     — { name:"Rent" }',
+    '  update_bill     — { name:"Rent", dueDate?:"YYYY-MM-DD", amountCents?:N, recurrence?:"monthly"|"weekly"|"biweekly"|"once" }',
+    "                    Use this when the user wants to MODIFY an existing bill — move the date, change the amount, change frequency. NOT for new bills (use add_bill).",
+    "                    Trigger phrases:",
+    "                       \"move rent to the 15th\" / \"change rent due to the 15th\"",
+    "                       \"rent is now $1,500\" / \"phone bill went up to $90\"",
+    "                       \"electricity is actually due the 10th not the 5th\"",
+    "                       \"netflix bumped to $18\"",
+    "                       \"change gym to biweekly\"",
+    "                    Required: name (must match an existing bill). At least one of {dueDate, amountCents, recurrence}.",
+    "                    Examples:",
+    "                       \"move rent to the 15th\" → { kind:\"update_bill\", params:{ name:\"Rent\", dueDate:\"<next 15th>\" } }",
+    "                       \"phone bill is now 90\" → { kind:\"update_bill\", params:{ name:\"Phone\", amountCents:9000 } }",
+    "                       \"change netflix to 18\" → { kind:\"update_bill\", params:{ name:\"Netflix\", amountCents:1800 } }",
+    "                    The bill name must match one in STATE.bills (case-insensitive). If multiple bills could match, REPLY IN TALK mode asking which one.",
     '  record_spend    — { kind:"record_spend", params:{ amountCents:N, note:"coffee", billKey?:"rent", originalAmount?:N, originalCurrency?:"VND", category?:"coffee", vendor?:"Lighthouse", tags?:["work"], context?:"vietnam trip" } }',
     "                    ★ ALL FIELDS GO INSIDE params. ALWAYS wrap in params:{...}. NEVER put fields at the top level of the intent.",
     "",
@@ -654,13 +680,21 @@ async function parseProposal(state, userMessage, history, options) {
   const message = typeof parsed.message === "string" ? parsed.message : "";
 
   // ask_simulate: read-only "can I afford X" path.
+  // Preserve note + vendor + category if the AI captured them — so if
+  // the user taps [Log it] afterwards, the resulting record_spend
+  // includes the purpose ("jacket" / "dinner" / "Lighthouse coffee").
+  // Without this, every logged afford-check is a noteless spend.
   if (parsed.mode === "ask_simulate" && Number.isFinite(parsed.amountCents) && parsed.amountCents > 0) {
-    return {
+    const out = {
       mode: "ask_simulate",
       message: message || "Looking at it.",
       amountCents: Math.round(parsed.amountCents),
       warnings: [],
     };
+    if (typeof parsed.note === "string" && parsed.note.trim()) out.note = parsed.note.trim();
+    if (typeof parsed.vendor === "string" && parsed.vendor.trim()) out.vendor = parsed.vendor.trim();
+    if (typeof parsed.category === "string" && parsed.category.trim()) out.category = parsed.category.trim();
+    return out;
   }
 
   // do: 1+ intents. Multi-intent brain-dumps come back as `intents: [...]`,

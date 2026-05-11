@@ -48,6 +48,8 @@ const MESSAGES = {
   dupBillName:     { en: "You already have a bill named {name}.",            ru: "Счёт «{name}» уже есть." },
   noBillByName:    { en: "No bill by that name.",                            ru: "Нет счёта с таким названием." },
   noBillMatch:     { en: "No bill matching {name}.",                         ru: "Нет счёта, похожего на «{name}»." },
+  updateBillNoChange: { en: "Tell me what to change — date, amount, or recurrence.",
+                       ru: "Скажи что менять — дату, сумму или периодичность." },
 
   // ── spend / income ──
   needValidAmount: { en: "Need a valid amount.",                             ru: "Нужна корректная сумма." },

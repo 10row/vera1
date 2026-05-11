@@ -112,6 +112,33 @@ function validateIntent(state, intent, todayStr, lang) {
       return ok();
     }
 
+    case "update_bill": {
+      if (!state.setup) return reject(M(L, "setupFirst"));
+      const key = m.billKey(p.name || p.key);
+      if (!key || !state.bills || !state.bills[key]) return reject(M(L, "noBillByName"));
+      // At least ONE field to update
+      const hasDueDate = p.dueDate != null;
+      const hasAmount = p.amountCents != null;
+      const hasRecurrence = p.recurrence != null;
+      if (!hasDueDate && !hasAmount && !hasRecurrence) {
+        return reject(M(L, "updateBillNoChange"));
+      }
+      // Validate each field that's being changed
+      if (hasDueDate) {
+        const dd = m.normalizeDate(p.dueDate);
+        if (!dd) return reject(M(L, "badDateFormat"));
+        if (dd < todayStr) return reject(M(L, "billPastDate"));
+      }
+      if (hasAmount) {
+        const amt = Math.round(Number(p.amountCents));
+        if (!Number.isFinite(amt) || amt <= 0) return reject(M(L, "needValidAmount"));
+      }
+      if (hasRecurrence && !m.RECURRENCES.includes(p.recurrence)) {
+        return reject(M(L, "badRecurrence"));
+      }
+      return ok();
+    }
+
     case "record_spend": {
       if (!state.setup) return reject(M(L, "setupFirst"));
       const amt = Math.round(Number(p.amountCents));

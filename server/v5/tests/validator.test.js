@@ -152,3 +152,50 @@ test("[engine] thrown errors carry .code for caller translation", () => {
   assertEq(caught.code, "engineDupBill", "thrown error should carry the code");
   assertEq(caught.params && caught.params.name, "Rent");
 });
+
+// ── update_bill — edit existing bill (move date, change amount, etc.) ─
+test("[validator] update_bill on non-existent bill REJECTED", () => {
+  const v = validateIntent(setup(), {
+    kind: "update_bill",
+    params: { name: "DoesNotExist", dueDate: "2025-12-01" },
+  }, TODAY);
+  assertEq(v.ok, false);
+});
+
+test("[validator] update_bill with no fields to change REJECTED", () => {
+  let s = setup();
+  s = applyIntent(s, { kind: "add_bill", params: { name: "Rent", amountCents: 100000, dueDate: "2025-05-01", recurrence: "monthly" } }).state;
+  const v = validateIntent(s, { kind: "update_bill", params: { name: "Rent" } }, TODAY);
+  assertEq(v.ok, false, "no fields to update should reject");
+});
+
+test("[validator] update_bill with valid new dueDate PASSES", () => {
+  let s = setup();
+  s = applyIntent(s, { kind: "add_bill", params: { name: "Rent", amountCents: 100000, dueDate: "2025-05-01", recurrence: "monthly" } }).state;
+  const v = validateIntent(s, { kind: "update_bill", params: { name: "Rent", dueDate: "2025-05-15" } }, TODAY);
+  assertEq(v.ok, true);
+});
+
+test("[validator] update_bill with past dueDate REJECTED", () => {
+  let s = setup();
+  s = applyIntent(s, { kind: "add_bill", params: { name: "Rent", amountCents: 100000, dueDate: "2025-05-01", recurrence: "monthly" } }).state;
+  const v = validateIntent(s, { kind: "update_bill", params: { name: "Rent", dueDate: "2025-04-01" } }, TODAY);
+  assertEq(v.ok, false);
+});
+
+test("[engine] update_bill changes the bill in place + preserves snapshot for undo", () => {
+  let s = setup();
+  s = applyIntent(s, { kind: "add_bill", params: { name: "Rent", amountCents: 100000, dueDate: "2025-05-01", recurrence: "monthly" } }).state;
+  const oldPace = s.dailyPaceCents;
+  // Update: change amount and date
+  s = applyIntent(s, { kind: "update_bill", params: { name: "Rent", amountCents: 150000, dueDate: "2025-05-15" } }).state;
+  const key = m.billKey("Rent");
+  assertEq(s.bills[key].amountCents, 150000, "amount updated");
+  assertEq(s.bills[key].dueDate, "2025-05-15", "dueDate updated");
+  // Today is locked — pace must NOT change
+  assertEq(s.dailyPaceCents, oldPace, "today's pace stays locked after update_bill");
+  // Undo restores
+  s = applyIntent(s, { kind: "undo_last", params: {} }).state;
+  assertEq(s.bills[key].amountCents, 100000, "amount restored");
+  assertEq(s.bills[key].dueDate, "2025-05-01", "dueDate restored");
+});

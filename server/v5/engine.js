@@ -101,11 +101,13 @@ function eventRefreshesPace(targetIntentKind, targetIntentParams, targetEvent, t
     targetIntentKind === "adjust_balance" ||
     targetIntentKind === "update_payday"
   ) return true;
-  // add_bill / remove_bill: apply doesn't refresh today's pace
-  // (today is locked) — therefore undo also doesn't refresh.
+  // add_bill / remove_bill / update_bill: apply doesn't refresh today's
+  // pace (today is locked) — therefore undo also doesn't refresh.
   // Symmetry preserved: pace stays put through the apply+undo round-trip
   // regardless of which order spends were made.
-  if (targetIntentKind === "add_bill" || targetIntentKind === "remove_bill") return false;
+  if (targetIntentKind === "add_bill" ||
+      targetIntentKind === "remove_bill" ||
+      targetIntentKind === "update_bill") return false;
   if (targetIntentKind === "record_spend" || targetIntentKind === "record_income") {
     // Backdated → refreshes (historical cycle correction)
     if (params.date && params.date !== todayStr) return true;
@@ -301,6 +303,42 @@ function applyIntent(state, intent) {
       // up obligated money but today's pace stays at the morning value.
       // Tomorrow's rollover refresh absorbs the change.
       const ev = makeEvent(intent, prevBalance, { newBalance: next.balanceCents, removed });
+      next.events.push(ev);
+      return { state: next, event: ev };
+    }
+
+    case "update_bill": {
+      if (!next.setup) throwCoded("setupFirst", "Set up first.");
+      const key = m.billKey(p.name || p.key);
+      if (!next.bills[key]) throwCoded("engineNoSuchBill", "No such bill: " + (p.name || p.key), { name: p.name || p.key });
+      const bill = next.bills[key];
+      // Snapshot the previous values for undo — same pattern as
+      // bill_payment which captures prevDueDate + prevPaidThisCycle.
+      const prev = {
+        amountCents: bill.amountCents,
+        dueDate: bill.dueDate,
+        recurrence: bill.recurrence,
+      };
+      // Apply only fields the user changed. Missing field = leave as-is.
+      if (p.amountCents != null) {
+        const amt = Math.round(Number(p.amountCents));
+        if (Number.isFinite(amt) && amt > 0) bill.amountCents = amt;
+      }
+      if (p.dueDate != null) {
+        const dd = m.normalizeDate(p.dueDate);
+        if (dd) bill.dueDate = dd;
+      }
+      if (p.recurrence != null && m.RECURRENCES.includes(p.recurrence)) {
+        bill.recurrence = p.recurrence;
+      }
+      // TODAY IS LOCKED — editing a bill (date / amount / recurrence)
+      // doesn't shift today's pace. Tomorrow's rollover absorbs the
+      // change. Same rule as add_bill and remove_bill.
+      const ev = makeEvent(intent, prevBalance, {
+        newBalance: next.balanceCents,
+        billKey: key,
+        prevBill: prev,
+      });
       next.events.push(ev);
       return { state: next, event: ev };
     }
@@ -691,6 +729,16 @@ function applyIntent(state, intent) {
           if (target.removed) {
             const k = m.billKey(target.removed.name);
             next.bills[k] = target.removed;
+          }
+          break;
+        }
+        case "update_bill": {
+          // Restore the bill's pre-update fields from the snapshot.
+          const k = target.billKey || m.billKey(target.intent.params.name);
+          if (k && next.bills[k] && target.prevBill) {
+            if (target.prevBill.amountCents != null) next.bills[k].amountCents = target.prevBill.amountCents;
+            if (target.prevBill.dueDate != null) next.bills[k].dueDate = target.prevBill.dueDate;
+            if (target.prevBill.recurrence != null) next.bills[k].recurrence = target.prevBill.recurrence;
           }
           break;
         }

@@ -349,61 +349,78 @@ function handle(state, text, todayStr) {
 //   - Keep messages SHORT (Telegram is a tight surface)
 //   - Italics for the example phrasings (Markdown)
 //   - Skip path always available (no bullying)
+// Localized copy. WHAT-led: state what's happening, ask the next thing.
+// The PHILOSOPHY ("no budgets, no categories") is discovered through
+// use, not explained upfront. The cycle concept ("spend down to ~$0
+// by payday, bills protected") lands in step 3, where it actually
+// matters for the user's mental model.
+//
+// Voice rules:
+//   - One frame sentence at the start ("I tell you one number a day")
+//   - Then immediately the ask
+//   - Tiny italic clarifier on each ask (savings/credit don't count, etc.)
+//   - Cycle concept introduced ONCE, in step 3, after they have a payday
+//   - Skip path always available
 const copy = {
   askBalance(L) {
     return L === "ru"
-      ? "Привет 👋 Я *Spendkitty*.\n\nДелаю одну вещь: каждое утро говорю тебе одно число — сколько можешь потратить сегодня, не сломав себе остаток месяца.\n\nБез бюджетов. Без категорий. Без домашки. Одно число.\n\nЧтобы это посчитать, мне нужно три вещи. Начнём с первой:\n\n*Сколько сейчас на основном счёте — примерно?*"
-      : "Hey 👋 I'm *Spendkitty*.\n\nI do one thing: every morning I tell you one number — what you can spend today without breaking later in the month.\n\nNo budgets. No categories. No homework. One number.\n\nTo work it out, I need three things from you. Let's start with the first:\n\n*What's roughly in your main account right now?*";
+      ? "Привет 👋 Я *Spendkitty*. Покажу тебе одно число в день — сколько можешь потратить.\n\nТри быстрых вопроса. Первый — *сколько в твоём счёте для трат?*\n_(Без сбережений и кредиток. Только повседневные деньги.)_"
+      : "Hey 👋 I'm *Spendkitty*. I'll show you one number a day — what you can spend.\n\nThree quick things. First — *what's in your spending account?*\n_(Savings or credit cards don't count. Just the day-to-day money.)_";
   },
-  // First miss — restate the promise + reassure on privacy. Many users
-  // dodge because they don't trust the bot yet.
   balanceMissOnce(L) {
     return L === "ru"
-      ? "Никаких связей с банком, ничего никому не передаётся — это нужно только мне, чтобы посчитать твоё дневное число.\n\nХватит и примерной суммы. *Сколько на счёте?*"
-      : "No bank link, nothing shared — this is just so I can work out your daily number.\n\nA rough figure is plenty. *What's in your account?*";
+      ? "Никаких связей с банком — это просто для расчёта. Хватит и примерной суммы. *Сколько в твоём счёте?*"
+      : "No bank link — just for the math. A rough figure is plenty. *What's in your spending account?*";
   },
   balanceMissTwice(L) {
     return L === "ru"
-      ? "Не парься — скажи *пропустить* и продолжим. Сможем добавить баланс позже когда удобно."
-      : "No stress — just say *skip* and we'll move on. You can add the balance later.";
+      ? "Не парься — скажи *пропустить* и продолжим. Добавишь баланс позже."
+      : "No stress — just say *skip* and we'll move on. You can add it later.";
   },
   balanceMissThrice(L) {
     return L === "ru"
-      ? "Не парься — скажи *пропустить* и продолжим. Поправим потом."
-      : "No rush — just say *skip* and we'll move on. We can come back to this later.";
+      ? "Не парься — скажи *пропустить*."
+      : "No rush — just say *skip*.";
   },
   gotBalanceAskPayday(L, amt, sym) {
     const fmt = m.toMoney(amt, sym);
     return L === "ru"
-      ? "Записал — *" + fmt + "*. 👍\n\nВторое из трёх: *когда следующая зарплата?*\n\nДата вроде _«15-го»_ или _«30 апреля»_. Или скажи *«irregular»* — если ты фрилансер/подрядчик и зарплата приходит нерегулярно (тогда покажу не дни-до-зарплаты, а сколько ещё хватит денег)."
-      : "Got it — *" + fmt + "*. 👍\n\nSecond of three: *when's your next paycheck?*\n\nA date like _\"the 15th\"_ or _\"April 30\"_ works. Or say *\"irregular\"* if you're a contractor/freelancer (I'll show you runway days instead of days-to-payday).";
+      ? "Записал, *" + fmt + "*.\n\nДальше — *когда следующая зарплата?*\n_(Дата типа «15-го» или «30 апреля». Или скажи «irregular», если фрилансер/подрядчик — покажу сколько хватит денег.)_"
+      : "Got it, *" + fmt + "*.\n\nNext — *when's your next paycheck?*\n_(A date like \"the 15th\" or \"April 30\". Or say \"irregular\" if you're a contractor/freelancer — I'll show you runway days.)_";
   },
   paydayMissOnce(L) {
     return L === "ru"
-      ? "_(нужна дата зарплаты — без этого не посчитаю дневное число)_\n\nПопробуй _«15-го»_, _«1 мая»_. Если зарплата нерегулярная — напиши *«irregular»*."
-      : "_(need your payday — without it I can't work out the daily number)_\n\nTry _\"the 15th\"_, _\"May 1\"_. If your pay's irregular (freelance/contractor), just say *\"irregular\"*.";
+      ? "_(нужна дата)_ Попробуй _«15-го»_, _«1 мая»_, или *«irregular»* для нерегулярной."
+      : "_(need a date)_ Try _\"the 15th\"_, _\"May 1\"_, or *\"irregular\"* for variable income.";
   },
   paydayMissTwice(L) {
     return L === "ru"
-      ? "_(всё ещё нужна дата зарплаты — или /reset чтобы начать заново)_\n\nДата вроде *15-го* или *30 апреля*. Или *«irregular»*."
-      : "_(still need your payday — or /reset to start over)_\n\nA date like *\"the 15th\"* or *\"May 1\"*. Or *\"irregular\"*.";
+      ? "_(дата или «irregular» — или /reset чтобы начать заново)_"
+      : "_(a date or \"irregular\" — or /reset to start over)_";
   },
+  // Step 3 — THE CYCLE CONCEPT LANDS HERE.
+  // After the user has given balance + payday, they need the mental
+  // model: spend down to ~0 by payday, bills are protected, paycheck
+  // refills. This is the only place we explain it — and only in 2
+  // short sentences. The bills ask comes right after.
   allSet(L, amt, payday, sym) {
     const fmt = m.toMoney(amt, sym);
     return L === "ru"
-      ? "Готово ✅ *" + fmt + "*, зарплата *" + payday + "*.\n\nТретье — *счета*. Если есть что-то регулярное (аренда, телефон, подписки) — расскажи прямо сейчас: _«аренда 1400 1-го числа»_, _«телефон 80 ежемесячно»_. Или ничего — добавишь позже.\n\nС этого момента просто говори со мной как с другом: _«потратил 20 на кофе»_, _«могу позволить 200?»_, _«получил зарплату»_. Каждое утро я скажу тебе твоё число."
-      : "Done ✅ *" + fmt + "*, payday *" + payday + "*.\n\nThird — *bills*. If you have recurring stuff (rent, phone, subscriptions), tell me now: _\"rent 1400 due the 1st\"_, _\"phone 80 monthly\"_. Or skip it — you can add bills any time.\n\nFrom here, just talk to me like a friend: _\"spent 20 on coffee\"_, _\"can I afford 200?\"_, _\"got paid\"_. Every morning I'll tell you your number.";
+      ? "*" + fmt + "* до *" + payday + "* ✓\n\nКак это работает: я даю тебе число на день. *Тратишь до ~0 к зарплате — так и задумано.* Счета держу отдельно, чтобы случайно не съел рент.\n\nПоследнее — *есть счета?* Аренда, телефон, подписки, что-то одноразовое впереди. Или скажи *пропустить*."
+      : "*" + fmt + "* until *" + payday + "* ✓\n\nHow it works: I give you a number for today. *You spend down to ~$0 by payday — that's the whole point.* Bills get reserved so they can't be accidentally eaten. Next paycheck refills the cycle.\n\nLast — *got any bills?* Rent, phone, subscriptions, anything one-time coming up. Or say *skip*.";
   },
+  // Same idea but for irregular pay — no payday, so "runway" replaces
+  // "spend down by payday" framing.
   allSetSkipped(L, amt, sym) {
     const fmt = m.toMoney(amt, sym);
     return L === "ru"
-      ? "Готово ✅ *" + fmt + "*, зарплата нерегулярная — буду показывать сколько дней ещё хватит.\n\nЕсли есть регулярные счета (аренда, подписки) — расскажи: _«аренда 1400 1-го числа»_. Или ничего — добавишь позже.\n\nС этого момента просто говори со мной: _«потратил 20 на кофе»_, _«получил 3000»_, _«могу позволить 200?»_. Каждое утро я скажу тебе твоё число."
-      : "Done ✅ *" + fmt + "*, irregular pay — I'll show you runway days instead of days-to-payday.\n\nIf you have recurring bills (rent, subscriptions), tell me now: _\"rent 1400 due the 1st\"_. Or skip — you can add bills any time.\n\nFrom here, just talk to me: _\"spent 20 on coffee\"_, _\"got 3000\"_, _\"can I afford 200?\"_. Every morning I'll tell you your number.";
+      ? "*" + fmt + "*, нерегулярная зарплата ✓\n\nКак это работает: я даю тебе число на день. *Покажу сколько дней ещё хватит* при текущей трате. Когда придёт зарплата — скажи мне, и время продлится.\n\nПоследнее — *есть счета?* Аренда, подписки, что впереди. Или *пропустить*."
+      : "*" + fmt + "*, irregular pay ✓\n\nHow it works: I give you a number for today. *I'll show you runway days* — how long the money lasts at this pace. When income lands, tell me and the runway extends.\n\nLast — *got any bills?* Rent, subscriptions, anything upcoming. Or *skip*.";
   },
   skippedSetup(L) {
     return L === "ru"
-      ? "Без проблем — пропускаем настройку. Когда будешь готов(а), скажи: _«у меня 5000»_, _«получил 3к»_, _«потратил 50 на обед»_ — всё подхвачу."
-      : "All good — skipping setup. Whenever you're ready, just tell me: _\"I have 5000\"_, _\"got 3k\"_, _\"spent 50 on lunch\"_ — I'll pick it up from there.";
+      ? "Без проблем — пропускаю настройку. Когда будешь готов(а): _«у меня 5000»_, _«получил 3к»_, _«потратил 50 на обед»_."
+      : "All good — skipping setup. When you're ready: _\"I have 5000\"_, _\"got 3k\"_, _\"spent 50 on lunch\"_.";
   },
 };
 

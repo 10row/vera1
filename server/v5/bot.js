@@ -364,6 +364,18 @@ function describeIntent(intent, state) {
       return lang === "ru"
         ? "Удалить счёт *" + E(p.name) + "*"
         : "Remove bill *" + E(p.name) + "*";
+    case "update_bill": {
+      // Render the diff — what's changing on this bill. Multiple field
+      // changes get joined with " · ".
+      const parts = [];
+      if (p.amountCents != null) parts.push(M(p.amountCents));
+      if (p.dueDate != null) parts.push((lang === "ru" ? "к " : "due ") + p.dueDate);
+      if (p.recurrence != null) parts.push(p.recurrence);
+      const delta = parts.join(" · ");
+      return lang === "ru"
+        ? "Изменить *" + E(p.name) + "* → " + delta
+        : "Update *" + E(p.name) + "* → " + delta;
+    }
     case "record_spend": {
       // Foreign-currency spend: show both ("₫200,000 ≈ $8.00").
       const isForeign = p.originalCurrency
@@ -455,6 +467,78 @@ async function safeReply(ctx, text, options) {
   }
 }
 
+// ── REPLY KEYBOARD (persistent quick-capture buttons) ─────────
+// Four buttons at the bottom of chat — always available, low-friction:
+//   [+ Spend]  [+ Bill]  [Afford?]  [Open app]
+//
+// Tap a button → bot enters a tiny GUIDED FLOW: asks one question,
+// user types the answer, bot parses with context. Two messages from
+// tap to logged. The most-common actions get the fewest taps.
+//
+// The keyboard is set on the post-onboarding "all set" message and
+// stays visible across the conversation. Reply keyboards persist —
+// no need to resend.
+const REPLY_BUTTON_LABELS = {
+  en: { spend: "+ Spend", bill: "+ Bill", afford: "Afford?", app: "Open app" },
+  ru: { spend: "+ Расход", bill: "+ Счёт", afford: "Могу ли?", app: "Открыть" },
+};
+function mainKeyboard(lang) {
+  const L = (lang === "ru") ? "ru" : "en";
+  const lbl = REPLY_BUTTON_LABELS[L];
+  return {
+    keyboard: [
+      [{ text: lbl.spend }, { text: lbl.bill }],
+      [{ text: lbl.afford }, { text: lbl.app }],
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+  };
+}
+// Reverse-lookup: incoming message text → button kind (or null).
+function detectReplyButton(text) {
+  if (!text || typeof text !== "string") return null;
+  const t = text.trim();
+  for (const L of ["en", "ru"]) {
+    const lbl = REPLY_BUTTON_LABELS[L];
+    if (t === lbl.spend) return "spend";
+    if (t === lbl.bill) return "bill";
+    if (t === lbl.afford) return "afford";
+    if (t === lbl.app) return "app";
+  }
+  return null;
+}
+// Localized guided-flow prompts.
+function guidedPromptFor(kind, lang) {
+  const ru = lang === "ru";
+  switch (kind) {
+    case "spend":  return ru ? "Сколько, на что? _(пример: «5 кофе»)_" : "How much, what for? _(e.g. \"5 coffee\")_";
+    case "bill":   return ru ? "Название счёта, сумма, когда платить? _(пример: «аренда 1400 1-го числа»)_" : "Bill name, amount, when due? _(e.g. \"rent 1400 monthly the 1st\")_";
+    case "afford": return ru ? "Сколько и на что? _(пример: «200 куртка»)_" : "How much for what? _(e.g. \"200 jacket\")_";
+    default: return ru ? "Что сделать?" : "What's the action?";
+  }
+}
+// Transform a guided reply into a natural-language form the AI parses
+// cleanly. The hint kind tells us how to prefix.
+function applyGuidedHint(text, kind) {
+  if (!text || !kind) return text;
+  const t = String(text).trim();
+  // If the user already wrote a fully-qualified sentence (rare), keep it.
+  // Otherwise prefix with a verb the AI knows.
+  switch (kind) {
+    case "spend":
+      if (/^(spent|i\s+spent|got\s+a|paid|потратил|купил|оплатил)/i.test(t)) return t;
+      return "spent " + t;
+    case "afford":
+      if (/^(can\s+i\s+afford|if\s+i|могу\s+ли|если\s+потрачу)/i.test(t)) return t;
+      return "can I afford " + t;
+    case "bill":
+      // Bills are usually self-descriptive ("rent 1400 monthly"); no prefix needed.
+      return t;
+    default:
+      return t;
+  }
+}
+
 async function safeEdit(ctx, text, options) {
   try {
     return await ctx.editMessageText(text, options || {});
@@ -515,10 +599,49 @@ async function processText(prisma, ctx, telegramId, text, options) {
     const lang = state.language === "ru" ? "ru" : "en";
     const history = await db.loadHistory(prisma, u.id);
 
+    // ── REPLY-KEYBOARD BUTTON TAP ──
+    // The persistent keyboard sends button LABELS as plain text. If we
+    // see one, intercept BEFORE the AI gets it: set a guided-prompt
+    // marker on state, send the one-question prompt, wait for next msg.
+    const buttonKind = state.setup ? detectReplyButton(text) : null;
+    if (buttonKind === "app") {
+      // Open app — same as /app command.
+      const url = process.env.MINIAPP_URL;
+      if (!url) { await safeReply(ctx, M(lang, "miniAppNotConfigured")); return; }
+      await safeReply(ctx, M(lang, "miniAppOpen"), {
+        reply_markup: { inline_keyboard: [[{ text: lang === "ru" ? "Открыть" : "Open", web_app: { url } }]] },
+      });
+      return;
+    }
+    if (buttonKind === "spend" || buttonKind === "bill" || buttonKind === "afford") {
+      // Set the guided-prompt marker. Expires after 5 minutes so an
+      // abandoned flow doesn't trap the next message forever.
+      state.guidedPrompt = { kind: buttonKind, started: Date.now() };
+      await db.saveState(prisma, u.id, state);
+      await safeReply(ctx, "_" + m.escapeMd(guidedPromptFor(buttonKind, lang)) + "_", { parse_mode: "Markdown" });
+      return;
+    }
+
+    // ── GUIDED-PROMPT REPLY ──
+    // If user is mid-guided-flow (tapped a button last turn), transform
+    // their reply into a prefixed sentence the AI parses naturally.
+    // 5 min expiry — if they ignored the prompt and typed something
+    // unrelated, fall through to normal processing.
+    let processedText = text;
+    if (state.guidedPrompt && Date.now() - (state.guidedPrompt.started || 0) < 5 * 60 * 1000) {
+      processedText = applyGuidedHint(text, state.guidedPrompt.kind);
+      state.guidedPrompt = null;
+      await db.saveState(prisma, u.id, state);
+    } else if (state.guidedPrompt) {
+      // Stale — clean up.
+      state.guidedPrompt = null;
+      await db.saveState(prisma, u.id, state);
+    }
+
     // Persist user message into history.
     await db.appendHistory(prisma, u.id, "user", text);
 
-    const result = await processMessage(state, text, history, options);
+    const result = await processMessage(state, processedText, history, options);
 
     // ── ONBOARDING ───────────────────────────────
     if (result.kind === "onboarding") {
@@ -550,7 +673,14 @@ async function processText(prisma, ctx, telegramId, text, options) {
         reply += "\n\n" + heroLineWithInsight(state, lang);
       }
       await db.appendHistory(prisma, u.id, "assistant", reply);
-      await safeReply(ctx, reply, { parse_mode: "Markdown" });
+      // Attach the persistent reply keyboard on the FINAL onboarding
+      // message — once it's set, Telegram remembers it across the
+      // conversation. The user gets quick-capture buttons forever.
+      const replyOpts = { parse_mode: "Markdown" };
+      if (result.done && state.setup) {
+        replyOpts.reply_markup = mainKeyboard(lang);
+      }
+      await safeReply(ctx, reply, replyOpts);
 
       // ── BRAIN-DUMP CAPTURE ────────────────────────
       // If onboarding just completed AND the original message has bill /
@@ -611,16 +741,21 @@ async function processText(prisma, ctx, telegramId, text, options) {
             : "🟢 *Yep, you're fine* — after that you'd have " + projAvailable + " available, " + sim.projected.dailyPaceFormatted + "/day.");
         }
       }
-      // Offer "log it now" button.
-      const logIntent = {
-        kind: "record_spend",
-        params: { amountCents: result.amountCents, note: "" },
-      };
+      // Offer "log it now" button. If the AI captured a note/vendor/
+      // category from the afford-check ("can I afford 200 for a jacket?"
+      // → note="jacket"), thread it into the log intent so the resulting
+      // record_spend isn't a noteless ghost in history.
+      const logParams = { amountCents: result.amountCents, note: result.note || "" };
+      if (result.vendor) logParams.vendor = result.vendor;
+      if (result.category) logParams.category = result.category;
+      const logIntent = { kind: "record_spend", params: logParams };
       const token = setPending(state, logIntent);
       await db.saveState(prisma, u.id, state);
-      // Decision flow buttons — the LLM judge flagged "No" as ambiguous
-      // (reject the spend? reject the calculation?). "Skip" is unambiguous.
-      const yesLabel = lang === "ru" ? "Записать" : "Log it";
+      // Decision flow buttons. If we have a note, the label can be
+      // more specific: "Log jacket" beats "Log it" for clarity.
+      const yesLabel = lang === "ru"
+        ? (result.note ? "Записать «" + result.note + "»" : "Записать")
+        : (result.note ? "Log it · " + result.note : "Log it");
       const noLabel = lang === "ru" ? "Не сейчас" : "Skip";
       await safeReply(ctx, lines.join("\n"), {
         parse_mode: "Markdown",
@@ -788,7 +923,12 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     if (!state.setup) {
       await processText(prisma, ctx, telegramId, "/start");
     } else {
-      await safeReply(ctx, heroLineWithInsight(state, lang), { parse_mode: "Markdown" });
+      // Re-attach the persistent reply keyboard on /start for users who
+      // were onboarded before the keyboard existed (or who cleared it).
+      await safeReply(ctx, heroLineWithInsight(state, lang), {
+        parse_mode: "Markdown",
+        reply_markup: mainKeyboard(lang),
+      });
     }
     return;
   }

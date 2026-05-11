@@ -2552,8 +2552,54 @@ function InputModal(props) {
       }, opts.icon);
     }
 
+    // Starter chips — five common intents, tap to pre-fill the textarea.
+    // Discoverability without overload: chips live INSIDE the modal
+    // (not on the Today tab where they'd duplicate the S button) and
+    // disappear once the user starts typing (so they don't fight the
+    // input). One row, horizontally scrollable on narrow phones.
+    function starterChip(label, prefill) {
+      return h("button", {
+        type: "button",
+        onClick: function() {
+          setInput(prefill);
+          // Focus the textarea after the chip tap so the user can
+          // immediately keep typing (cursor at end).
+          setTimeout(function() {
+            var ta = document.querySelector("textarea[autofocus]") || document.querySelector("textarea");
+            if (ta) { ta.focus(); ta.setSelectionRange(prefill.length, prefill.length); }
+          }, 30);
+        },
+        style: {
+          padding: "6px 12px",
+          background: "transparent",
+          border: "1px solid " + C.border,
+          borderRadius: 999,
+          color: C.text,
+          fontSize: 12,
+          fontFamily: "'Inter',sans-serif",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+          userSelect: "none",
+        },
+      }, label);
+    }
+    var chipsRow = !input ? h("div", {
+      style: {
+        display: "flex", gap: 6, marginBottom: 14,
+        overflowX: "auto", paddingBottom: 4,
+        WebkitOverflowScrolling: "touch",
+      },
+    },
+      starterChip("Spend", "spent "),
+      starterChip("Save for", "save "),
+      starterChip("Income", "got paid "),
+      starterChip("Bill", "rent "),
+      starterChip("Afford?", "can i afford ")
+    ) : null;
+
     body = h("div", null,
       h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 12 } }, "Log a spend"),
+      chipsRow,
       h("textarea", {
         value: input,
         autoFocus: true,
