@@ -343,7 +343,21 @@ function describeIntent(intent, state) {
           }
         }
       } catch { /* never block the confirm card on a math hiccup */ }
-      const head = verb + " *" + E(p.name) + "* — " + M(p.amountCents) + " · " + p.dueDate + recurrenceTag;
+      // Foreign-currency bill: show both ("€200 ≈ $216") like record_spend.
+      // Without this the user types "200 euro for friend" and the confirm
+      // card silently shows only $216 — they can't verify the conversion.
+      const isForeign = p.originalCurrency
+        && Number.isFinite(p.originalAmount)
+        && p.originalAmount > 0;
+      let amountPhrase;
+      if (isForeign) {
+        const ccy = require("./currency");
+        const fromSubunits = ccy.spokenToSubunits(p.originalAmount, p.originalCurrency);
+        amountPhrase = ccy.fmt(fromSubunits, p.originalCurrency) + " ≈ " + M(p.amountCents);
+      } else {
+        amountPhrase = M(p.amountCents);
+      }
+      const head = verb + " *" + E(p.name) + "* — " + amountPhrase + " · " + p.dueDate + recurrenceTag;
       return head + paceLine;
     }
     case "remove_bill":
@@ -799,6 +813,7 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
         "  • _\"зарплата пришла\"_\n\n" +
         "*Команды:*\n" +
         "  /today — текущий статус\n" +
+        "  /bills — счета (можно оплатить одним нажатием)\n" +
         "  /undo — отменить последнее\n" +
         "  /app — открыть дашборд\n" +
         "  /reset — сбросить всё"
@@ -820,6 +835,7 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
         "  • _\"paycheck arrived\"_\n\n" +
         "*Commands:*\n" +
         "  /today — current status\n" +
+        "  /bills — bills (tap to pay)\n" +
         "  /undo — undo last action\n" +
         "  /app — open dashboard\n" +
         "  /reset — wipe everything";
@@ -864,6 +880,136 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     await safeReply(ctx, lines.join("\n"), { parse_mode: "Markdown" });
     return;
   }
+  // ── /bills — the commitment lifecycle made tappable ──────────
+  // Lists outstanding (unpaid this cycle) bills + recurring bills with
+  // inline [✓ Pay] buttons. One tap applies bill_payment instantly
+  // (reversible via /undo). The view is regenerated fresh each
+  // invocation so buttons never go stale — solves the chat-buttons-
+  // expire problem by being a query, not a persistent card.
+  //
+  // Layout:
+  //   *Unpaid this cycle:*
+  //     · Friend — €200 ≈ $216 · due Friday   [✓ Pay Friend]
+  //     · Dry cleaning — $40 · due Saturday   [✓ Pay Dry cleaning]
+  //
+  //   *Recurring:*
+  //     · Rent — $1,400 · next 1st            [✓ Pay this cycle]
+  //
+  //   *Paid this cycle:*  (collapsed in text, just listed)
+  //     · Internet — $60 · paid May 5
+  //
+  // After tap, the bot edits the keyboard to remove that bill's button
+  // and sends a confirmation. User can /undo if it was a mistake.
+  if (command === "bills") {
+    const u = await db.resolveUser(prisma, "tg_" + telegramId);
+    const state = await db.loadState(prisma, u.id);
+    const lang = state.language === "ru" ? "ru" : "en";
+    if (!state.setup) {
+      await safeReply(ctx, lang === "ru" ? "Сначала настроим — какой баланс?" : "Set up first — what's your balance?");
+      return;
+    }
+    const sym = state.currencySymbol || "$";
+    const today = m.today(state.timezone || "UTC");
+    const ccy = require("./currency");
+
+    // Helpers
+    const formatAmount = (b) => {
+      if (b.originalCurrency && Number.isFinite(b.originalAmount) && b.originalAmount > 0) {
+        const fromSubunits = ccy.spokenToSubunits(b.originalAmount, b.originalCurrency);
+        return ccy.fmt(fromSubunits, b.originalCurrency) + " ≈ " + m.toMoney(b.amountCents, sym);
+      }
+      return m.toMoney(b.amountCents, sym);
+    };
+    const formatDue = (dueDate) => {
+      const days = m.daysBetween(today, dueDate);
+      if (days < 0) return lang === "ru" ? "просрочено " + Math.abs(days) + " дн" : "overdue " + Math.abs(days) + "d";
+      if (days === 0) return lang === "ru" ? "сегодня" : "today";
+      if (days === 1) return lang === "ru" ? "завтра" : "tomorrow";
+      if (days <= 14) return lang === "ru" ? "через " + days + " дн" : "in " + days + "d";
+      try {
+        const dt = new Date(dueDate + "T12:00:00Z");
+        return dt.toLocaleDateString(lang === "ru" ? "ru-RU" : "en-US", { month: "short", day: "numeric" });
+      } catch { return dueDate; }
+    };
+
+    const allBills = Object.entries(state.bills || {})
+      .map(([key, b]) => Object.assign({ billKey: key }, b))
+      .filter(b => b && b.name);
+
+    if (allBills.length === 0) {
+      const msg = lang === "ru"
+        ? "_Пока нет счетов. Напиши, например, «аренда 1400 первого числа», чтобы добавить._"
+        : "_No bills yet. Type something like \"rent 1400 due the 1st\" to add one._";
+      await safeReply(ctx, msg, { parse_mode: "Markdown" });
+      return;
+    }
+
+    // Buckets
+    const recurringKinds = new Set(["monthly", "weekly", "biweekly"]);
+    const unpaidOnce = allBills.filter(b => !b.paidThisCycle && (!b.recurrence || b.recurrence === "once"));
+    const recurring = allBills.filter(b => recurringKinds.has(b.recurrence));
+    const paidThisCycle = allBills.filter(b => b.paidThisCycle);
+
+    const lines = [];
+    const buttons = []; // each entry is a row (array of button objects)
+
+    if (unpaidOnce.length > 0) {
+      lines.push(lang === "ru" ? "*Не оплачено в этом цикле:*" : "*Unpaid this cycle:*");
+      // Sort by dueDate ascending (most urgent first)
+      unpaidOnce.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+      for (const b of unpaidOnce) {
+        lines.push("  · " + m.escapeMd(b.name) + " — " + formatAmount(b) + " · " + formatDue(b.dueDate));
+        const label = (lang === "ru" ? "✓ Оплатить " : "✓ Pay ") + (b.name.length > 30 ? b.name.slice(0, 27) + "…" : b.name);
+        buttons.push([{ text: label, callback_data: "paybill:" + b.billKey }]);
+      }
+    }
+
+    if (recurring.length > 0) {
+      if (lines.length > 0) lines.push("");
+      lines.push(lang === "ru" ? "*Регулярные:*" : "*Recurring:*");
+      // Unpaid-this-cycle recurring bills first
+      recurring.sort((a, b) => (a.paidThisCycle ? 1 : 0) - (b.paidThisCycle ? 1 : 0)
+                              || String(a.dueDate).localeCompare(String(b.dueDate)));
+      for (const b of recurring) {
+        const status = b.paidThisCycle
+          ? (lang === "ru" ? " · ✓ оплачено" : " · ✓ paid")
+          : "";
+        lines.push("  · " + m.escapeMd(b.name) + " — " + formatAmount(b) + " · " +
+                   (lang === "ru" ? "след. " : "next ") + formatDue(b.dueDate) +
+                   " · " + b.recurrence + status);
+        // Inline Pay button only for unpaid recurring (paid this cycle =
+        // already done, will auto-cycle next).
+        if (!b.paidThisCycle) {
+          const label = (lang === "ru" ? "✓ Оплатить " : "✓ Pay ") + (b.name.length > 30 ? b.name.slice(0, 27) + "…" : b.name);
+          buttons.push([{ text: label, callback_data: "paybill:" + b.billKey }]);
+        }
+      }
+    }
+
+    if (paidThisCycle.filter(b => !b.recurrence || b.recurrence === "once").length > 0) {
+      if (lines.length > 0) lines.push("");
+      lines.push(lang === "ru" ? "*Оплачено в этом цикле:*" : "*Paid this cycle:*");
+      const paidOnces = paidThisCycle.filter(b => !b.recurrence || b.recurrence === "once");
+      paidOnces.sort((a, b) => String(b.dueDate).localeCompare(String(a.dueDate)));
+      for (const b of paidOnces) {
+        lines.push("  · " + m.escapeMd(b.name) + " — " + formatAmount(b) + " · ✓");
+      }
+    }
+
+    // Footer link to mini app
+    const url = process.env.MINIAPP_URL;
+    if (url) {
+      buttons.push([{ text: lang === "ru" ? "Открыть в приложении" : "Open in app", web_app: { url } }]);
+    }
+
+    const text = lines.join("\n");
+    await safeReply(ctx, text, {
+      parse_mode: "Markdown",
+      reply_markup: buttons.length > 0 ? { inline_keyboard: buttons } : undefined,
+    });
+    return;
+  }
+
   if (command === "undo") {
     const u = await db.resolveUser(prisma, "tg_" + telegramId);
     await db.withUserLock(u.id, async () => {
@@ -969,6 +1115,94 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
         await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } }).catch(() => {});
         await safeReply(ctx, (lang === "ru" ? "Отменено.\n" : "Undone.\n") + heroLine(r.state, lang), { parse_mode: "Markdown" });
       } catch (e) {
+        await safeReply(ctx, "_" + m.escapeMd(translateErr(e, lang)) + "_", { parse_mode: "Markdown" });
+      }
+    });
+    return;
+  }
+
+  // ── /bills Pay button ──────────────────────────────────────
+  // Tapped from the /bills inline keyboard. One-tap bill_payment.
+  // Reversible via /undo (just like every other applied action).
+  //
+  // Defensive: if the bill is already paid (e.g. user re-tapped after
+  // sync from mini app), show a polite "already paid" notice. If the
+  // bill no longer exists (deleted), show that too. Never crash.
+  //
+  // After success: edit the original /bills message's inline keyboard
+  // to remove THIS bill's button (so re-tapping is impossible) and
+  // send a confirmation message with hero update.
+  if (data.startsWith("paybill:")) {
+    const billKey = data.slice(8);
+    const u = await db.resolveUser(prisma, "tg_" + telegramId);
+    await db.withUserLock(u.id, async () => {
+      let state = await db.loadState(prisma, u.id);
+      const lang = state.language === "ru" ? "ru" : "en";
+      const bill = state.bills && state.bills[billKey];
+      if (!bill) {
+        await safeReply(ctx, "_" + (lang === "ru" ? "Счёт не найден." : "Bill not found.") + "_", { parse_mode: "Markdown" });
+        return;
+      }
+      if (bill.paidThisCycle) {
+        await safeReply(ctx, "_" + (lang === "ru" ? "Уже оплачено в этом цикле." : "Already paid this cycle.") + "_", { parse_mode: "Markdown" });
+        return;
+      }
+      const intent = {
+        kind: "record_spend",
+        params: {
+          amountCents: bill.amountCents,
+          billKey,
+          note: bill.name,
+        },
+      };
+      // Preserve foreign-currency info so history shows "€200 ≈ $216".
+      if (bill.originalCurrency && Number.isFinite(bill.originalAmount) && bill.originalAmount > 0) {
+        intent.params.originalAmount = bill.originalAmount;
+        intent.params.originalCurrency = bill.originalCurrency;
+      }
+      const todayStr = m.today(state.timezone || "UTC");
+      const v = require("./validator").validateIntent(state, intent, todayStr, lang);
+      if (!v.ok) {
+        const reasonText = v.clarify ? v.clarify.question : v.reason;
+        await safeReply(ctx, "_" + m.escapeMd(reasonText || "") + "_", { parse_mode: "Markdown" });
+        return;
+      }
+      try {
+        const r = applyIntent(state, intent);
+        await db.saveState(prisma, u.id, r.state);
+
+        // Edit the /bills keyboard: remove the row whose button matched
+        // this billKey so the user can't re-tap. Other rows preserved.
+        try {
+          const kb = ctx.callbackQuery && ctx.callbackQuery.message && ctx.callbackQuery.message.reply_markup;
+          if (kb && Array.isArray(kb.inline_keyboard)) {
+            const newRows = kb.inline_keyboard.filter(row =>
+              !row.some(btn => btn && btn.callback_data === "paybill:" + billKey)
+            );
+            await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: newRows } }).catch(() => {});
+          }
+        } catch { /* best effort */ }
+
+        // Send confirmation + hero. Mention pace UNCHANGED — because
+        // bill_payment doesn't refresh pace (Model B + symmetry rule).
+        // That's the user-visible AAA: pace stays put because the
+        // reservation already carved it out.
+        const sym = state.currencySymbol || "$";
+        const isForeign = bill.originalCurrency && Number.isFinite(bill.originalAmount) && bill.originalAmount > 0;
+        let amountPhrase;
+        if (isForeign) {
+          const ccy = require("./currency");
+          const fromSubunits = ccy.spokenToSubunits(bill.originalAmount, bill.originalCurrency);
+          amountPhrase = ccy.fmt(fromSubunits, bill.originalCurrency) + " ≈ " + m.toMoney(bill.amountCents, sym);
+        } else {
+          amountPhrase = m.toMoney(bill.amountCents, sym);
+        }
+        const head = lang === "ru"
+          ? "✓ Оплачено *" + m.escapeMd(bill.name) + "* — " + amountPhrase
+          : "✓ Paid *" + m.escapeMd(bill.name) + "* — " + amountPhrase;
+        await safeReply(ctx, head + "\n" + heroLine(r.state, lang), { parse_mode: "Markdown" });
+      } catch (e) {
+        console.error("[v5 paybill]", e);
         await safeReply(ctx, "_" + m.escapeMd(translateErr(e, lang)) + "_", { parse_mode: "Markdown" });
       }
     });
@@ -1097,10 +1331,38 @@ async function processCallbackData(prisma, ctx, telegramId, data) {
       }
       if (applied.length === 0) return;
 
+      // ── LIFECYCLE HINT ───────────────────────────────────
+      // When the user reserves money via add_bill (without immediately
+      // paying it in the SAME batch), the bot's response should hint
+      // at the next phase: how to mark it paid when the money actually
+      // leaves. Without this hint the user wonders "now what?" — does
+      // it auto-pay? do I track it? AAA UX = close the loop.
+      //
+      // Skip the hint for commitment_choice flow (add_bill+pay in same
+      // batch — already done) and for non-bill intents.
+      const reservations = applied.filter((i, idx) => {
+        if (i.kind !== "add_bill") return false;
+        const billKey = m.billKey((i.params && i.params.name) || "");
+        if (!billKey) return false;
+        // Paired payment in same batch → not a reservation, suppress.
+        const paidInBatch = applied.some((j, jdx) =>
+          jdx !== idx && j.kind === "record_spend" && j.params && j.params.billKey === billKey
+        );
+        return !paidInBatch;
+      });
+      let lifecycleHint = "";
+      if (reservations.length > 0) {
+        // One name → inline; multiple → comma list.
+        const names = reservations.map(i => i.params.name).join(", ");
+        lifecycleHint = lang === "ru"
+          ? "\n\n_Когда заплатишь — напиши «оплатил " + m.escapeMd(names) + "» или открой приложение, чтобы отметить._"
+          : "\n\n_When you pay, just say \"paid " + m.escapeMd(names) + "\" or tap it in the app to mark it._";
+      }
+
       // Hero post-confirm: facts only. The auto-pushed insight after
       // every spend was noise — moved to pull-only (/today + AI question
       // replies) per user feedback. AAA brand register: quiet by default.
-      await safeReply(ctx, heroLine(state, lang), { parse_mode: "Markdown" });
+      await safeReply(ctx, heroLine(state, lang) + lifecycleHint, { parse_mode: "Markdown" });
     } catch (e) {
       console.error("[v5 confirm apply]", e);
       await safeEdit(ctx, "_" + m.escapeMd(translateErr(e, lang)) + "_", Object.assign({ parse_mode: "Markdown" }, clearButtons));
@@ -1114,6 +1376,7 @@ function attach(prisma) {
 
   bot.command("start", (ctx) => processCommand(prisma, ctx, ctx.from.id, "start").catch(e => console.error("[v5 /start]", e)));
   bot.command("today", (ctx) => processCommand(prisma, ctx, ctx.from.id, "today").catch(e => console.error("[v5 /today]", e)));
+  bot.command("bills", (ctx) => processCommand(prisma, ctx, ctx.from.id, "bills").catch(e => console.error("[v5 /bills]", e)));
   bot.command("undo",  (ctx) => processCommand(prisma, ctx, ctx.from.id, "undo").catch(e => console.error("[v5 /undo]", e)));
   bot.command("reset", (ctx) => processCommand(prisma, ctx, ctx.from.id, "reset").catch(e => console.error("[v5 /reset]", e)));
   bot.command("app",   (ctx) => processCommand(prisma, ctx, ctx.from.id, "app").catch(e => console.error("[v5 /app]", e)));
@@ -1290,5 +1553,5 @@ module.exports = {
   bot, attach, processText, processCommand, processCallbackData,
   buttonLabelsFor,
   // Exported for tests:
-  setPending, setPendingPair, takePending,
+  setPending, setPendingPair, takePending, describeIntent,
 };
