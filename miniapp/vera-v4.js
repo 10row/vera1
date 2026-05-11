@@ -416,15 +416,25 @@ function Heatmap(props) {
   var onSelectDay = props.onSelectDay || function() {};
   // tapHaptic is now file-scope (top of file).
 
-  // Color thresholds: 0 spend = dim grey, <50% pace = green,
-  // 50-100% pace = green-medium, 100-150% = amber, >150% = red
-  function colorForDay(spent) {
+  // Color thresholds (tightened — user reported "very over shows
+  // orange not red"):
+  //   ratio ≤ 0.5  → light green ("comfortable")
+  //   ratio ≤ 1.0  → green       ("on track / right at pace")
+  //   ratio ≤ 1.25 → amber       ("a bit over")
+  //   ratio > 1.25 → red         ("notable overspend")
+  //
+  // PER-DAY PACE: each cell carries its OWN paceCents (set by engine
+  // when pace was refreshed THAT day, written into state.paceHistory).
+  // Falls back to the global `dailyPace` prop for cells from before
+  // paceHistory existed. This is the historical-accuracy fix.
+  function colorForDay(spent, dayPace) {
     if (spent === 0) return { bg: C.cardHi, fg: C.muted };
-    if (dailyPace <= 0) return { bg: C.cardHi, fg: C.muted };
-    var ratio = spent / dailyPace;
+    var paceToUse = (dayPace != null && dayPace > 0) ? dayPace : dailyPace;
+    if (paceToUse <= 0) return { bg: C.cardHi, fg: C.muted };
+    var ratio = spent / paceToUse;
     if (ratio <= 0.5) return { bg: "rgba(79,184,136,0.55)", fg: "#0F0F0F" };
     if (ratio <= 1.0) return { bg: "rgba(79,184,136,0.85)", fg: "#0F0F0F" };
-    if (ratio <= 1.5) return { bg: "rgba(240,160,80,0.85)", fg: "#0F0F0F" };
+    if (ratio <= 1.25) return { bg: "rgba(240,160,80,0.85)", fg: "#0F0F0F" };
     return { bg: "rgba(228,86,86,0.85)", fg: "#FFFFFF" };
   }
 
@@ -448,7 +458,7 @@ function Heatmap(props) {
       },
     },
       heatmap.map(function(d, i) {
-        var col = colorForDay(d.spentCents);
+        var col = colorForDay(d.spentCents, d.paceCents);
         var isOpen = open === d.date;
         return h("div", {
           key: d.date,

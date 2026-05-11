@@ -220,6 +220,8 @@ function v5ToV4View(state) {
 function buildHeatmap(state) {
   const tz = state.timezone || "UTC";
   const today = m.today(tz);
+  const paceHist = (state && state.paceHistory) || {};
+  const currentPace = state && state.dailyPaceCents || 0;
   const out = [];
   // Walk back 29 days (so we get 30 cells ending today).
   // Two bug fixes:
@@ -227,6 +229,13 @@ function buildHeatmap(state) {
   //      "record_spend". Old check used the wrong string so the heatmap
   //      never showed any data — long-standing bug.
   //   2. Skip soft-deleted txs (deletedAt set) — same reason as view.
+  //
+  // PER-DAY PACE: each cell now carries the pace THAT DAY had (from
+  // state.paceHistory, written by engine.refreshPace at cycle events
+  // + day rollover). Falls back to today's pace if no snapshot exists
+  // (e.g. cells from before this feature shipped). Heatmap color
+  // compares spend-vs-that-day's-pace, not spend-vs-today's-pace —
+  // fixes the "very over but shows orange" misclassification.
   for (let offset = 29; offset >= 0; offset--) {
     const date = m.addDays(today, -offset);
     let cents = 0;
@@ -236,18 +245,41 @@ function buildHeatmap(state) {
       if (t.kind !== "spend") continue;
       if (t.date === date) cents += Math.abs(t.amountCents || 0);
     }
-    out.push({ date, spentCents: cents });
+    // Per-day pace lookup with two-tier fallback:
+    //   1. Exact paceHistory entry for THIS date (set when engine
+    //      refreshed pace on this day)
+    //   2. Most-recent prior paceHistory entry (covers days where no
+    //      cycle event fired — pace was stable through that day)
+    //   3. Current pace (covers all dates before paceHistory existed)
+    let paceForDay = paceHist[date];
+    if (paceForDay == null) {
+      // Walk back through paceHistory for the most-recent prior entry.
+      const earlierKeys = Object.keys(paceHist).filter(k => k < date).sort();
+      if (earlierKeys.length) paceForDay = paceHist[earlierKeys[earlierKeys.length - 1]];
+    }
+    if (paceForDay == null) paceForDay = currentPace;
+    out.push({ date, spentCents: cents, paceCents: paceForDay });
   }
   return out;
 }
 
-// recentTransactionsForApp — last 50 spends/incomes formatted for the
-// feed. Skips soft-deleted (journaling), exposes ALL graph fields so
-// the Mini App detail modal can show vendor/category/tags/context/
-// foreign-currency without re-fetching.
+// recentTransactionsForApp — ALL non-deleted spends/incomes formatted
+// for the feed. Skips soft-deleted (journaling), exposes ALL graph
+// fields so the Mini App detail modal can show vendor/category/tags/
+// context/foreign-currency without re-fetching.
+//
+// CAP HISTORY: previously sliced to 50, which broke two things:
+//   1. History feed cut off at 50 (user couldn't see older spends)
+//   2. Heatmap day-tap showed empty for days >5 ago when the user
+//      was active (50 most-recent didn't span 30 days of dense use)
+//
+// Now: send everything non-deleted. Safety cap at 2000 (covers ~1 year
+// at 5 spends/day average — bounded payload). If a user exceeds that,
+// we'll add pagination — but it's not a near-term constraint.
+const MAX_TXS_IN_FEED = 2000;
 function recentTransactionsForApp(state) {
   const txs = state.transactions || [];
-  return txs.filter(t => !t.deletedAt).slice(-50).reverse().map(t => ({
+  return txs.filter(t => !t.deletedAt).slice(-MAX_TXS_IN_FEED).reverse().map(t => ({
     id: t.id,
     kind: t.kind,
     amountCents: t.amountCents,

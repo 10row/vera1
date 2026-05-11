@@ -223,6 +223,12 @@ function createFreshState() {
     // record_spend does NOT recompute — that's the entire point.
     dailyPaceCents: 0,
     dailyPaceComputedDate: null,
+    // Per-day pace snapshots: { "YYYY-MM-DD": paceCents }. Written by
+    // engine.refreshPace whenever the frozen pace is recomputed. Used by
+    // the heatmap to color each day's spend relative to THAT day's pace
+    // (not today's). Bounded — engine prunes entries older than 400 days
+    // to keep state JSON size in check.
+    paceHistory: {},
   };
 }
 

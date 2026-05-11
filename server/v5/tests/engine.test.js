@@ -789,6 +789,76 @@ test("[engine] backdated tx undo restores balance fully", () => {
   assertEq(s.balanceCents, 500000, "undo restores balance even for backdated txs");
 });
 
+// ── paceHistory — per-day pace snapshots for accurate heatmap colors
+
+test("[engine] refreshPace writes today's pace into paceHistory", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  assertTrue(!!s.paceHistory, "paceHistory exists");
+  assertEq(s.paceHistory[today], s.dailyPaceCents, "today's pace written");
+});
+
+test("[engine] paceHistory updates on every cycle event (adjust/add_bill/etc.)", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  const paceA = s.paceHistory[today];
+
+  // adjust_balance is a cycle event → paceHistory updates
+  s = applyIntent(s, { kind: "adjust_balance", params: { newBalanceCents: 400000 } }).state;
+  const paceB = s.paceHistory[today];
+  assertTrue(paceB !== paceA, "pace updated after adjust_balance");
+  assertEq(paceB, s.dailyPaceCents);
+
+  // add_bill is a cycle event → paceHistory updates
+  s = applyIntent(s, {
+    kind: "add_bill",
+    params: { name: "Rent", amountCents: 100000, dueDate: m.addDays(today, 5), recurrence: "monthly" },
+  }).state;
+  const paceC = s.paceHistory[today];
+  assertTrue(paceC !== paceB, "pace updated after add_bill");
+});
+
+test("[engine] paceHistory does NOT update on today-dated record_spend (Model B)", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  const paceBefore = s.paceHistory[today];
+  s = applyIntent(s, { kind: "record_spend", params: { amountCents: 5000, note: "coffee" } }).state;
+  // Today-dated spend doesn't refresh pace, so paceHistory[today] unchanged.
+  assertEq(s.paceHistory[today], paceBefore);
+});
+
+test("[engine] paceHistory prunes entries older than 400 days", () => {
+  let s = m.createFreshState();
+  const today = m.today("UTC");
+  s = applyIntent(s, {
+    kind: "setup_account",
+    params: { balanceCents: 500000, payday: m.addDays(today, 23), payFrequency: "monthly" },
+  }).state;
+  // Manually inject old paceHistory entries simulating long-time use.
+  for (let i = 0; i < 500; i++) {
+    s.paceHistory[m.addDays(today, -i)] = 10000 + i;
+  }
+  // Trigger another refresh — engine should prune to ~400.
+  s = applyIntent(s, { kind: "adjust_balance", params: { newBalanceCents: 600000 } }).state;
+  const keys = Object.keys(s.paceHistory);
+  assertTrue(keys.length <= 401, "pruned to <= 400 entries, got " + keys.length);
+  // Ensure recent entries kept, oldest pruned.
+  assertTrue(s.paceHistory[today] != null, "today still present");
+  assertEq(s.paceHistory[m.addDays(today, -500)], undefined, "500-day-old entry pruned");
+});
+
 // resolveTxDate helper unit checks (model.js)
 test("[model] resolveTxDate accepts valid past date within window", () => {
   const today = m.today("UTC");

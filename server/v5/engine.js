@@ -46,9 +46,29 @@ function computePaceFor(state, todayStr) {
 // IMPORTANT: this does NOT fire from inside record_spend. Spending
 // reduces balance but pace stays at today's stored value — that's the
 // whole point of the rolling-pace fix.
+// Bound on paceHistory size — covers ~400 days, plenty for year-round
+// use, prevents state JSON from growing unbounded.
+const PACE_HISTORY_MAX_DAYS = 400;
+
 function refreshPace(state, todayStr) {
-  state.dailyPaceCents = computePaceFor(state, todayStr);
+  const pace = computePaceFor(state, todayStr);
+  state.dailyPaceCents = pace;
   state.dailyPaceComputedDate = todayStr;
+  // Write a per-day snapshot. Used by the heatmap to color each day
+  // relative to THAT day's pace, not today's (historical accuracy).
+  if (!state.paceHistory || typeof state.paceHistory !== "object") {
+    state.paceHistory = {};
+  }
+  state.paceHistory[todayStr] = pace;
+  // Prune entries older than the bound. Keep state JSON bounded for
+  // year-round use. Cheap: object iteration over ~400 keys max.
+  const keys = Object.keys(state.paceHistory);
+  if (keys.length > PACE_HISTORY_MAX_DAYS) {
+    const cutoff = m.addDays(todayStr, -PACE_HISTORY_MAX_DAYS);
+    for (const k of keys) {
+      if (k < cutoff) delete state.paceHistory[k];
+    }
+  }
 }
 
 function applyIntent(state, intent) {
