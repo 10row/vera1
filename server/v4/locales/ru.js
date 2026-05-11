@@ -142,6 +142,8 @@ module.exports = {
   "miniapp.hero.inAccount": "на счёте",
   "miniapp.hero.leftToday": "осталось сегодня",
   "miniapp.hero.overToday": "перерасход сегодня",
+  "miniapp.hero.runway": "{pace}/день · хватит ещё на ~{runway}д",
+  "miniapp.hero.runwaySingle": "{pace}/день · хватит ещё на ~1д",
   "miniapp.hero.subNoBills": "{pace}/день · {days}д до зарплаты",
   "miniapp.hero.subNoBillsSingleDay": "{pace}/день · 1д до зарплаты",
   "miniapp.hero.subWithBills": "{available} доступно · {pace}/день · {days}д",

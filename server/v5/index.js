@@ -72,6 +72,78 @@ function requireTelegramAuth(req, res, next) {
   next();
 }
 
+// ── RATE LIMITING ─────────────────────────────────
+// Per-user, per-bucket sliding-window counter. Each authenticated
+// request is keyed by the Telegram user_id (sid). Buckets:
+//   - "default" — cheap reads (view, /apply with no AI)         → 60 / min
+//   - "parse"   — text parse (calls OpenAI)                     → 30 / min
+//   - "photo"   — receipt vision (more expensive)               → 10 / min
+//
+// In-memory only (no Redis dep). Reset on server restart. For a
+// single-instance deploy on Railway this is plenty. If we ever scale
+// horizontally, swap for a Redis token bucket.
+//
+// Returns 429 + Retry-After hint. Limits are GENEROUS by design — only
+// abuse / runaway loops should trip them; real users never will.
+const _rateLimits = {
+  default: { limit: 60, windowMs: 60 * 1000, buckets: new Map() },
+  parse:   { limit: 30, windowMs: 60 * 1000, buckets: new Map() },
+  photo:   { limit: 10, windowMs: 60 * 1000, buckets: new Map() },
+};
+function rateLimit(bucketName) {
+  return function(req, res, next) {
+    const cfg = _rateLimits[bucketName] || _rateLimits.default;
+    const sid = req.params.sid || "anon";
+    const now = Date.now();
+    let entry = cfg.buckets.get(sid);
+    if (!entry || now - entry.windowStart > cfg.windowMs) {
+      entry = { windowStart: now, count: 0 };
+      cfg.buckets.set(sid, entry);
+    }
+    entry.count++;
+    if (entry.count > cfg.limit) {
+      const retryMs = cfg.windowMs - (now - entry.windowStart);
+      res.set("Retry-After", Math.ceil(retryMs / 1000));
+      return res.status(429).json({ error: "Too many requests — slow down a moment." });
+    }
+    next();
+  };
+}
+// Sweep stale entries every 5 min to bound memory.
+setInterval(function() {
+  const now = Date.now();
+  for (const cfg of Object.values(_rateLimits)) {
+    for (const [k, v] of cfg.buckets) {
+      if (now - v.windowStart > cfg.windowMs * 5) cfg.buckets.delete(k);
+    }
+  }
+}, 5 * 60 * 1000).unref();
+
+// ── ANONYMOUS EVENT COUNTERS ──────────────────────
+// Privacy-aligned analytics: we count what happens, not who did it.
+// No per-user attribution; no third-party telemetry. The counts live
+// in-memory and are visible via /api/v5/metrics (admin-style read).
+//
+// Brand line: "we count what happens. we don't watch who."
+// This is the bare minimum needed to see if features are getting used.
+// For real cohort analytics, layer PostHog (privacy-first) on top later.
+const _eventCounts = Object.create(null);
+const _eventsStartedAt = Date.now();
+function countEvent(name) {
+  if (!name) return;
+  _eventCounts[name] = (_eventCounts[name] || 0) + 1;
+}
+// Public read endpoint — no auth needed (counts are aggregate, no PII).
+// Could be gated behind an admin token later if we want.
+app.get("/api/v5/metrics", function(_req, res) {
+  res.json({
+    uptimeMs: Date.now() - _eventsStartedAt,
+    counts: _eventCounts,
+  });
+});
+// Expose for other modules.
+module.exports.countEvent = countEvent;
+
 // ── STATIC ────────────────────────────────────────
 app.use("/miniapp", express.static(path.join(__dirname, "../../miniapp")));
 app.get("/", (req, res) => res.redirect("/miniapp/"));
@@ -242,6 +314,27 @@ function v5ToV4View(state) {
     dueNow: view.dueNow.map(d => ({ key: d.key, name: d.name, amountFormatted: d.amountFormatted, dueDate: d.dueDate, daysUntilDue: d.daysUntilDue })),
     upcoming: view.upcoming.map(d => ({ key: d.key, name: d.name, amountFormatted: d.amountFormatted, dueDate: d.dueDate, daysUntilDue: d.daysUntilDue })),
     statusWord: view.status,
+
+    // ── CONTRACTOR / RUNWAY MODEL ──
+    // For irregular-pay users (contractors, freelancers, anyone with
+    // variable income), there's no meaningful "days to payday." Show
+    // runway instead — how many days the current pace can sustain.
+    //
+    // runwayDays = disposable ÷ pace (capped at a sane upper bound to
+    // avoid "∞d" UX when pace approaches 0).
+    //
+    // Mini app + chat hero conditionally render runway vs days-to-payday
+    // based on `isIrregular`. Same data model, different surface.
+    isIrregular: state.payFrequency === "irregular",
+    runwayDays: (function() {
+      if (state.payFrequency !== "irregular") return null;
+      const pace = view.dailyPaceCents || 0;
+      const disp = view.disposableCents || 0;
+      if (pace <= 0 || disp <= 0) return 0;
+      const days = Math.floor(disp / pace);
+      // Cap at 365 — beyond a year is conceptually "lots" not a useful number.
+      return Math.min(365, days);
+    })(),
 
     invariantOk: true,
   };
@@ -414,7 +507,7 @@ app.get("/api/v4/locale", (req, res) => {
 });
 
 // ── MINI APP API ──────────────────────────────────
-app.get("/api/v5/view/:sid", requireTelegramAuth, async (req, res) => {
+app.get("/api/v5/view/:sid", requireTelegramAuth, rateLimit("default"), async (req, res) => {
   try {
     const u = await db.resolveUser(prisma, req.params.sid);
     const state = await db.loadState(prisma, u.id);
@@ -426,7 +519,7 @@ app.get("/api/v5/view/:sid", requireTelegramAuth, async (req, res) => {
   }
 });
 
-app.post("/api/v5/action/:sid", requireTelegramAuth, async (req, res) => {
+app.post("/api/v5/action/:sid", requireTelegramAuth, rateLimit("default"), async (req, res) => {
   try {
     const intent = req.body.intent;
     if (!intent || typeof intent.kind !== "string") return res.status(400).json({ error: "Invalid intent" });
@@ -464,7 +557,7 @@ app.post("/api/v5/action/:sid", requireTelegramAuth, async (req, res) => {
 // the SAME pipeline as a Telegram message would, returns the proposal
 // (do/talk/decision) so the Mini App can render its own confirm card.
 // This is the standalone-app input primitive: no chat hop required.
-app.post("/api/v5/parse/:sid", requireTelegramAuth, async (req, res) => {
+app.post("/api/v5/parse/:sid", requireTelegramAuth, rateLimit("parse"), async (req, res) => {
   try {
     const text = String(req.body && req.body.text || "").trim();
     if (!text) return res.status(400).json({ error: "Need text." });
@@ -473,11 +566,12 @@ app.post("/api/v5/parse/:sid", requireTelegramAuth, async (req, res) => {
     const state = await db.loadState(prisma, u.id);
     const { processMessage } = require("./pipeline");
     const result = await processMessage(state, text, [], { _debugUserId: u.telegramId || u.id });
-    // Pass through whatever the pipeline returns. Mini App's InputModal
-    // knows how to render each kind (do, do_batch, talk, decision).
+    countEvent("parse_text");
+    countEvent("parse_text.kind." + (result.kind || "unknown"));
     res.json(result);
   } catch (e) {
     console.error("[v5 parse]", e);
+    countEvent("parse_text.error");
     res.status(500).json({ error: "Internal" });
   }
 });
@@ -492,7 +586,7 @@ app.post("/api/v5/parse/:sid", requireTelegramAuth, async (req, res) => {
 // photos are large. Stripe-style: parse-only — apply happens via
 // /api/v5/apply after user confirms.
 const _parsePhotoBodyParser = express.json({ limit: "8mb" });
-app.post("/api/v5/parse-photo/:sid", _parsePhotoBodyParser, requireTelegramAuth, async (req, res) => {
+app.post("/api/v5/parse-photo/:sid", _parsePhotoBodyParser, requireTelegramAuth, rateLimit("photo"), async (req, res) => {
   try {
     const dataUrl = String(req.body && req.body.dataUrl || "");
     if (!dataUrl || !dataUrl.startsWith("data:image/")) {
@@ -512,16 +606,12 @@ app.post("/api/v5/parse-photo/:sid", _parsePhotoBodyParser, requireTelegramAuth,
 
     const vision = require("./ai-vision");
     const r = await vision.extractFromReceipt(buf, Object.assign({}, state, { id: u.telegramId || u.id }));
-    if (!r.ok) return res.json({ kind: "talk", message: r.reason || "Couldn't read the photo." });
+    if (!r.ok) {
+      countEvent("parse_photo.failed");
+      return res.json({ kind: "talk", message: r.reason || "Couldn't read the photo." });
+    }
 
-    // Run the SAME pipeline post-AI steps (currency conversion, validation,
-    // commitment-shape detection) so the photo flow merges with the text
-    // flow before reaching the user's confirm card. Pipeline expects a
-    // proposal-shape from the AI; synthesize one with the vision intent.
     const { processMessage } = require("./pipeline");
-    // Use a synthetic user message so the pipeline's backdate-strip and
-    // commitment-marker scanners have something neutral to operate on
-    // (receipts don't carry English phrasing — they carry items + amounts).
     const syntheticMsg = (r.intent.params && r.intent.params.note) || "receipt photo";
     const result = await processMessage(state, syntheticMsg, [], {
       _debugUserId: u.telegramId || u.id,
@@ -531,9 +621,11 @@ app.post("/api/v5/parse-photo/:sid", _parsePhotoBodyParser, requireTelegramAuth,
         intent: r.intent,
       }),
     });
+    countEvent("parse_photo.ok");
     res.json(result);
   } catch (e) {
     console.error("[v5 parse-photo]", e);
+    countEvent("parse_photo.error");
     res.status(500).json({ error: "Internal" });
   }
 });
@@ -541,7 +633,7 @@ app.post("/api/v5/parse-photo/:sid", _parsePhotoBodyParser, requireTelegramAuth,
 // /api/v5/apply — apply a confirmed intent (or array of intents) from
 // the Mini App. Same validate+apply path as the Telegram confirm-yes
 // callback, just exposed via HTTP. Multi-intent batches handled.
-app.post("/api/v5/apply/:sid", requireTelegramAuth, async (req, res) => {
+app.post("/api/v5/apply/:sid", requireTelegramAuth, rateLimit("default"), async (req, res) => {
   try {
     const intent = req.body && req.body.intent;
     const intents = req.body && req.body.intents;
@@ -566,8 +658,11 @@ app.post("/api/v5/apply/:sid", requireTelegramAuth, async (req, res) => {
           const r = applyIntent(state, it);
           state = r.state;
           applied.push(it);
+          countEvent("apply.ok");
+          if (it && it.kind) countEvent("apply.kind." + it.kind);
         } catch (e) {
           failed.push({ intent: it, reason: translateErrLocal(e, lang) });
+          countEvent("apply.engine_error");
         }
       }
       if (applied.length > 0) await db.saveState(prisma, u.id, state);
@@ -585,7 +680,7 @@ app.post("/api/v5/apply/:sid", requireTelegramAuth, async (req, res) => {
   }
 });
 
-app.get("/api/v5/simulate/:sid", requireTelegramAuth, async (req, res) => {
+app.get("/api/v5/simulate/:sid", requireTelegramAuth, rateLimit("default"), async (req, res) => {
   try {
     const amt = Math.round(Number(req.query.amountCents));
     if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "amountCents required" });

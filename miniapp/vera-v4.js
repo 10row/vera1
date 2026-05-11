@@ -311,19 +311,20 @@ function Hero(props) {
   var v = props.view;
   var col = colorForState(v.state);
 
-  // Status pill — only when not calm. Calm is the default and doesn't
-  // need calling out. Reducing noise is the polish.
+  // Status indicator — colored dot only, no word. The previous "Calm"
+  // / "Tight" labels read off-brand for a tool that *tells you to
+  // spend*. Color carries the meaning: green = healthy (no dot rendered),
+  // amber = pace is tight, red = cycle deficit. The big number's color
+  // double-codes it for color-blind users. No anthropomorphic labels.
   var pill = (v.state === "calm") ? null : h("div", {
     style: {
-      display: "inline-flex", alignItems: "center", gap: 6,
+      display: "inline-flex", alignItems: "center",
       background: softColorForState(v.state),
-      color: col, fontSize: 12, fontWeight: 600,
-      padding: "5px 12px", borderRadius: 999,
-      letterSpacing: "0.02em", marginBottom: 14,
+      padding: "6px 10px", borderRadius: 999,
+      marginBottom: 14,
     },
   },
-    h("span", { style: { width: 6, height: 6, borderRadius: "50%", background: col } }),
-    v.state === "over" ? t("status.over") : t("status.tight")
+    h("span", { style: { width: 8, height: 8, borderRadius: "50%", background: col } })
   );
 
   // OVER STATE — surface the deficit. The user's question in this
@@ -363,10 +364,22 @@ function Hero(props) {
   var hasBills = (v.obligatedCents || 0) > 0;
 
   // Pace + days context line (mid tier).
-  var paceLineKey = (v.daysToPayday === 1)
-    ? "miniapp.hero.subNoBillsSingleDay"
-    : "miniapp.hero.subNoBills";
-  var paceDaysContext = t(paceLineKey, { pace: paceShort, days: v.daysToPayday });
+  // CONTRACTOR / IRREGULAR: show "runway" days (how long balance lasts
+  // at current pace) instead of "days to payday" — which is meaningless
+  // for variable-income users.
+  var paceDaysContext;
+  if (v.isIrregular) {
+    var runway = (typeof v.runwayDays === "number") ? v.runwayDays : 0;
+    var runwayKey = (runway === 1)
+      ? "miniapp.hero.runwaySingle"
+      : "miniapp.hero.runway";
+    paceDaysContext = t(runwayKey, { pace: paceShort, runway: runway });
+  } else {
+    var paceLineKey = (v.daysToPayday === 1)
+      ? "miniapp.hero.subNoBillsSingleDay"
+      : "miniapp.hero.subNoBills";
+    paceDaysContext = t(paceLineKey, { pace: paceShort, days: v.daysToPayday });
+  }
 
   // Reference line (smallest, muted). When bills exist: "$X available ·
   // $Y in account". When no bills: balance == available, so just show

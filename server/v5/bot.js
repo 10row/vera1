@@ -816,6 +816,8 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
         "  /bills — счета (можно оплатить одним нажатием)\n" +
         "  /undo — отменить последнее\n" +
         "  /app — открыть дашборд\n" +
+        "  /privacy — как я обращаюсь с твоими данными\n" +
+        "  /export — выгрузка всех твоих данных (JSON)\n" +
         "  /reset — сбросить всё"
       : "*Spendkitty — what I can do:*\n\n" +
         "💸 *Log spends* — just tell me:\n" +
@@ -838,6 +840,8 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
         "  /bills — bills (tap to pay)\n" +
         "  /undo — undo last action\n" +
         "  /app — open dashboard\n" +
+        "  /privacy — how I handle your data\n" +
+        "  /export — download all your data (JSON)\n" +
         "  /reset — wipe everything";
     await safeReply(ctx, helpText, { parse_mode: "Markdown" });
     return;
@@ -1066,6 +1070,97 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     });
     return;
   }
+  // ── /privacy — plain-language data policy ──────────────────
+  // What we collect, where it goes, and the user's rights. Money apps
+  // earn trust by being clear about this BEFORE the user asks. Spendkitty
+  // is built around restraint — and that should be visible.
+  if (command === "privacy") {
+    const u = await db.resolveUser(prisma, "tg_" + telegramId);
+    const state = await db.loadState(prisma, u.id);
+    const lang = state.language === "ru" ? "ru" : "en";
+    const text = lang === "ru"
+      ? "*Прозрачность и приватность*\n\n" +
+        "*Что я храню:*\n" +
+        "• Твой Telegram ID (чтобы тебя узнавать)\n" +
+        "• То, что ты мне пишешь (траты, счета, баланс)\n" +
+        "• Производные расчёты (твой дневной темп, лимиты)\n\n" +
+        "*Куда это уходит:*\n" +
+        "• Хранится на моих серверах (Railway, шифрование на диске)\n" +
+        "• Текстовые сообщения обрабатываются через OpenAI для понимания (они не обучают модели на API-данных)\n" +
+        "• Никаких трекеров, рекламы, продажи данных. Не подключаюсь к банкам.\n\n" +
+        "*Твои права:*\n" +
+        "• /export — выгрузить все свои данные (JSON)\n" +
+        "• /reset — стереть всё. Полностью. Без вопросов.\n\n" +
+        "_Кошельки большие — мы маленькие. Чем меньше я знаю, тем лучше работаю._"
+      : "*How your data is handled*\n\n" +
+        "*What I store:*\n" +
+        "• Your Telegram ID (to recognize you)\n" +
+        "• What you tell me (spends, bills, balance)\n" +
+        "• Derived numbers (your daily pace, limits)\n\n" +
+        "*Where it goes:*\n" +
+        "• Stays on my servers (Railway, encrypted at rest)\n" +
+        "• Text messages are processed via OpenAI for understanding (they don't train on API data)\n" +
+        "• No trackers, no ads, no data sale. No bank link.\n\n" +
+        "*Your rights:*\n" +
+        "• /export — download all your data (JSON)\n" +
+        "• /reset — wipe everything. No questions asked.\n\n" +
+        "_The less I know about you, the better I work._";
+    await safeReply(ctx, text, { parse_mode: "Markdown" });
+    return;
+  }
+
+  // ── /export — GDPR-style "give me my data" ─────────────────
+  // Emit the user's full state as JSON. For small accounts (<3KB) we
+  // inline it in chat. Larger payloads go as a .json file attachment
+  // so Telegram doesn't truncate.
+  if (command === "export") {
+    const u = await db.resolveUser(prisma, "tg_" + telegramId);
+    const state = await db.loadState(prisma, u.id);
+    const lang = state.language === "ru" ? "ru" : "en";
+    // Build the export payload — everything the user has typed plus
+    // derived state. Exclude internal session fields the user never sees.
+    const payload = {
+      _meta: {
+        exportedAt: new Date().toISOString(),
+        format: "spendkitty-export-v1",
+        telegramId: String(telegramId),
+      },
+      setup: state.setup || false,
+      language: state.language || "en",
+      currency: state.currency,
+      currencySymbol: state.currencySymbol,
+      timezone: state.timezone,
+      balanceCents: state.balanceCents,
+      payday: state.payday,
+      payFrequency: state.payFrequency,
+      bills: state.bills || {},
+      transactions: state.transactions || [],
+      events: state.events || [],
+      paceHistory: state.paceHistory || {},
+    };
+    const json = JSON.stringify(payload, null, 2);
+    // Telegram caps text messages at ~4096 chars. JSON code blocks
+    // overhead → use 3500 for the inline threshold.
+    if (json.length <= 3500) {
+      const head = lang === "ru" ? "*Твои данные:*" : "*Your data:*";
+      await safeReply(ctx, head + "\n```json\n" + json + "\n```", { parse_mode: "Markdown" });
+    } else {
+      // Larger payloads — send as a file. Telegram supports document
+      // upload via InputFile (Buffer + filename).
+      try {
+        const buf = Buffer.from(json, "utf8");
+        const fname = "spendkitty-export-" + (state.language || "en") + "-" + new Date().toISOString().slice(0, 10) + ".json";
+        await ctx.replyWithDocument({ source: buf, filename: fname }, {
+          caption: lang === "ru" ? "Твои данные на Spendkitty" : "Your Spendkitty data",
+        });
+      } catch (e) {
+        console.error("[v5 /export]", e);
+        await safeReply(ctx, lang === "ru" ? "_Не удалось выгрузить — попробуй позже._" : "_Couldn't export — try again later._", { parse_mode: "Markdown" });
+      }
+    }
+    return;
+  }
+
   if (command === "debug") {
     // Production dev tool — show the last few raw AI responses for this
     // user. Lets you (the dev / Claude) inspect what the AI saw without
@@ -1381,6 +1476,8 @@ function attach(prisma) {
   bot.command("reset", (ctx) => processCommand(prisma, ctx, ctx.from.id, "reset").catch(e => console.error("[v5 /reset]", e)));
   bot.command("app",   (ctx) => processCommand(prisma, ctx, ctx.from.id, "app").catch(e => console.error("[v5 /app]", e)));
   bot.command("debug", (ctx) => processCommand(prisma, ctx, ctx.from.id, "debug").catch(e => console.error("[v5 /debug]", e)));
+  bot.command("privacy", (ctx) => processCommand(prisma, ctx, ctx.from.id, "privacy").catch(e => console.error("[v5 /privacy]", e)));
+  bot.command("export", (ctx) => processCommand(prisma, ctx, ctx.from.id, "export").catch(e => console.error("[v5 /export]", e)));
   bot.command("help",  (ctx) => processCommand(prisma, ctx, ctx.from.id, "help").catch(e => console.error("[v5 /help]", e)));
 
   bot.on("message:text", async (ctx) => {

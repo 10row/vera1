@@ -183,9 +183,15 @@ function heroLine(state, lang) {
   const dot = v.status === "tight" ? "🟡" : "🟢";
 
   if (irregular) {
+    // Contractor / freelance — show RUNWAY (days the balance lasts at
+    // current pace) instead of a fictitious "days to payday." Matches
+    // the mini app hero's runway model for irregular pay.
+    const pace = v.dailyPaceCents || 0;
+    const disp = v.disposableCents || 0;
+    const runwayDays = (pace > 0 && disp > 0) ? Math.min(365, Math.floor(disp / pace)) : 0;
     return L === "ru"
-      ? dot + " " + leftTodayPiece + v.balanceFormatted + " · " + v.dailyPaceFormatted + "/день"
-      : dot + " " + leftTodayPiece + v.balanceFormatted + " · " + v.dailyPaceFormatted + "/day";
+      ? dot + " " + leftTodayPiece + v.dailyPaceFormatted + "/день · хватит ещё на ~" + runwayDays + "д"
+      : dot + " " + leftTodayPiece + v.dailyPaceFormatted + "/day · ~" + runwayDays + "d runway";
   }
 
   return L === "ru"
