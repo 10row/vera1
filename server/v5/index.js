@@ -694,6 +694,53 @@ app.get("/api/v5/simulate/:sid", requireTelegramAuth, rateLimit("default"), asyn
   }
 });
 
+// /api/v5/settings — switch language and/or currency from the mini app.
+// Body: { language?: "en"|"ru", currency?: "USD"|"RUB"|... }
+// Returns: { ok: true, view } so the mini app can refresh in place.
+//
+// Currency switch note: changes the symbol/code stored in state. Does
+// NOT retroactively convert any stored balance/transaction amounts —
+// those stay as raw integer cents in the new symbol. User must adjust
+// balance manually if they actually moved currencies with their money.
+const _CURRENCY_SYMBOLS = {
+  USD: "$", EUR: "€", GBP: "£", RUB: "₽", KZT: "₸", UAH: "₴", BYN: "Br",
+  CAD: "$", AUD: "$", NZD: "$", INR: "₹", JPY: "¥", CNY: "¥", BRL: "R$",
+  TRY: "₺", THB: "฿", CHF: "Fr", PLN: "zł", VND: "₫", IDR: "Rp",
+  KRW: "₩", HKD: "HK$", TWD: "NT$", MXN: "$", ZAR: "R", NOK: "kr",
+  SEK: "kr", DKK: "kr", SGD: "$", MYR: "RM", PHP: "₱", AED: "د.إ",
+  SAR: "﷼", ILS: "₪", CZK: "Kč", HUF: "Ft", RON: "lei", BGN: "лв",
+  KGS: "сом", UZS: "сўм", TJS: "сом", MNT: "₮",
+};
+app.post("/api/v5/settings/:sid", requireTelegramAuth, rateLimit("default"), async (req, res) => {
+  try {
+    const wantLang = req.body && req.body.language;
+    const wantCcy = req.body && req.body.currency;
+    if (!wantLang && !wantCcy) return res.status(400).json({ error: "Provide language or currency." });
+    if (wantLang && wantLang !== "en" && wantLang !== "ru") {
+      return res.status(400).json({ error: "Language must be en or ru." });
+    }
+    if (wantCcy && !_CURRENCY_SYMBOLS[wantCcy]) {
+      return res.status(400).json({ error: "Unknown currency code." });
+    }
+    const u = await db.resolveUser(prisma, req.params.sid);
+    let result;
+    await db.withUserLock(u.id, async () => {
+      const state = await db.loadState(prisma, u.id);
+      if (wantLang) state.language = wantLang;
+      if (wantCcy) {
+        state.currency = wantCcy;
+        state.currencySymbol = _CURRENCY_SYMBOLS[wantCcy];
+      }
+      await db.saveState(prisma, u.id, state);
+      result = { ok: true, view: v5ToV4View(state) };
+    });
+    res.json(result);
+  } catch (e) {
+    console.error("[v5 settings]", e);
+    res.status(500).json({ error: "Internal" });
+  }
+});
+
 // ── TELEGRAM ──────────────────────────────────────
 attach(prisma);
 

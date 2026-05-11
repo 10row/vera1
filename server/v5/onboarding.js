@@ -382,11 +382,16 @@ const copy = {
       ? "Не парься — скажи *пропустить*."
       : "No rush — just say *skip*.";
   },
+  // After balance confirm: includes the CURRENCY SYMBOL in the
+  // formatted amount, so a user who's been auto-detected to the wrong
+  // currency sees it immediately ("$5,000" when they expected "₽5,000").
+  // The escape-hatch hint at the bottom (/currency, /language) is the
+  // failsafe — small, tucked away, but always there.
   gotBalanceAskPayday(L, amt, sym) {
     const fmt = m.toMoney(amt, sym);
     return L === "ru"
-      ? "Записал, *" + fmt + "*.\n\nДальше — *когда следующая зарплата?*\n_(Дата типа «15-го» или «30 апреля». Или скажи «irregular», если фрилансер/подрядчик — покажу сколько хватит денег.)_"
-      : "Got it, *" + fmt + "*.\n\nNext — *when's your next paycheck?*\n_(A date like \"the 15th\" or \"April 30\". Or say \"irregular\" if you're a contractor/freelancer — I'll show you runway days.)_";
+      ? "Записал, *" + fmt + "*.\n_(Не та валюта? `/currency RUB` или `/currency USD` — пара секунд.)_\n\nДальше — *когда следующая зарплата?*\n_(Дата типа «15-го» или «30 апреля». Или скажи «irregular», если фрилансер/подрядчик — покажу сколько хватит денег.)_"
+      : "Got it, *" + fmt + "*.\n_(Wrong currency? `/currency RUB` or `/currency USD` — takes a second.)_\n\nNext — *when's your next paycheck?*\n_(A date like \"the 15th\" or \"April 30\". Or say \"irregular\" if you're a contractor/freelancer — I'll show you runway days.)_";
   },
   paydayMissOnce(L) {
     return L === "ru"

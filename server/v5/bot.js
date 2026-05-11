@@ -27,25 +27,106 @@ function translateErr(e, lang) {
   return e.message || String(e);
 }
 
-// normalizeLang — accepts Telegram language_code values like "en-US", "ru",
-// "ru-RU" and reduces them to the supported set. We support en + ru today;
-// everything else falls back to en.
+// normalizeLang — accepts Telegram language_code values like "en-US",
+// "ru-RU", "kk-KZ", "uk-UA" and reduces them to the UI language we
+// support (EN or RU strings). Cyrillic-family languages → ru (best
+// available; Russian is widely understood in this region). Everything
+// else → en.
+//
+// Why broader than just "ru": users in the post-Soviet space often have
+// Telegram set to their national language (Kazakh, Belarusian, Ukrainian,
+// Uzbek, Kyrgyz, etc.) but speak Russian and need Russian UI. Mapping
+// these to "en" was a real complaint — they got an English bot they
+// couldn't read fluently.
 function normalizeLang(code) {
   if (!code) return "en";
   const c = String(code).toLowerCase().split(/[-_]/)[0];
-  if (c === "ru") return "ru";
+  const cyrillicFamily = new Set([
+    "ru", "uk", "be", "kk", "ky", "uz", "tg",
+    "mn", "bg", "mk", "sr", "ba", "cv", "sah", "tt"
+  ]);
+  if (cyrillicFamily.has(c)) return "ru";
   return "en";
 }
 
-// defaultCurrencyForLang — paired with normalizeLang. Russian user gets
-// RUB+₽ by default; English gets USD+$. Without this, language commit
-// without currency commit shows RU users "$" and breaks trust.
-const _DEFAULT_CURRENCY = {
-  en: { code: "USD", symbol: "$" },
-  ru: { code: "RUB", symbol: "₽" },
+// defaultCurrencyForLocale — country-aware. Uses the FULL locale code
+// (e.g. "ru-KZ", "en-GB") to pick the most likely currency for the
+// user's country. Falls back to language-only mapping if no country
+// specifier. Decouples currency from UI language — a Russian-speaker
+// in Kazakhstan should see KZT ₸, not RUB ₽; an English-speaker in
+// the UK should see GBP £, not USD $.
+//
+// This closes the six "wrong-currency" holes flagged by users:
+//   - Russian speaker, Kazakh Telegram (kk-KZ) → was: USD; now: KZT
+//   - Russian speaker, Belarusian Telegram (be-BY) → was: USD; now: BYN
+//   - Ukrainian speaker (uk-UA) → was: USD; now: UAH
+//   - English speaker in UK (en-GB) → was: USD; now: GBP
+//   - English speaker in Australia (en-AU) → was: USD; now: AUD
+//   - Russian speaker in Russia (ru-RU) → was: RUB ✓ (unchanged)
+const _CURRENCY_BY_LOCALE = {
+  // Country-specific (full code wins)
+  "ru-by": { code: "BYN", symbol: "Br" },
+  "ru-kz": { code: "KZT", symbol: "₸" },
+  "ru-ua": { code: "UAH", symbol: "₴" },
+  "ru-kg": { code: "KGS", symbol: "сом" },
+  "ru-uz": { code: "UZS", symbol: "сўм" },
+  "kk-kz": { code: "KZT", symbol: "₸" },
+  "be-by": { code: "BYN", symbol: "Br" },
+  "uk-ua": { code: "UAH", symbol: "₴" },
+  "ky-kg": { code: "KGS", symbol: "сом" },
+  "uz-uz": { code: "UZS", symbol: "сўм" },
+  "en-gb": { code: "GBP", symbol: "£" },
+  "en-au": { code: "AUD", symbol: "$" },
+  "en-ca": { code: "CAD", symbol: "$" },
+  "en-nz": { code: "NZD", symbol: "$" },
+  "en-ie": { code: "EUR", symbol: "€" },
+  "en-in": { code: "INR", symbol: "₹" },
+  "fr-ca": { code: "CAD", symbol: "$" },
+  "fr-ch": { code: "CHF", symbol: "Fr" },
+  "de-ch": { code: "CHF", symbol: "Fr" },
+  "it-ch": { code: "CHF", symbol: "Fr" },
+  "pt-br": { code: "BRL", symbol: "R$" },
+  "zh-tw": { code: "TWD", symbol: "NT$" },
+  "zh-hk": { code: "HKD", symbol: "HK$" },
+  // Language-only fallbacks (when no country in the code)
+  "ru": { code: "RUB", symbol: "₽" },
+  "en": { code: "USD", symbol: "$" },
+  "kk": { code: "KZT", symbol: "₸" },
+  "be": { code: "BYN", symbol: "Br" },
+  "uk": { code: "UAH", symbol: "₴" },
+  "ky": { code: "KGS", symbol: "сом" },
+  "uz": { code: "UZS", symbol: "сўм" },
+  "tg": { code: "TJS", symbol: "сом" },
+  "mn": { code: "MNT", symbol: "₮" },
+  "bg": { code: "BGN", symbol: "лв" },
+  "fr": { code: "EUR", symbol: "€" },
+  "de": { code: "EUR", symbol: "€" },
+  "es": { code: "EUR", symbol: "€" },
+  "it": { code: "EUR", symbol: "€" },
+  "pt": { code: "EUR", symbol: "€" },
+  "nl": { code: "EUR", symbol: "€" },
+  "pl": { code: "PLN", symbol: "zł" },
+  "tr": { code: "TRY", symbol: "₺" },
+  "ja": { code: "JPY", symbol: "¥" },
+  "ko": { code: "KRW", symbol: "₩" },
+  "zh": { code: "CNY", symbol: "¥" },
+  "th": { code: "THB", symbol: "฿" },
+  "vi": { code: "VND", symbol: "₫" },
+  "id": { code: "IDR", symbol: "Rp" },
+  "hi": { code: "INR", symbol: "₹" },
 };
+function defaultCurrencyForLocale(code) {
+  if (!code) return { code: "USD", symbol: "$" };
+  const c = String(code).toLowerCase().replace("_", "-");
+  if (_CURRENCY_BY_LOCALE[c]) return _CURRENCY_BY_LOCALE[c];
+  const baseLang = c.split("-")[0];
+  if (_CURRENCY_BY_LOCALE[baseLang]) return _CURRENCY_BY_LOCALE[baseLang];
+  return { code: "USD", symbol: "$" };
+}
+// Back-compat for code that still calls defaultCurrencyForLang.
+// Internal use: prefer defaultCurrencyForLocale with the raw code.
 function defaultCurrencyForLang(lang) {
-  return _DEFAULT_CURRENCY[lang] || _DEFAULT_CURRENCY.en;
+  return defaultCurrencyForLocale(lang);
 }
 
 // hasBrainDumpExtras — heuristic: does the message contain content beyond
@@ -604,23 +685,31 @@ async function processText(prisma, ctx, telegramId, text, options) {
   await db.withUserLock(u.id, async () => {
     let state = await db.loadState(prisma, u.id);
 
-    // Detect language from Telegram's client locale on the first turn (when
-    // the user is still virgin: no setup, no transactions). After that the
-    // user's language is locked unless they explicitly switch.
+    // Detect language + currency from Telegram's client locale on the
+    // first turn (virgin user — no setup, no transactions, no events).
+    // After that, the user's language/currency are locked unless they
+    // explicitly switch via /language or /currency commands.
+    //
+    // CRITICAL: language and currency are decoupled now.
+    //   - Language: cyrillic-family locale codes → "ru" UI; else "en"
+    //   - Currency: FULL locale code → country-aware mapping
+    //     (e.g. "ru-KZ" → KZT, "en-GB" → GBP, "kk-KZ" → KZT)
+    //
+    // This closes the "Russian speaker in Kazakhstan got USD" complaint.
     const tgLang = ctx.from && ctx.from.language_code;
     const isVirgin = !state.setup && (!state.transactions || state.transactions.length === 0)
       && (!state.events || state.events.length === 0);
-    if (isVirgin && tgLang && state.language !== normalizeLang(tgLang)) {
-      state.language = normalizeLang(tgLang);
-      // CRITICAL: language change implies currency change for the
-      // virgin user. Without this, RU users see "$120,000" and lose
-      // trust before turn 3 (persona test 0003.1). Defaults are
-      // overridable later via update_settings if user explicitly says
-      // "switch to USD".
-      const def = defaultCurrencyForLang(state.language);
-      state.currency = def.code;
-      state.currencySymbol = def.symbol;
-      await db.saveState(prisma, u.id, state);
+    if (isVirgin && tgLang) {
+      const newLang = normalizeLang(tgLang);
+      const newCcy = defaultCurrencyForLocale(tgLang);
+      let changed = false;
+      if (state.language !== newLang) { state.language = newLang; changed = true; }
+      if (state.currency !== newCcy.code) {
+        state.currency = newCcy.code;
+        state.currencySymbol = newCcy.symbol;
+        changed = true;
+      }
+      if (changed) await db.saveState(prisma, u.id, state);
     }
 
     const lang = state.language === "ru" ? "ru" : "en";
@@ -1002,6 +1091,8 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
         "  /bills — счета (одним нажатием оплатить)\n" +
         "  /undo — отменить последнее\n" +
         "  /app — открыть дашборд\n" +
+        "  /language — переключить язык (en / ru)\n" +
+        "  /currency — поменять валюту (RUB / USD / EUR / KZT…)\n" +
         "  /privacy — что я храню\n" +
         "  /export — выгрузить все данные (JSON)\n" +
         "  /reset — стереть всё\n\n" +
@@ -1038,6 +1129,8 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
         "  /bills — bills (tap to pay)\n" +
         "  /undo — undo last action\n" +
         "  /app — open dashboard\n" +
+        "  /language — switch UI language (en / ru)\n" +
+        "  /currency — change currency (USD / RUB / EUR / KZT…)\n" +
         "  /privacy — how your data is handled\n" +
         "  /export — download everything (JSON)\n" +
         "  /reset — wipe everything\n\n" +
@@ -1269,6 +1362,77 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     });
     return;
   }
+  // ── /language — switch UI language (anytime) ──────────────
+  // The first-turn auto-detection takes a best guess from the user's
+  // Telegram locale. If wrong (or if it changed), /language lets them
+  // fix it without losing data. Two args: bare /language shows current
+  // + options; /language en or /language ru switches.
+  if (command === "language") {
+    const u = await db.resolveUser(prisma, "tg_" + telegramId);
+    const state = await db.loadState(prisma, u.id);
+    const arg = String(payload || "").trim().toLowerCase().split(/\s+/)[0];
+    const wanted = arg ? normalizeLang(arg) : null;
+    if (!arg) {
+      // Show current + options
+      const curr = state.language || "en";
+      const ru = curr === "ru";
+      await safeReply(ctx,
+        (ru ? "Сейчас: *русский* 🇷🇺" : "Current: *English* 🇬🇧") + "\n\n" +
+        (ru ? "Переключить: `/language en`" : "Switch: `/language ru`"),
+        { parse_mode: "Markdown" });
+      return;
+    }
+    state.language = wanted;
+    await db.saveState(prisma, u.id, state);
+    await safeReply(ctx, wanted === "ru"
+      ? "Готово ✅ Теперь общаюсь по-русски."
+      : "Done ✅ Switched to English.", { parse_mode: "Markdown" });
+    return;
+  }
+
+  // ── /currency — switch base currency (anytime) ─────────────
+  // Changes the formatting symbol/code for ALL display going forward.
+  // CRITICAL: doesn't retroactively convert stored cents — past
+  // numbers continue to display in the new symbol but the underlying
+  // value is the same integer. User must manually adjust_balance if
+  // they're truly converting (e.g. moved countries with money in tow).
+  // Bare /currency shows current + common options.
+  if (command === "currency") {
+    const u = await db.resolveUser(prisma, "tg_" + telegramId);
+    const state = await db.loadState(prisma, u.id);
+    const lang = state.language === "ru" ? "ru" : "en";
+    const arg = String(payload || "").trim().toUpperCase().split(/\s+/)[0];
+    if (!arg) {
+      const curr = state.currency || "USD";
+      const sym = state.currencySymbol || "$";
+      await safeReply(ctx, lang === "ru"
+        ? "Сейчас: *" + sym + " " + curr + "*\n\nПопулярные: `/currency RUB` `/currency USD` `/currency EUR` `/currency KZT` `/currency GBP` `/currency BYN` `/currency UAH`"
+        : "Current: *" + sym + " " + curr + "*\n\nCommon: `/currency RUB` `/currency USD` `/currency EUR` `/currency KZT` `/currency GBP` `/currency BYN` `/currency UAH`",
+        { parse_mode: "Markdown" });
+      return;
+    }
+    // Look up the symbol for the requested currency code. Use the
+    // existing currency module which has the full ISO table.
+    const currency = require("./currency");
+    let sym;
+    try { sym = currency.symbolFor(arg); } catch { sym = null; }
+    if (!sym) {
+      await safeReply(ctx, lang === "ru"
+        ? "_Не знаю валюту «" + arg + "». Используй ISO-код (USD, EUR, RUB, KZT...)._"
+        : "_Don't know currency \"" + arg + "\". Use an ISO code (USD, EUR, RUB, KZT...)._",
+        { parse_mode: "Markdown" });
+      return;
+    }
+    state.currency = arg;
+    state.currencySymbol = sym;
+    await db.saveState(prisma, u.id, state);
+    await safeReply(ctx, lang === "ru"
+      ? "Готово ✅ Валюта: *" + sym + " " + arg + "*.\n\n_Я не пересчитываю прошлые суммы — если ты сменил(а) страну с деньгами, скорректируй баланс через «у меня сейчас X»._"
+      : "Done ✅ Currency: *" + sym + " " + arg + "*.\n\n_I don't re-convert past amounts — if you actually moved countries with money, adjust your balance via \"I now have X\"._",
+      { parse_mode: "Markdown" });
+    return;
+  }
+
   // ── /privacy — plain-language data policy ──────────────────
   // What we collect, where it goes, and the user's rights. Money apps
   // earn trust by being clear about this BEFORE the user asks. Spendkitty
@@ -1675,6 +1839,8 @@ function attach(prisma) {
   bot.command("reset", (ctx) => processCommand(prisma, ctx, ctx.from.id, "reset").catch(e => console.error("[v5 /reset]", e)));
   bot.command("app",   (ctx) => processCommand(prisma, ctx, ctx.from.id, "app").catch(e => console.error("[v5 /app]", e)));
   bot.command("debug", (ctx) => processCommand(prisma, ctx, ctx.from.id, "debug").catch(e => console.error("[v5 /debug]", e)));
+  bot.command("language", (ctx) => processCommand(prisma, ctx, ctx.from.id, "language", ctx.match || "").catch(e => console.error("[v5 /language]", e)));
+  bot.command("currency", (ctx) => processCommand(prisma, ctx, ctx.from.id, "currency", ctx.match || "").catch(e => console.error("[v5 /currency]", e)));
   bot.command("privacy", (ctx) => processCommand(prisma, ctx, ctx.from.id, "privacy").catch(e => console.error("[v5 /privacy]", e)));
   bot.command("export", (ctx) => processCommand(prisma, ctx, ctx.from.id, "export").catch(e => console.error("[v5 /export]", e)));
   bot.command("help",  (ctx) => processCommand(prisma, ctx, ctx.from.id, "help").catch(e => console.error("[v5 /help]", e)));

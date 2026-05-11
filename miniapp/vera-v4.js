@@ -2161,7 +2161,24 @@ function App() {
         // NotSetUpState screen to flash. Fix: wrap loadLocale in a
         // Promise so the chain WAITS for setData before the terminal
         // .then() runs.
-        var lang = (v && v.language) || "en";
+        // Locale resolution priority:
+        //   1. Server-stored state.language (the user's confirmed choice)
+        //   2. Browser navigator.language (fallback when state is unset)
+        //   3. "en" (last resort)
+        // The browser fallback catches the case where the user opens
+        // the mini app BEFORE having chatted with the bot, so the
+        // server doesn't have a language yet. Without it the mini app
+        // would show English to a Russian user opening the dashboard.
+        function browserLangFallback() {
+          try {
+            var b = (navigator && (navigator.language || navigator.userLanguage)) || "";
+            var base = b.toLowerCase().split(/[-_]/)[0];
+            var cyrillic = ["ru","uk","be","kk","ky","uz","tg","mn","bg","mk","sr","ba","cv","sah","tt"];
+            if (cyrillic.indexOf(base) !== -1) return "ru";
+          } catch (e) {}
+          return "en";
+        }
+        var lang = (v && v.language) || browserLangFallback();
         return new Promise(function(resolve) {
           loadLocale(lang, function() {
             setData({
@@ -2251,6 +2268,10 @@ function App() {
   // Help overlay state — opened by the ? button top-right.
   var helpOpenState = useState(false);
   var helpOpen = helpOpenState[0], setHelpOpen = helpOpenState[1];
+  // Settings overlay state — opened by the gear icon top-right.
+  // Where users fix wrong-detected language/currency without /reset.
+  var settingsOpenState = useState(false);
+  var settingsOpen = settingsOpenState[0], setSettingsOpen = settingsOpenState[1];
 
   function openInputWith(text) {
     setPrefill(text || "");
@@ -2265,25 +2286,50 @@ function App() {
     },
   },
     content,
-    // Top-right ? button — opens the help overlay. Only shows once
+    // Top-right buttons — settings (⚙) + help (?). Only show once
     // user is set up (no point on the not-set-up screen).
     (data && data.view && data.view.setup) ? h("div", {
-      onClick: function() { tapHaptic && tapHaptic(); setHelpOpen(true); },
       style: {
         position: "fixed",
         top: 14, right: 14,
-        width: 30, height: 30, borderRadius: "50%",
-        background: "rgba(31,31,31,0.85)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
-        color: C.sub, fontSize: 14, fontWeight: 600,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        cursor: "pointer", userSelect: "none",
+        display: "flex", gap: 8,
         zIndex: 60,
-        border: "1px solid " + C.border,
       },
-    }, "?") : null,
+    },
+      h("div", {
+        onClick: function() { tapHaptic && tapHaptic(); setSettingsOpen(true); },
+        style: {
+          width: 30, height: 30, borderRadius: "50%",
+          background: "rgba(31,31,31,0.85)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          color: C.sub, fontSize: 14,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", userSelect: "none",
+          border: "1px solid " + C.border,
+        },
+      }, "⚙"),
+      h("div", {
+        onClick: function() { tapHaptic && tapHaptic(); setHelpOpen(true); },
+        style: {
+          width: 30, height: 30, borderRadius: "50%",
+          background: "rgba(31,31,31,0.85)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          color: C.sub, fontSize: 14, fontWeight: 600,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", userSelect: "none",
+          border: "1px solid " + C.border,
+        },
+      }, "?")
+    ) : null,
     helpOpen ? h(HelpModal, { onClose: function() { setHelpOpen(false); } }) : null,
+    settingsOpen ? h(SettingsModal, {
+      view: data && data.view,
+      sid: sid.current,
+      onClose: function() { setSettingsOpen(false); },
+      onChange: function() { setSettingsOpen(false); loadView(); },
+    }) : null,
     showFab ? h(InputFAB, { onOpen: onFabOpen }) : null,
     inputMode === "text" ? h(InputModal, {
       sid: sid.current,
@@ -2451,6 +2497,200 @@ function HelpModal(props) {
           fontFamily: "'Inter',sans-serif", cursor: "pointer",
         },
       }, "Got it")
+    )
+  );
+}
+
+// ── SETTINGS MODAL ─────────────────────────────────────────
+// Tiny settings panel — language + currency overrides. The mini app
+// equivalent of /language and /currency chat commands. Lets users fix
+// wrong-detected identity without going back to chat.
+//
+// Currency switching note: doesn't retroactively convert stored cents.
+// Display formatting flips immediately; underlying numbers stay the
+// same integer. User who's actually moved countries should adjust
+// their balance manually after switching.
+function SettingsModal(props) {
+  var view = props.view || {};
+  var sid = props.sid;
+  var currentLang = view.language || "en";
+  var currentCcy = view.currency || "USD";
+  var savingState = useState(false);
+  var saving = savingState[0], setSaving = savingState[1];
+  var errState = useState("");
+  var err = errState[0], setErr = errState[1];
+
+  useEffect(function() {
+    function onKey(e) { if (e.key === "Escape" && !saving) props.onClose(); }
+    document.addEventListener("keydown", onKey);
+    return function() { document.removeEventListener("keydown", onKey); };
+  }, [saving]);
+
+  // Common currencies, ordered by relevance. Full list is enormous —
+  // exposing the top 10ish covers 95% of users. Power users can use
+  // the /currency command for less-common ISO codes.
+  var CURRENCIES = [
+    { code: "USD", sym: "$", name: "US Dollar" },
+    { code: "EUR", sym: "€", name: "Euro" },
+    { code: "GBP", sym: "£", name: "British Pound" },
+    { code: "RUB", sym: "₽", name: "Russian Ruble" },
+    { code: "KZT", sym: "₸", name: "Kazakhstani Tenge" },
+    { code: "UAH", sym: "₴", name: "Ukrainian Hryvnia" },
+    { code: "BYN", sym: "Br", name: "Belarusian Ruble" },
+    { code: "CAD", sym: "$", name: "Canadian Dollar" },
+    { code: "AUD", sym: "$", name: "Australian Dollar" },
+    { code: "INR", sym: "₹", name: "Indian Rupee" },
+    { code: "JPY", sym: "¥", name: "Japanese Yen" },
+    { code: "CNY", sym: "¥", name: "Chinese Yuan" },
+    { code: "BRL", sym: "R$", name: "Brazilian Real" },
+    { code: "TRY", sym: "₺", name: "Turkish Lira" },
+    { code: "THB", sym: "฿", name: "Thai Baht" },
+  ];
+
+  function applyChange(payload) {
+    if (saving) return;
+    setSaving(true); setErr("");
+    fetch(API_BASE + "/api/v5/settings/" + sid, {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+      body: JSON.stringify(payload),
+    })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, body: d }; }); })
+      .then(function(res) {
+        if (!res.ok || !(res.body && res.body.ok)) {
+          setErr((res.body && res.body.error) || "Couldn't save.");
+          setSaving(false);
+          return;
+        }
+        tapHaptic && tapHaptic();
+        props.onChange();
+      })
+      .catch(function(e) { setErr(e.message); setSaving(false); });
+  }
+
+  function ToggleRow(opts) {
+    return h("div", {
+      onClick: function() { if (!opts.active && !saving) opts.onSelect(); },
+      style: {
+        padding: "10px 14px",
+        background: opts.active ? C.greenSoft : C.card,
+        border: "1px solid " + (opts.active ? C.green : C.border),
+        borderRadius: 10,
+        marginBottom: 6,
+        display: "flex", alignItems: "center", gap: 10,
+        cursor: opts.active || saving ? "default" : "pointer",
+        opacity: saving ? 0.6 : 1,
+      },
+    },
+      h("div", { style: { fontSize: 18 } }, opts.icon),
+      h("div", { style: { flex: 1 } },
+        h("div", { style: { fontSize: 13, fontWeight: 500, color: C.text } }, opts.label),
+        opts.sub ? h("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, opts.sub) : null
+      ),
+      opts.active ? h("div", { style: { fontSize: 14, color: C.green } }, "✓") : null
+    );
+  }
+
+  return h("div", {
+    onClick: function(e) { if (e.target === e.currentTarget && !saving) props.onClose(); },
+    style: {
+      position: "fixed", inset: 0,
+      background: "rgba(0,0,0,0.72)",
+      zIndex: 1100,
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      animation: "fadeIn 200ms ease",
+    },
+  },
+    h("div", {
+      onClick: function(e) { e.stopPropagation(); },
+      style: {
+        background: "#1a1a1a",
+        borderTopLeftRadius: 22, borderTopRightRadius: 22,
+        width: "100%", maxWidth: 520,
+        maxHeight: "85vh",
+        padding: "22px 22px 32px",
+        overflowY: "auto",
+        boxShadow: "0 -12px 50px rgba(0,0,0,0.6)",
+        animation: "modalIn 320ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+      },
+    },
+      h("div", {
+        style: { width: 38, height: 4, background: "rgba(255,255,255,0.18)", borderRadius: 2, margin: "0 auto 22px" },
+      }),
+      h("div", {
+        style: {
+          fontFamily: "'Lora',serif", fontSize: 24, fontWeight: 500,
+          color: C.text, letterSpacing: "-0.01em", marginBottom: 22,
+        },
+      }, "Settings"),
+      // Language
+      h("div", { style: { marginBottom: 22 } },
+        h("div", {
+          style: {
+            fontSize: 11, color: C.sub,
+            textTransform: "uppercase", letterSpacing: "0.08em",
+            fontWeight: 600, marginBottom: 10,
+          },
+        }, "Language"),
+        ToggleRow({
+          icon: "🇬🇧", label: "English",
+          active: currentLang === "en",
+          onSelect: function() { applyChange({ language: "en" }); },
+        }),
+        ToggleRow({
+          icon: "🇷🇺", label: "Русский",
+          active: currentLang === "ru",
+          onSelect: function() { applyChange({ language: "ru" }); },
+        })
+      ),
+      // Currency
+      h("div", { style: { marginBottom: 22 } },
+        h("div", {
+          style: {
+            fontSize: 11, color: C.sub,
+            textTransform: "uppercase", letterSpacing: "0.08em",
+            fontWeight: 600, marginBottom: 10,
+          },
+        }, "Currency"),
+        CURRENCIES.map(function(c) {
+          return h("div", { key: c.code },
+            ToggleRow({
+              icon: c.sym,
+              label: c.code + " · " + c.name,
+              active: currentCcy === c.code,
+              onSelect: function() { applyChange({ currency: c.code }); },
+            })
+          );
+        })
+      ),
+      err ? h("div", {
+        style: {
+          padding: "10px 12px", marginBottom: 12,
+          background: "rgba(228,86,86,0.12)",
+          border: "1px solid rgba(228,86,86,0.3)",
+          borderRadius: 8, fontSize: 12, color: C.red,
+        },
+      }, err) : null,
+      h("div", {
+        style: {
+          fontSize: 11, color: C.muted, marginBottom: 16,
+          lineHeight: 1.5,
+        },
+      },
+        "_Switching currency just changes the symbol — past amounts aren't re-converted. If you actually moved countries with money, adjust your balance in chat afterward._"
+      ),
+      h("button", {
+        onClick: props.onClose,
+        disabled: saving,
+        style: {
+          width: "100%", padding: "13px",
+          background: C.text, border: "none", borderRadius: 10,
+          color: "#0F0F0F", fontSize: 13, fontWeight: 600,
+          fontFamily: "'Inter',sans-serif",
+          cursor: saving ? "default" : "pointer",
+          opacity: saving ? 0.6 : 1,
+        },
+      }, saving ? "Saving…" : "Done")
     )
   );
 }
