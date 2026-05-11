@@ -326,4 +326,46 @@ function simulateSpend(state, amountCents) {
   };
 }
 
-module.exports = { compute, heroLine, heroLineWithInsight, heroInsight, simulateSpend, projectPaceImpact };
+// Simulate adding a NEW commitment (bill / set-aside / save-for) to the
+// state. Used by confirm-card rendering so the user sees the pace
+// impact INLINE before tapping Yes — making the afford-check
+// structurally part of every commitment decision.
+//
+// Reserve math: adding a bill with dueDate ≤ payday raises `obligated`
+// by amountCents, drops disposable by the same, drops pace by
+// amount/days. Cache invalidation on the clone is critical (Model B
+// frozen pace would otherwise survive on the projected state).
+function simulateAddBill(state, billParams) {
+  const cur = compute(state);
+  if (!cur.setup) return null;
+  if (!billParams || !Number.isFinite(billParams.amountCents) || billParams.amountCents <= 0) return null;
+  const next = JSON.parse(JSON.stringify(state));
+  if (!next.bills) next.bills = {};
+  // Inject the bill as if it existed. Use a transient key so we don't
+  // collide with real bills.
+  const transientKey = "__sim_" + m.billKey(billParams.name || "x");
+  next.bills[transientKey] = {
+    name: billParams.name || "Pending",
+    amountCents: billParams.amountCents,
+    dueDate: m.normalizeDate(billParams.dueDate) || cur.payday,
+    recurrence: billParams.recurrence || "once",
+    paidThisCycle: false,
+    createdAt: Date.now(),
+  };
+  // Invalidate frozen-pace cache on clone — projection requires fresh
+  // recompute. (Same critical pattern as simulateSpend.)
+  next.dailyPaceComputedDate = null;
+  next.dailyPaceCents = 0;
+  const projected = compute(next);
+  return {
+    current: cur,
+    projected,
+    delta: {
+      dailyPaceCents: projected.dailyPaceCents - cur.dailyPaceCents,
+      disposableCents: projected.disposableCents - cur.disposableCents,
+      stateChanged: cur.status !== projected.status,
+    },
+  };
+}
+
+module.exports = { compute, heroLine, heroLineWithInsight, heroInsight, simulateSpend, simulateAddBill, projectPaceImpact };

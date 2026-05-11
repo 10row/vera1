@@ -207,10 +207,47 @@ function describeIntent(intent, state) {
       return lang === "ru"
         ? "Поправить баланс → " + M(p.newBalanceCents)
         : "Set balance to " + M(p.newBalanceCents);
-    case "add_bill":
-      return lang === "ru"
-        ? "Добавить счёт *" + E(p.name) + "* — " + M(p.amountCents) + " · " + p.dueDate + " · " + p.recurrence
-        : "Add bill *" + E(p.name) + "* — " + M(p.amountCents) + " · " + p.dueDate + " · " + p.recurrence;
+    case "add_bill": {
+      // Unified commitment intent — labels adapt by recurrence:
+      //   once   → "Set aside" (saving-for / one-time future expense)
+      //   weekly/biweekly/monthly → "Add bill" (recurring obligation)
+      // Same engine data, surface label matches the user's mental model.
+      const isOnce = p.recurrence === "once" || !p.recurrence;
+      const ru = lang === "ru";
+      const verb = isOnce
+        ? (ru ? "Отложить" : "Set aside")
+        : (ru ? "Добавить счёт" : "Add bill");
+      const recurrenceTag = isOnce
+        ? ""
+        : " · " + p.recurrence;
+      // Pace impact line — compute by simulating the add and showing
+      // the daily-pace delta. THIS is the inline afford-check. User
+      // sees the cost-per-day before tapping Yes. Failsafe AAA.
+      let paceLine = "";
+      try {
+        const sim = require("./view").simulateAddBill(state, p);
+        if (sim && sim.delta && Number.isFinite(sim.delta.dailyPaceCents)) {
+          const dropCents = -sim.delta.dailyPaceCents; // positive number = how much pace drops
+          if (dropCents > 0) {
+            const dropFmt = m.toShort(dropCents, sym);
+            const projFmt = m.toShort(sim.projected.dailyPaceCents, sym);
+            paceLine = ru
+              ? "\n_Темп: −" + dropFmt + "/день → " + projFmt + "/день_"
+              : "\n_Pace: −" + dropFmt + "/day → " + projFmt + "/day_";
+            // Warn if projection puts user in tight or over state.
+            if (sim.projected.status === "tight") {
+              paceLine += ru ? " ⚠️ впритык" : " ⚠️ tight";
+            } else if (sim.projected.status === "over") {
+              paceLine = ru
+                ? "\n_⚠️ Это превысит твой бюджет — оставит дефицит_"
+                : "\n_⚠️ This would put you over — would leave a deficit_";
+            }
+          }
+        }
+      } catch { /* never block the confirm card on a math hiccup */ }
+      const head = verb + " *" + E(p.name) + "* — " + M(p.amountCents) + " · " + p.dueDate + recurrenceTag;
+      return head + paceLine;
+    }
     case "remove_bill":
       return lang === "ru"
         ? "Удалить счёт *" + E(p.name) + "*"

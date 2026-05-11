@@ -42,6 +42,88 @@ test("[view] simulateSpend reduces projected balance", () => {
   const sim = simulateSpend(s, 10000);
   assertEq(sim.projected.balanceCents, 490000);
 });
+// ── simulateAddBill — pace impact for proposed commitments (the unified
+// "set aside / save for / add bill" primitive). This drives the inline
+// pace-impact line on the add_bill confirm card. AAA invariant: the
+// projection must use a FRESH compute on the cloned state (cache
+// invalidation) so the projected pace reflects the new commitment.
+
+test("[view] simulateAddBill: pace drops by amount/days when adding a one-time set-aside", () => {
+  const { simulateAddBill } = require("../view");
+  const s = setup(500000);
+  // Setup with 30-day cycle (payday 30 days out per setup() helper).
+  const today = m.today("UTC");
+  const sim = simulateAddBill(s, {
+    name: "Friend",
+    amountCents: 23520, // €200 ≈ $235.20
+    dueDate: m.addDays(today, 7),
+    recurrence: "once",
+  });
+  assertTrue(!!sim, "sim returns a result");
+  assertTrue(sim.delta.dailyPaceCents < 0, "pace drops when commitment added");
+  // Drop should be amount / days = 23520 / 30 ≈ 784 cents
+  const expectedDrop = Math.floor(23520 / 30);
+  const actualDrop = -sim.delta.dailyPaceCents;
+  // Within 10 cents of exact (floor rounding).
+  assertTrue(Math.abs(actualDrop - expectedDrop) <= 10,
+    "pace drop ~$" + (expectedDrop/100).toFixed(2) + "/day, got $" + (actualDrop/100).toFixed(2));
+});
+
+test("[view] simulateAddBill: bill past payday is NOT obligated this cycle (no pace impact)", () => {
+  const { simulateAddBill } = require("../view");
+  const s = setup(500000);
+  const today = m.today("UTC");
+  const sim = simulateAddBill(s, {
+    name: "Future thing",
+    amountCents: 50000,
+    dueDate: m.addDays(today, 60), // way past 30-day payday
+    recurrence: "once",
+  });
+  assertTrue(!!sim);
+  // dueDate > payday → not in this cycle's obligation math.
+  assertEq(sim.delta.dailyPaceCents, 0, "no pace impact when bill is post-payday");
+});
+
+test("[view] simulateAddBill: status flips to 'tight' or 'over' when reservation too large", () => {
+  const { simulateAddBill } = require("../view");
+  const s = setup(100000); // small balance
+  const today = m.today("UTC");
+  const sim = simulateAddBill(s, {
+    name: "Big",
+    amountCents: 90000, // most of balance reserved
+    dueDate: m.addDays(today, 10),
+    recurrence: "once",
+  });
+  assertTrue(!!sim);
+  assertTrue(sim.projected.status !== "calm",
+    "status should not be 'calm' after reserving 90% of balance; got " + sim.projected.status);
+  assertTrue(sim.delta.stateChanged, "delta.stateChanged should signal");
+});
+
+test("[view] simulateAddBill: doesn't mutate source state", () => {
+  const { simulateAddBill } = require("../view");
+  const s = setup(500000);
+  const before = JSON.stringify(s);
+  simulateAddBill(s, {
+    name: "x", amountCents: 5000, dueDate: m.addDays(m.today("UTC"), 7), recurrence: "once",
+  });
+  assertEq(JSON.stringify(s), before, "simulate must not mutate source");
+});
+
+test("[view] simulateAddBill: cache invalidation (fresh pace recompute on clone)", () => {
+  const { simulateAddBill } = require("../view");
+  const s = setup(500000);
+  // Force a stale cached pace value on the source state (impossible
+  // shape, just for testing cache discipline).
+  s.dailyPaceCents = 99999;
+  s.dailyPaceComputedDate = m.today("UTC");
+  const sim = simulateAddBill(s, {
+    name: "test", amountCents: 10000, dueDate: m.addDays(m.today("UTC"), 7), recurrence: "once",
+  });
+  assertTrue(sim.projected.dailyPaceCents !== 99999,
+    "projection ignores the stale cache (invalidates on clone)");
+});
+
 test("[view] simulateSpend doesn't mutate source state", () => {
   const s = setup(500000);
   const before = JSON.stringify(s);

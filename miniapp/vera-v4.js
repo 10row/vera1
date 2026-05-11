@@ -1089,7 +1089,20 @@ function BillCard(props) {
         ),
         h("div", { style: { fontSize: 11, color: col, marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" } },
           h("span", null, label),
-          e.recurrence && e.recurrence !== "once" ? h("span", { style: { color: C.muted } }, "· " + e.recurrence) : null,
+          // Commitment-type chip — visually distinguish recurring obligations
+          // from one-time set-asides. Same underlying primitive (add_bill),
+          // different surface label to match the user's mental model.
+          //   recurrence !== "once" → "MONTHLY" / "WEEKLY" / "BIWEEKLY"
+          //   recurrence === "once" → "ONE-TIME" (set aside)
+          e.recurrence && e.recurrence !== "once"
+            ? h("span", { style: { color: C.muted } }, "· " + e.recurrence)
+            : h("span", {
+                style: {
+                  fontSize: 9, color: C.muted, padding: "2px 7px", borderRadius: 999,
+                  background: C.cardHi, fontWeight: 500, textTransform: "uppercase",
+                  letterSpacing: "0.04em", whiteSpace: "nowrap",
+                },
+              }, "one-time"),
           // "next cycle" chip — quiet pill marking bills due AFTER payday.
           // The next paycheck handles them, so they're NOT in this cycle's
           // engine reservation. Helps user understand why the daily pace
