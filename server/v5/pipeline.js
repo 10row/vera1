@@ -149,6 +149,46 @@ const ACTION_VERBS = {
 // Tight verb patterns above keep false positives low.
 //
 // ask_simulate stays exempt — that mode is read-only by contract.
+// scrubFabricatedNumbers — defensive failsafe against AI hallucinated
+// projection numbers in ask_simulate / answer modes. The AI's message
+// must not contain $X/day, $X left, drop to $X, etc. — the bot computes
+// real numbers via simulate() and renders them as a separate line.
+//
+// Without this, the user sees two contradicting numbers (AI's fiction
+// + bot's truth) in the same reply. Trust-killer for a money tool.
+//
+// Pattern detection is INTENTIONALLY broad — false-positive cost is a
+// generic message ("Yes — manageable.") which is harmless; false-
+// negative cost is shipped-fiction next to truth, which is the bug.
+//
+// `mode` arg gates: only applied to ask_simulate today. Future answer
+// modes can opt in here.
+const FABRICATED_NUMBER_PATTERNS = [
+  /\$\s*\d[\d,]*(?:\.\d+)?\s*\/\s*day/i,        // "$X/day" or "$X.XX / day"
+  /\$\s*\d[\d,]*(?:\.\d+)?\s+(?:less|more|left|available|saved|spare)\b/i,
+  /\b(?:drop|fall|rise|jump|climb)\s+to\s+\$\s*\d/i,
+  /\bafter\s+(?:that)?[^.]{0,30}\$\s*\d/i,
+  /\bfor\s+\d+\s+days?\b/i,
+  // Cyrillic variants
+  /\$?\s*\d[\d,]*(?:\.\d+)?\s*\/\s*день/i,
+  /(?:упадёт|упадет|снизится|вырастет)\s+до\s+\$/i,
+  // Bare "$X" left over from the patterns above can still slip through;
+  // the patterns above catch the most common shapes. We don't strip
+  // single $X mentions (those can be the user's own quoted amount).
+];
+function scrubFabricatedNumbers(message, mode) {
+  if (!message || typeof message !== "string") return message;
+  if (mode !== "ask_simulate") return message; // only mode that's structurally guaranteed to fabricate
+  const hasFiction = FABRICATED_NUMBER_PATTERNS.some(p => p.test(message));
+  if (!hasFiction) return message;
+  // Drop the entire message — bot's computed line will carry the real
+  // answer. Empty string causes the bot's render to skip the AI text
+  // and lead with the computed answer (the right thing).
+  // Diagnostic: caller can pick up the original via the breadcrumb if
+  // needed (not implemented yet — keep simple).
+  return "";
+}
+
 function detectSilentLie(proposal, lang) {
   if (!proposal || !proposal.message) return null;
   if (proposal.mode === "ask_simulate") return null;
@@ -309,9 +349,17 @@ async function processMessage(state, userMessage, history, options) {
 
   if (proposal.mode === "ask_simulate") {
     const sim = simulateSpend(state, proposal.amountCents);
+    // FAILSAFE: scrub fabricated projection numbers from AI's message.
+    // The AI literally cannot know the projection — it runs AFTER the
+    // AI returns. Anything like "$X/day" / "drop to $Y" / "$Z left" in
+    // the message is hallucinated. Bot renders the REAL computed line
+    // below. Without this scrubber, user sees two contradicting numbers.
+    // (Real bug from screenshot: "$140.54/day" AI fiction + "$131.69/day"
+    // bot truth in the same reply. Trust-killer.)
+    const cleanedMessage = scrubFabricatedNumbers(proposal.message, "ask_simulate");
     return {
       kind: "decision",
-      message: proposal.message,
+      message: cleanedMessage,
       amountCents: proposal.amountCents,
       simulate: sim,
     };

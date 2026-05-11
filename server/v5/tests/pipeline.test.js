@@ -588,3 +588,99 @@ test("[pipeline] resolves 'N days ago' deterministically", async () => {
     });
   assertEq(r.intent.params.date, m.addDays(m.today("UTC"), -3));
 });
+
+// ── FABRICATED-NUMBER SCRUBBER (the trust-killer fix) ──
+// User reported a screenshot: bot replied to "if I spend 200 how much
+// is my daily rate?" with TWO conflicting numbers ($140.54 AI fiction
+// + $131.69 bot truth) in the same reply. Root cause: AI prompt
+// examples showed the AI writing fabricated projection numbers; the
+// orchestrator then appended its own computed line. Two numbers, only
+// one true. Tests below lock in the fix.
+test("[pipeline] ask_simulate: strips AI's fabricated '$X/day' from message", async () => {
+  const s = fullySetUp(500000);
+  const r = await processMessage(s, "if i spend 200 how much is my daily rate?", [], {
+    _aiCall: stub({
+      mode: "ask_simulate",
+      message: "You'd drop to $140.54/day after, still calm.",
+      amountCents: 20000,
+    }),
+  });
+  assertEq(r.kind, "decision");
+  // The fabricated-number message MUST be stripped — bot's computed
+  // simulate line is the real answer.
+  assertEq(r.message, "", "AI's fictional message stripped (bot's computed line carries the truth)");
+  assertTrue(!!r.simulate, "real simulate result attached");
+});
+
+test("[pipeline] ask_simulate: strips '$X less/day' phrasing", async () => {
+  const s = fullySetUp(500000);
+  const r = await processMessage(s, "can i afford 200 jacket?", [], {
+    _aiCall: stub({
+      mode: "ask_simulate",
+      message: "Yes — $20 less/day after, still calm.",
+      amountCents: 20000,
+    }),
+  });
+  assertEq(r.message, "", "fabricated '$20 less/day' triggers strip");
+});
+
+test("[pipeline] ask_simulate: strips 'drop to $X' phrasing", async () => {
+  const s = fullySetUp(500000);
+  const r = await processMessage(s, "afford 100?", [], {
+    _aiCall: stub({
+      mode: "ask_simulate",
+      message: "Sure — you'd drop to $150/day after.",
+      amountCents: 10000,
+    }),
+  });
+  assertEq(r.message, "");
+});
+
+test("[pipeline] ask_simulate: PASSES THROUGH clean messages without numbers", async () => {
+  const s = fullySetUp(500000);
+  const r = await processMessage(s, "can i afford 200?", [], {
+    _aiCall: stub({
+      mode: "ask_simulate",
+      message: "Yes — manageable.",
+      amountCents: 20000,
+    }),
+  });
+  assertEq(r.message, "Yes — manageable.", "clean message preserved verbatim");
+});
+
+test("[pipeline] ask_simulate: clean Russian message preserved", async () => {
+  const s = fullySetUp(500000);
+  const r = await processMessage(s, "могу позволить 200?", [], {
+    _aiCall: stub({
+      mode: "ask_simulate",
+      message: "Да — норм.",
+      amountCents: 20000,
+    }),
+  });
+  assertEq(r.message, "Да — норм.");
+});
+
+test("[pipeline] ask_simulate: strips Russian 'упадёт до $X/день' phrasing", async () => {
+  const s = fullySetUp(500000);
+  const r = await processMessage(s, "потяну 200?", [], {
+    _aiCall: stub({
+      mode: "ask_simulate",
+      message: "Да — упадёт до $124/день, всё норм.",
+      amountCents: 20000,
+    }),
+  });
+  assertEq(r.message, "", "Russian fabricated number stripped");
+});
+
+test("[pipeline] do mode: AI numbers in confirm message NOT stripped (user-spoken amount is legitimate)", async () => {
+  const s = fullySetUp(500000);
+  const r = await processMessage(s, "spent 30 coffee", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Logging $30 coffee.",
+      intent: { kind: "record_spend", params: { amountCents: 3000, note: "coffee" } },
+    }),
+  });
+  // do mode is NOT scrubbed — AI echoing user's spoken amount is fine.
+  assertEq(r.message, "Logging $30 coffee.");
+});
