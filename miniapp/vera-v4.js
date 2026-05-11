@@ -286,121 +286,132 @@ function relativeDay(dateStr, today) {
 // No inputs, no buttons, no decisions. The morning glance.
 // Decision support ("can I afford X?") lives in chat — the right place
 // for conversation. The hero stays calm.
+// ── HERO ─────────────────────────────────────────────────────
+// AAA polish: lead with BALANCE (the bank number — what the user
+// actually has), then derive the rest through clear adjacency.
+//
+// Layout principles:
+//   1. Status pill ONLY when tight or over (calm = default, no chip).
+//   2. Big balance number, serif, with "in account" label below.
+//   3. Sub-line carries pace + days. If bills exist, prepends
+//      "$X available" so the relationship balance → reservations →
+//      available is visible without explanation.
+//   4. A small "Today: $X of $Y" chip when user has spent today —
+//      replaces the variance + pace-impact chips (which were too
+//      noisy).
+//   5. Over-state: deficit becomes the headline (red), balance + days
+//      move to the sub-line. Different shape because the question
+//      "am I over?" dominates.
+//
+// What this REMOVES from the previous hero:
+//   - "free today" / "over for this period" labels (didn't add info)
+//   - Variance chip ("$X under/over today" — replaced by today-chip)
+//   - Pace-impact line ("$X/day less rest of cycle" — too speculative)
+//
+// Less noise, more clarity. The user complaint was bank-balance
+// invisibility; the fix is leading with it.
 function Hero(props) {
   var v = props.view;
   var col = colorForState(v.state);
 
-  var pill = h("div", {
+  // Status pill — only when not calm. Calm is the default and doesn't
+  // need calling out. Reducing noise is the polish.
+  var pill = (v.state === "calm") ? null : h("div", {
     style: {
       display: "inline-flex", alignItems: "center", gap: 6,
       background: softColorForState(v.state),
       color: col, fontSize: 12, fontWeight: 600,
       padding: "5px 12px", borderRadius: 999,
-      letterSpacing: "0.02em", marginBottom: 16,
+      letterSpacing: "0.02em", marginBottom: 14,
     },
   },
     h("span", { style: { width: 6, height: 6, borderRadius: "50%", background: col } }),
-    v.state === "over" ? t("status.over") : v.state === "tight" ? t("status.tight") : t("status.calm")
+    v.state === "over" ? t("status.over") : t("status.tight")
   );
 
-  // Sub-line shows three quick-reference facts:
-  //   {available this cycle} · {$/day pace} · {days to payday}
-  //
-  // We feature DISPOSABLE (= balance − bills set aside), not raw
-  // account balance. Reasoning: balance is a banking-app number; what
-  // the user actually wants to know is "what's mine to spend this
-  // cycle?" — that's disposable. Bills are obligations already carved
-  // out by the engine; showing balance forces the user to do the
-  // subtraction in their head. Total balance still lives ON the bills
-  // section subtitle (where bill math reconciles).
-  var availShort = v.disposableShort || v.disposableFormatted || "";
-  var paceShort = v.dailyPaceShort || v.dailyPaceFormatted || "";
-
-  var heroNumber, heroLabel, subContext;
+  // OVER STATE — surface the deficit, demote balance to the sub-line.
+  // The user's question in this state is "how bad?", not "how much
+  // do I have?"
   if (v.state === "over") {
-    heroNumber = v.deficitFormatted;
-    heroLabel = t("miniapp.hero.overForPeriod");
-    subContext = t("miniapp.hero.subContextOver", { available: availShort, pace: paceShort });
-  } else {
-    heroNumber = v.todayRemainingFormatted;
-    heroLabel = t("miniapp.hero.freeToday");
-    var key = (v.daysToPayday === 1) ? "miniapp.hero.subContextSingleDay" : "miniapp.hero.subContext";
-    subContext = t(key, { available: availShort, pace: paceShort, days: v.daysToPayday });
+    var overSub = (v.daysToPayday === 1)
+      ? t("miniapp.hero.overSubBillsSingleDay", { balance: v.balanceShort || v.balanceFormatted })
+      : t("miniapp.hero.overSubBills", { balance: v.balanceShort || v.balanceFormatted, days: v.daysToPayday });
+    return h("div", { style: { padding: "32px 20px 22px", textAlign: "center" } },
+      pill,
+      h("div", {
+        style: {
+          fontFamily: "'Lora',serif", fontSize: 60, fontWeight: 500,
+          color: col, lineHeight: 1.0, letterSpacing: "-0.02em",
+          transition: "color 0.4s ease",
+        },
+      }, t("miniapp.hero.overDeficit", { amount: v.deficitFormatted })),
+      h("div", { style: { fontSize: 12, color: C.muted, marginTop: 12 } }, overSub)
+    );
   }
 
-  // Variance chip — informational ("today vs pace"), passive.
-  // Critical: this does NOT change the headline pace (pace stays frozen
-  // per Model B). It just acknowledges today's running delta so the user
-  // FEELS the win/cost without the goalpost moving.
-  // Hidden when there's no signal: no pace (over state), no spend yet
-  // today, or variance is exactly 0 (rare; not worth the row).
-  var varianceCents = v.varianceCents || 0;
+  // CALM / TIGHT STATE — balance is headline.
+  var balanceText = v.balanceFormatted || "";
+  var paceShort = v.dailyPaceShort || v.dailyPaceFormatted || "";
+  var availShort = v.disposableShort || v.disposableFormatted || "";
+  var hasBills = (v.obligatedCents || 0) > 0;
+
+  // Sub-line: derive from state.
+  // With bills:  "$4,800 available · $128/day · 12d"
+  // Without:     "$128/day · 12d to payday"
+  var subContext;
+  if (hasBills) {
+    var bKey = (v.daysToPayday === 1) ? "miniapp.hero.subWithBillsSingleDay" : "miniapp.hero.subWithBills";
+    subContext = t(bKey, { available: availShort, pace: paceShort, days: v.daysToPayday });
+  } else {
+    var nKey = (v.daysToPayday === 1) ? "miniapp.hero.subNoBillsSingleDay" : "miniapp.hero.subNoBills";
+    subContext = t(nKey, { pace: paceShort, days: v.daysToPayday });
+  }
+
+  // Today usage chip — the single most useful "in the moment" signal.
+  // Replaces the previous variance + pace-impact pair (too noisy).
+  // Color: green if under pace, amber if over. Hidden when no spending
+  // today (calm baseline = no chip).
   var todaySpent = v.todaySpentCents || 0;
   var paceCents = v.dailyPaceCents || 0;
-  var showVariance = paceCents > 0 && todaySpent > 0 && varianceCents !== 0;
-  var varianceChip = null;
-  if (showVariance) {
-    var isUnder = varianceCents > 0;
-    var chipColor = isUnder ? C.green : C.amber;
-    var chipBg = isUnder ? C.greenSoft : C.amberSoft;
-    var chipText = isUnder
-      ? t("miniapp.hero.under", { amount: v.varianceShort })
-      : t("miniapp.hero.over", { amount: v.varianceShort });
-    varianceChip = h("div", {
+  var showToday = todaySpent > 0 && paceCents > 0;
+  var todayChip = null;
+  if (showToday) {
+    var overPace = todaySpent > paceCents;
+    var chipColor = overPace ? C.amber : C.green;
+    var chipBg = overPace ? C.amberSoft : C.greenSoft;
+    todayChip = h("div", {
       style: {
         display: "inline-flex", alignItems: "center", gap: 6,
         background: chipBg, color: chipColor,
         fontSize: 11, fontWeight: 600,
         padding: "5px 11px", borderRadius: 999,
-        marginTop: 12, letterSpacing: "0.02em",
+        marginTop: 14, letterSpacing: "0.02em",
       },
     },
       h("span", { style: { width: 5, height: 5, borderRadius: "50%", background: chipColor } }),
-      chipText
+      t("miniapp.hero.todayUsage", {
+        spent: v.todaySpentFormatted || "",
+        pace: v.dailyPaceFormatted || "",
+      })
     );
-  }
-
-  // Pace-impact line — "Option A" from the audit discussion.
-  //
-  // Today's overspend doesn't vanish; it's redistributed across the
-  // remaining days of the cycle (tomorrow's pace recomputes at day
-  // rollover). Without surfacing this, the user has no signal that
-  // today's variance has consequences. With it, they see the cause-
-  // effect chain in one glance.
-  //
-  // Same color family as the variance chip but lighter weight so the
-  // chip stays the headline. Hidden alongside the chip when there's
-  // no signal (no spend / no pace), and ALSO hidden when the per-day
-  // delta is 0 (e.g. payday is tomorrow → no projection possible).
-  var paceDelta = v.paceDeltaCents || 0;
-  var showPaceImpact = showVariance && paceDelta !== 0;
-  var paceImpactLine = null;
-  if (showPaceImpact) {
-    var deltaShort = v.paceDeltaShort || "";
-    var deltaIsUp = paceDelta > 0; // tomorrow's pace HIGHER → user under-spent
-    var impactColor = deltaIsUp ? C.green : C.amber;
-    var impactKey = deltaIsUp ? "miniapp.hero.tomorrowMore" : "miniapp.hero.tomorrowLess";
-    paceImpactLine = h("div", {
-      style: {
-        fontSize: 10, color: impactColor, marginTop: 6,
-        letterSpacing: "0.02em", opacity: 0.9,
-      },
-    }, t(impactKey, { delta: deltaShort }));
   }
 
   return h("div", { style: { padding: "32px 20px 22px", textAlign: "center" } },
     pill,
+    // BIG: balance
     h("div", {
       style: {
         fontFamily: "'Lora',serif", fontSize: 60, fontWeight: 500,
         color: col, lineHeight: 1.0, letterSpacing: "-0.02em",
         transition: "color 0.4s ease",
       },
-    }, heroNumber),
-    h("div", { style: { fontSize: 13, color: C.sub, marginTop: 10, letterSpacing: "0.02em" } }, heroLabel),
+    }, balanceText),
+    // Label
+    h("div", { style: { fontSize: 13, color: C.sub, marginTop: 10, letterSpacing: "0.02em" } },
+      t("miniapp.hero.inAccount")),
+    // Sub-line (available + pace + days)
     h("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, subContext),
-    varianceChip,
-    paceImpactLine
+    todayChip
   );
 }
 
@@ -1531,7 +1542,6 @@ function Dashboard(props) {
       view: v, txs: txs, heatmap: heatmap, today: today,
       bills: bills, nameMap: nameMap, sym: sym, sid: props.sid,
       onViewUpdate: props.onViewUpdate, dateMinusN: dateMinusN,
-      onOpenInput: props.onOpenInput,
     });
   } else if (tab === "pulse") {
     content = h(PulseScreen, {
@@ -1541,7 +1551,6 @@ function Dashboard(props) {
     content = h(BillsScreen, {
       view: v, bills: bills, budgets: budgets, goals: goals,
       sym: sym, sid: props.sid, onViewUpdate: props.onViewUpdate,
-      onOpenInput: props.onOpenInput,
     });
   }
 
@@ -1560,57 +1569,6 @@ function Dashboard(props) {
 // at upcoming bills (if any) + recent activity. NO long history feed
 // (that's accessible via "View all" → modal). Primary info above
 // fold; scrolling reveals detail.
-// ── ACTION CHIPS ────────────────────────────────────────────
-// Discoverability without tutorial. A row of pill-shaped chips below
-// the hero — each opens the input modal pre-seeded with a starter
-// phrase. Users learn what the bot can do by SEEING the chips, not
-// from reading a help screen.
-//
-// Tap a chip → modal opens with the phrase already typed → user
-// completes the rest → submit. ONE chip-tap, TWO chars typed for a
-// log spend. The bot's capability surface is the UI.
-function ActionChips(props) {
-  var onOpenInput = props.onOpenInput;
-  if (!onOpenInput) return null;
-  // Each chip: visible label, starter text seeded into the modal.
-  // Starter text ends with a space so the cursor lands ready-to-type.
-  var chips = [
-    { label: "+ Log spend",     prefill: "spent " },
-    { label: "+ Reserve",       prefill: "need to reserve " },
-    { label: "+ Income",        prefill: "got paid " },
-    { label: "Can I afford…?",  prefill: "can i afford " },
-  ];
-  return h("div", {
-    style: {
-      display: "flex", gap: 8, flexWrap: "wrap",
-      padding: "0 16px 4px",
-      marginTop: -6,
-    },
-  },
-    chips.map(function(c) {
-      return h("div", {
-        key: c.label,
-        onClick: function() { tapHaptic && tapHaptic(); onOpenInput(c.prefill); },
-        style: {
-          padding: "8px 14px",
-          background: C.card,
-          border: "1px solid " + C.border,
-          borderRadius: 999,
-          fontSize: 12, color: C.text,
-          cursor: "pointer", userSelect: "none",
-          whiteSpace: "nowrap",
-          transition: "transform 120ms ease, background 180ms ease",
-        },
-        onMouseDown: function(e) { e.currentTarget.style.transform = "scale(0.96)"; },
-        onMouseUp: function(e) { e.currentTarget.style.transform = "scale(1)"; },
-        onMouseLeave: function(e) { e.currentTarget.style.transform = "scale(1)"; },
-        onTouchStart: function(e) { e.currentTarget.style.transform = "scale(0.96)"; },
-        onTouchEnd: function(e) { e.currentTarget.style.transform = "scale(1)"; },
-      }, c.label);
-    })
-  );
-}
-
 function TodayScreen(props) {
   var v = props.view, txs = props.txs, heatmap = props.heatmap, today = props.today;
   var bills = props.bills || [];
@@ -1626,9 +1584,6 @@ function TodayScreen(props) {
 
   return h("div", null,
     h(Hero, { view: v, sid: sid }),
-    // Action chips — the capability discovery surface. No tutorial
-    // needed: the bot tells you what's possible by showing buttons.
-    h(ActionChips, { onOpenInput: props.onOpenInput }),
     h(FirstTimeCard, null),
     h(TodayStrip, { view: v, txs: txs, today: today, nameMap: nameMap }),
     h(Heatmap, {
@@ -2081,7 +2036,6 @@ function App() {
       setData({ view: newView, txs: data.txs, heatmap: data.heatmap });
       loadView();
     },
-    onOpenInput: openInputWith,
   });
 
   // FAB visible only when fully set up + dashboard rendered.
@@ -2100,24 +2054,11 @@ function App() {
   var prefillState = useState("");
   var prefill = prefillState[0], setPrefill = prefillState[1];
 
-  function onFabPick(kind) {
-    if (kind === "text") {
-      setPrefill("");
-      setInputMode("text");
-    } else {
-      // Voice/photo — close Mini App to land in chat for now.
-      try {
-        if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.close === "function") {
-          window.Telegram.WebApp.close();
-        }
-      } catch {}
-    }
-  }
-
   function openInputWith(text) {
     setPrefill(text || "");
     setInputMode("text");
   }
+  function onFabOpen() { openInputWith(""); }
 
   return h("div", {
     style: {
@@ -2126,7 +2067,7 @@ function App() {
     },
   },
     content,
-    showFab ? h(InputFAB, { onPick: onFabPick }) : null,
+    showFab ? h(InputFAB, { onOpen: onFabOpen }) : null,
     inputMode === "text" ? h(InputModal, {
       sid: sid.current,
       initialText: prefill,
@@ -2154,178 +2095,54 @@ function App() {
 // Tap-vs-drag: detected via threshold (6px movement = drag, else tap).
 // Tap opens InputModal (which sends text directly to bot, no chat
 // hop needed). Drag repositions.
+// ── INPUT FAB ──────────────────────────────────────────────
+// Single-action FAB. Tap → opens the universal input modal.
+// No sub-buttons (voice/photo/text are inline icons INSIDE the
+// modal). One entry point, one path. Polish = fewer affordances.
+//
+// Position: fixed bottom-right above the tab bar. No drag, no
+// repositioning — every screen has the same hit zone. Predictable
+// is calmer than configurable.
 function InputFAB(props) {
-  var onPick = props.onPick || function() {};
-  // Position state — bottom-right by default. Persisted to localStorage.
-  // Account for tab bar (~78px) when computing default Y.
-  var initial = (function() {
-    try {
-      var raw = localStorage.getItem("fabPos");
-      if (raw) {
-        var p = JSON.parse(raw);
-        if (typeof p.x === "number" && typeof p.y === "number") return p;
-      }
-    } catch {}
-    return { x: window.innerWidth - 76, y: window.innerHeight - 170 };
-  })();
-  var posState = useState(initial);
-  var pos = posState[0], setPos = posState[1];
-  var openState = useState(false);
-  var open = openState[0], setOpen = openState[1];
+  var onOpen = props.onOpen || function() {};
   var pressedState = useState(false);
   var pressed = pressedState[0], setPressed = pressedState[1];
-  var draggingState = useState(false);
-  var dragging = draggingState[0], setDragging = draggingState[1];
-
-  var dragRef = useRef({ active: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0, moved: false });
-
-  // Persist when position stabilizes.
-  useEffect(function() {
-    try { localStorage.setItem("fabPos", JSON.stringify(pos)); } catch {}
-  }, [pos.x, pos.y]);
-
-  // Clamp to visible viewport with sensible insets. NO edge snap —
-  // drop where released (user feels in control). Just protect from
-  // going off-screen.
-  function clampPos(x, y) {
-    var fabSize = 60;
-    var padX = 8;
-    var padTop = 16;
-    var padBottom = 88; // above tab bar + a touch of breathing room
-    var maxX = window.innerWidth - fabSize - padX;
-    var maxY = window.innerHeight - fabSize - padBottom;
-    var clampedX = x < padX ? padX : (x > maxX ? maxX : x);
-    var clampedY = y < padTop ? padTop : (y > maxY ? maxY : y);
-    return { x: clampedX, y: clampedY };
-  }
-
-  function onDragStart(e) {
-    var touch = e.touches ? e.touches[0] : e;
-    dragRef.current = {
-      active: true,
-      startX: touch.clientX, startY: touch.clientY,
-      offsetX: touch.clientX - pos.x, offsetY: touch.clientY - pos.y,
-      moved: false,
-    };
-    setPressed(true);
-    if (open) setOpen(false);
-  }
-
-  function onDragMove(e) {
-    if (!dragRef.current.active) return;
-    var touch = e.touches ? e.touches[0] : e;
-    var dx = Math.abs(touch.clientX - dragRef.current.startX);
-    var dy = Math.abs(touch.clientY - dragRef.current.startY);
-    if (dx + dy > 6) {
-      dragRef.current.moved = true;
-      setDragging(true);
-      setPressed(false);
-    }
-    if (dragRef.current.moved) {
-      var rawX = touch.clientX - dragRef.current.offsetX;
-      var rawY = touch.clientY - dragRef.current.offsetY;
-      setPos(clampPos(rawX, rawY));
-      e.preventDefault();
-    }
-  }
-
-  function onDragEnd() {
-    var wasMoved = dragRef.current.moved;
-    dragRef.current.active = false;
-    setPressed(false);
-    if (wasMoved) {
-      // Drop where released. No edge snap. Just clamp to viewport.
-      setPos(function(p) { return clampPos(p.x, p.y); });
-      setTimeout(function() { setDragging(false); }, 180);
-    } else {
-      setDragging(false);
-      tapHaptic && tapHaptic();
-      setOpen(function(v) { return !v; });
-    }
-  }
-
-  function pickInput(kind) {
-    tapHaptic && tapHaptic();
-    setOpen(false);
-    onPick(kind);
-  }
 
   var fabSize = 60;
-  // Sub-buttons line up vertically above the FAB, anchored on the
-  // FAB's center. Each sub has a subtle tint hint of its role.
-  var subs = [
-    { icon: "🎤", label: "Voice", kind: "voice", tint: "rgba(79,184,136,0.18)" },
-    { icon: "📷", label: "Photo", kind: "photo", tint: "rgba(240,160,80,0.18)" },
-    { icon: "✍️", label: "Type",  kind: "text",  tint: "rgba(255,255,255,0.06)" },
-  ];
-
-  // FAB visual — soft cream gradient + green-tinted shadow.
   var fabBg = "linear-gradient(145deg, #FAF7F2 0%, #EFEAE2 100%)";
-  var fabShadow = open
-    ? "0 12px 32px rgba(79,184,136,0.35), 0 4px 12px rgba(0,0,0,0.35)"
-    : "0 8px 22px rgba(79,184,136,0.22), 0 3px 10px rgba(0,0,0,0.4)";
-  var fabTransform = pressed ? "scale(0.94)" : (open ? "rotate(-15deg) scale(1.05)" : "rotate(0deg) scale(1)");
+  var fabShadow = "0 8px 22px rgba(79,184,136,0.22), 0 3px 10px rgba(0,0,0,0.4)";
+  var fabTransform = pressed ? "scale(0.94)" : "scale(1)";
 
-  return h("div", null,
-    // Backdrop dimmer when open
-    open ? h("div", {
-      onClick: function() { setOpen(false); },
-      style: {
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
-        zIndex: 998,
-        animation: "fadeIn 200ms ease",
-      },
-    }) : null,
-    // Sub-buttons — vertically stacked above the FAB
-    open ? subs.map(function(s, i) {
-      var offset = (i + 1) * 70;
-      return h("div", {
-        key: s.kind,
-        onClick: function() { pickInput(s.kind); },
-        style: {
-          position: "fixed",
-          left: (pos.x + (fabSize - 56) / 2) + "px",
-          top: (pos.y - offset) + "px",
-          width: 56, height: 56, borderRadius: "50%",
-          background: "linear-gradient(145deg, " + s.tint + ", rgba(23,23,23,0.94))",
-          border: "1px solid rgba(255,255,255,0.08)",
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          fontSize: 20, color: C.text,
-          zIndex: 999, cursor: "pointer",
-          boxShadow: "0 6px 18px rgba(0,0,0,0.5)",
-          animation: "fabIn " + (220 + i * 50) + "ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-        },
-      },
-        h("span", { style: { lineHeight: 1 } }, s.icon),
-        h("span", { style: { fontSize: 8, color: C.muted, marginTop: 3, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 } }, s.label)
-      );
-    }) : null,
-    // Main FAB — "S" mark, Lora serif, premium polish
-    h("div", {
-      onMouseDown: onDragStart, onMouseMove: onDragMove, onMouseUp: onDragEnd, onMouseLeave: onDragEnd,
-      onTouchStart: onDragStart, onTouchMove: onDragMove, onTouchEnd: onDragEnd,
-      style: {
-        position: "fixed",
-        left: pos.x + "px", top: pos.y + "px",
-        width: fabSize, height: fabSize, borderRadius: "50%",
-        background: fabBg,
-        color: "#0F0F0F",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 30, fontFamily: "'Lora',serif", fontWeight: 500,
-        cursor: dragging ? "grabbing" : "pointer",
-        zIndex: 1000,
-        boxShadow: fabShadow,
-        userSelect: "none", touchAction: "none",
-        transition: dragging
-          ? "transform 80ms ease, box-shadow 200ms ease"
-          : "left 240ms cubic-bezier(0.34, 1.56, 0.64, 1), top 240ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 220ms ease",
-        transform: fabTransform,
-        letterSpacing: "-0.02em",
-      },
-    }, "S")
-  );
+  function handleTap() {
+    setPressed(true);
+    tapHaptic && tapHaptic();
+    setTimeout(function() { setPressed(false); onOpen(); }, 90);
+  }
+
+  return h("div", {
+    onMouseDown: function() { setPressed(true); },
+    onMouseUp: function() { setPressed(false); },
+    onMouseLeave: function() { setPressed(false); },
+    onClick: handleTap,
+    onTouchStart: function() { setPressed(true); },
+    onTouchEnd: function(e) { setPressed(false); e.preventDefault(); handleTap(); },
+    style: {
+      position: "fixed",
+      right: 16, bottom: 94,
+      width: fabSize, height: fabSize, borderRadius: "50%",
+      background: fabBg,
+      color: "#0F0F0F",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: 30, fontFamily: "'Lora',serif", fontWeight: 500,
+      cursor: "pointer",
+      zIndex: 1000,
+      boxShadow: fabShadow,
+      userSelect: "none", touchAction: "manipulation",
+      transition: "transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 220ms ease",
+      transform: fabTransform,
+      letterSpacing: "-0.02em",
+    },
+  }, "S");
 }
 
 // ── INPUT MODAL ──────────────────────────────────────────────
@@ -2353,6 +2170,18 @@ function InputModal(props) {
   var error = errorState[0], setError = errorState[1];
   var applyingState = useState(false);
   var applying = applyingState[0], setApplying = applyingState[1];
+  // Photo capture state — file input ref + reading flag for the spinner.
+  var fileInputRef = useRef(null);
+  var readingPhotoState = useState(false);
+  var readingPhoto = readingPhotoState[0], setReadingPhoto = readingPhotoState[1];
+  // Voice recognition state — Web Speech API where available.
+  var listeningState = useState(false);
+  var listening = listeningState[0], setListening = listeningState[1];
+  var recognitionRef = useRef(null);
+  // Feature-detect Web Speech API. If unavailable, hide the mic icon.
+  var SR = (typeof window !== "undefined") &&
+           (window.SpeechRecognition || window.webkitSpeechRecognition);
+  var voiceSupported = !!SR;
 
   // ── ROTATING PLACEHOLDER ─────────────────────────────────────
   // When the input is empty, the placeholder cycles through example
@@ -2401,6 +2230,80 @@ function InputModal(props) {
       .catch(function(e) { setError(e.message); })
       .then(function() { setLoading(false); });
   }
+
+  // ── PHOTO RECEIPT ─────────────────────────────────────────
+  // Pick or snap a receipt photo. Reads as base64 dataUrl, POSTs to
+  // /api/v5/parse-photo. Server vision-parses → returns the same
+  // result shape as text /parse, so the confirm card flow is shared.
+  function onPickPhoto(e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { setError("Pick an image."); return; }
+    if (file.size > 8 * 1024 * 1024) { setError("Photo too large (8MB max)."); return; }
+    setReadingPhoto(true); setError(""); setResult(null);
+    var reader = new FileReader();
+    reader.onload = function() {
+      var dataUrl = reader.result;
+      fetch(API_BASE + "/api/v5/parse-photo/" + sid, {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+        body: JSON.stringify({ dataUrl: dataUrl }),
+      })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, body: d }; }); })
+        .then(function(res) {
+          if (!res.ok) { setError((res.body && res.body.error) || "Couldn't read the photo."); return; }
+          setResult(res.body);
+        })
+        .catch(function(e2) { setError(e2.message); })
+        .then(function() {
+          setReadingPhoto(false);
+          // Clear the file input so picking the same file twice still triggers onChange.
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        });
+    };
+    reader.onerror = function() { setError("Couldn't read the file."); setReadingPhoto(false); };
+    reader.readAsDataURL(file);
+  }
+
+  // ── VOICE ─────────────────────────────────────────────────
+  // Web Speech API (when supported). Tap mic → start recognition →
+  // transcribed text fills the textarea. Tap again to stop. On
+  // unsupported devices the mic icon is hidden (voiceSupported=false).
+  function toggleVoice() {
+    if (!SR) return;
+    if (listening) {
+      try { recognitionRef.current && recognitionRef.current.stop(); } catch {}
+      setListening(false);
+      return;
+    }
+    var rec;
+    try { rec = new SR(); } catch (e) { setError("Voice not supported on this device."); return; }
+    rec.lang = (_activeLang === "ru" ? "ru-RU" : "en-US");
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.continuous = false;
+    var finalText = "";
+    rec.onresult = function(ev) {
+      var interim = "";
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var transcript = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) finalText += transcript;
+        else interim += transcript;
+      }
+      setInput((finalText + interim).trim());
+    };
+    rec.onerror = function() { setListening(false); };
+    rec.onend = function() { setListening(false); };
+    recognitionRef.current = rec;
+    try { rec.start(); setListening(true); }
+    catch (e) { setError("Couldn't start voice — try again."); }
+  }
+  // Cleanup recognition on unmount
+  useEffect(function() {
+    return function() {
+      try { recognitionRef.current && recognitionRef.current.stop(); } catch {}
+    };
+  }, []);
 
   function applyIntent() {
     if (!result || !result.intent || applying) return;
@@ -2499,6 +2402,33 @@ function InputModal(props) {
       }, "Try again")
     );
   } else {
+    // Icon button helper — uniform style, tap haptic, opacity-on-disabled.
+    function iconBtn(opts) {
+      var disabled = !!opts.disabled;
+      return h("button", {
+        type: "button",
+        onClick: opts.onClick,
+        disabled: disabled,
+        "aria-label": opts.label,
+        title: opts.label,
+        style: {
+          width: 40, height: 40,
+          background: opts.active ? C.greenSoft : C.card,
+          border: "1px solid " + (opts.active ? C.green : C.border),
+          color: opts.active ? C.green : C.text,
+          borderRadius: 10,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 17,
+          cursor: disabled ? "default" : "pointer",
+          opacity: disabled ? 0.4 : 1,
+          fontFamily: "'Inter',sans-serif",
+          transition: "background 160ms ease, border-color 160ms ease, opacity 160ms ease",
+          padding: 0,
+          userSelect: "none",
+        },
+      }, opts.icon);
+    }
+
     body = h("div", null,
       h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 12 } }, "Log a spend"),
       h("textarea", {
@@ -2519,21 +2449,54 @@ function InputModal(props) {
           marginBottom: 12,
         },
       }),
-      h("div", { style: { fontSize: 10, color: C.muted, marginBottom: 16, letterSpacing: "0.02em" } },
-        "Type a spend, an income, or ask a question. ⌘+Enter to submit."
+      // Action row: 📷 + 🎤 on left, Send on right. iMessage compose pattern.
+      h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
+        // Hidden file input — triggered by the camera button. `capture`
+        // hints mobile to default to the back camera for receipts.
+        h("input", {
+          ref: fileInputRef,
+          type: "file",
+          accept: "image/*",
+          capture: "environment",
+          onChange: onPickPhoto,
+          style: { display: "none" },
+        }),
+        iconBtn({
+          icon: readingPhoto ? "…" : "📷",
+          label: "Receipt photo",
+          disabled: readingPhoto || loading,
+          onClick: function() {
+            if (fileInputRef.current) fileInputRef.current.click();
+          },
+        }),
+        voiceSupported ? iconBtn({
+          icon: listening ? "■" : "🎤",
+          label: listening ? "Stop voice" : "Voice",
+          disabled: loading || readingPhoto,
+          active: listening,
+          onClick: toggleVoice,
+        }) : null,
+        h("div", { style: { flex: 1 } }), // spacer
+        h("button", {
+          onClick: submit,
+          disabled: !input.trim() || loading || readingPhoto,
+          style: {
+            padding: "10px 18px", background: C.text, border: "none",
+            borderRadius: 10, color: "#0F0F0F", fontSize: 13, fontWeight: 600,
+            fontFamily: "'Inter',sans-serif",
+            cursor: (!input.trim() || loading || readingPhoto) ? "default" : "pointer",
+            opacity: (!input.trim() || loading || readingPhoto) ? 0.45 : 1,
+            transition: "opacity 180ms ease",
+          },
+        }, loading ? "Thinking…" : readingPhoto ? "Reading…" : "Send")
       ),
-      h("button", {
-        onClick: submit,
-        disabled: !input.trim() || loading,
-        style: {
-          width: "100%", padding: "13px", background: C.text, border: "none",
-          borderRadius: 10, color: "#0F0F0F", fontSize: 13, fontWeight: 600,
-          fontFamily: "'Inter',sans-serif",
-          cursor: !input.trim() || loading ? "default" : "pointer",
-          opacity: !input.trim() || loading ? 0.45 : 1,
-          transition: "opacity 180ms ease",
-        },
-      }, loading ? "Thinking…" : "Send")
+      h("div", { style: { fontSize: 10, color: C.muted, marginTop: 10, letterSpacing: "0.02em" } },
+        listening
+          ? "Listening… tap ■ to stop"
+          : readingPhoto
+            ? "Reading your receipt…"
+            : "Type, tap 📷 for a receipt" + (voiceSupported ? ", or 🎤 to dictate" : "") + ". ⌘+Enter to send."
+      )
     );
   }
 

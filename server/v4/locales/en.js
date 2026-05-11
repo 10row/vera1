@@ -140,6 +140,20 @@ module.exports = {
   "miniapp.hero.over": "{amount} over today",
   "miniapp.hero.tomorrowLess": "≈ {delta}/day less rest of cycle",
   "miniapp.hero.tomorrowMore": "≈ {delta}/day more rest of cycle",
+  // ── NEW HERO (balance-led, polished) ──
+  // Headline: balance. Sub: pace + days. With-bills variant adds an
+  // available line so the relationship balance → reservations →
+  // available is visible.
+  "miniapp.hero.inAccount": "in account",
+  "miniapp.hero.subNoBills": "{pace}/day · {days}d to payday",
+  "miniapp.hero.subNoBillsSingleDay": "{pace}/day · 1d to payday",
+  "miniapp.hero.subWithBills": "{available} available · {pace}/day · {days}d",
+  "miniapp.hero.subWithBillsSingleDay": "{available} available · {pace}/day · 1d",
+  "miniapp.hero.reservedFor": "{amount} reserved for bills",
+  "miniapp.hero.todayUsage": "Today: {spent} of {pace}",
+  "miniapp.hero.overDeficit": "{amount} over",
+  "miniapp.hero.overSubBills": "balance {balance} · {days}d to payday",
+  "miniapp.hero.overSubBillsSingleDay": "balance {balance} · 1d to payday",
   "miniapp.heatmap.last30": "Last 30 days",
   "miniapp.heatmap.under": "under",
   "miniapp.heatmap.over": "over",

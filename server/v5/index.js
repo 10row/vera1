@@ -478,6 +478,62 @@ app.post("/api/v5/parse/:sid", requireTelegramAuth, async (req, res) => {
   }
 });
 
+// /api/v5/parse-photo — receipt photo from the mini app's inline
+// camera button. Body: { dataUrl: "data:image/jpeg;base64,..." }
+// (base64 keeps things JSON-only, no multipart deps). Returns the same
+// shape as /api/v5/parse: { kind, intent, ... } so the InputModal
+// renders the same confirm card whether the source was text or photo.
+//
+// Uses a per-route 8 MB body limit (above default 16 KB) because
+// photos are large. Stripe-style: parse-only — apply happens via
+// /api/v5/apply after user confirms.
+const _parsePhotoBodyParser = express.json({ limit: "8mb" });
+app.post("/api/v5/parse-photo/:sid", _parsePhotoBodyParser, requireTelegramAuth, async (req, res) => {
+  try {
+    const dataUrl = String(req.body && req.body.dataUrl || "");
+    if (!dataUrl || !dataUrl.startsWith("data:image/")) {
+      return res.status(400).json({ error: "Need a base64 image dataUrl." });
+    }
+    const commaIdx = dataUrl.indexOf(",");
+    if (commaIdx === -1) return res.status(400).json({ error: "Malformed dataUrl." });
+    const b64 = dataUrl.slice(commaIdx + 1);
+    const buf = Buffer.from(b64, "base64");
+    if (buf.length < 1024 || buf.length > 8 * 1024 * 1024) {
+      return res.status(400).json({ error: "Photo too small or too large." });
+    }
+
+    const u = await db.resolveUser(prisma, req.params.sid);
+    const state = await db.loadState(prisma, u.id);
+    if (!state.setup) return res.status(400).json({ error: "Set up first." });
+
+    const vision = require("./ai-vision");
+    const r = await vision.extractFromReceipt(buf, Object.assign({}, state, { id: u.telegramId || u.id }));
+    if (!r.ok) return res.json({ kind: "talk", message: r.reason || "Couldn't read the photo." });
+
+    // Run the SAME pipeline post-AI steps (currency conversion, validation,
+    // commitment-shape detection) so the photo flow merges with the text
+    // flow before reaching the user's confirm card. Pipeline expects a
+    // proposal-shape from the AI; synthesize one with the vision intent.
+    const { processMessage } = require("./pipeline");
+    // Use a synthetic user message so the pipeline's backdate-strip and
+    // commitment-marker scanners have something neutral to operate on
+    // (receipts don't carry English phrasing — they carry items + amounts).
+    const syntheticMsg = (r.intent.params && r.intent.params.note) || "receipt photo";
+    const result = await processMessage(state, syntheticMsg, [], {
+      _debugUserId: u.telegramId || u.id,
+      _aiCall: async () => JSON.stringify({
+        mode: "do",
+        message: "From receipt: " + (r.intent.params.vendor || r.intent.params.note || ""),
+        intent: r.intent,
+      }),
+    });
+    res.json(result);
+  } catch (e) {
+    console.error("[v5 parse-photo]", e);
+    res.status(500).json({ error: "Internal" });
+  }
+});
+
 // /api/v5/apply — apply a confirmed intent (or array of intents) from
 // the Mini App. Same validate+apply path as the Telegram confirm-yes
 // callback, just exposed via HTTP. Multi-intent batches handled.
