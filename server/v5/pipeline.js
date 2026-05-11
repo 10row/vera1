@@ -23,9 +23,164 @@
 const m = require("./model");
 const { parseProposal } = require("./ai");
 const { validateIntent } = require("./validator");
-const { simulateSpend } = require("./view");
+const { simulateSpend, compute } = require("./view");
 const onboarding = require("./onboarding");
 const { recordWarning } = require("./ai-debug");
+
+// ── COMMITMENT-SHAPE DETECTION ───────────────────────────────
+// When the AI emits record_spend for what's actually a one-time
+// commitment ("200 euro for friend's wedding"), default record_spend
+// behavior eats today's discretionary allowance — pace today drops by
+// the full amount. That's wrong for spends the user thinks of as
+// "planned commitments I should track but shouldn't affect today's
+// budget."
+//
+// Detection signal: amount SIGNIFICANT relative to daily pace AND the
+// note/message contains a commitment marker (wedding / trip / gift /
+// deposit / etc., or "for [event]" framing).
+//
+// When detected, the pipeline emits kind:"commitment_choice" with TWO
+// paths the user can pick on the confirm card:
+//   A. Spend today (record_spend) — eats today's daily
+//   B. Commitment (add_bill once + record_spend with billKey)
+//      — balance drops, bill clears, pace unchanged
+// The user taps the option that matches their mental model.
+
+// Commitment-object keywords. Detection requires "for X" framing OR
+// the keyword appears AS the object of "for".
+const COMMITMENT_OBJECTS_EN = "(?:trip|vacation|holiday|wedding|anniversary|birthday|graduation|engagement|honeymoon|funeral|party|celebration|baby\\s*shower|christening|gift|present|deposit|down\\s*payment|retainer|fundraiser|charity|donation|loan|tickets?)";
+const COMMITMENT_OBJECTS_RU = "(?:поездк\\w*|отпуск\\w*|путешеств\\w*|командировк\\w*|свадьб\\w*|юбилей\\w*|выпускн\\w*|праздник\\w*|подарок|подарк\\w*|подарки|залог\\w*|депозит\\w*|аванс\\w*|помолвк\\w*|похорон\\w*|вечеринк\\w*)";
+
+// Strong: "for [the/my/his/her/...] X" where X is a commitment object.
+// Also catches "X gift" / "X trip" suffixes.
+const COMMITMENT_STRONG_EN = new RegExp(
+  "\\b(?:for\\s+(?:the\\s+|a\\s+|an\\s+|my\\s+|his\\s+|her\\s+|our\\s+|their\\s+|[a-z]+'s\\s+)?" + COMMITMENT_OBJECTS_EN
+  + "|" + COMMITMENT_OBJECTS_EN + "\\s+(?:for|gift|present))\\b",
+  "i"
+);
+// Russian commitment framing: "для X" / "на X" / "к X-у" where X is a commitment object.
+const COMMITMENT_STRONG_RU = new RegExp(
+  "(?:^|[^\\p{L}])(?:для|на|к)\\s+" + COMMITMENT_OBJECTS_RU,
+  "iu"
+);
+// Day-of-week + ISO + relative-date markers — used to detect whether
+// the user actually said a date (and so AI's dueDate is real, not
+// invented). Used by the "never invent dueDate" safety net.
+const DATE_MARKERS_EN = /\b(today|tomorrow|tonight|yesterday|mon(day)?|tue(s|sday)?|wed(nesday)?|thu(r|rsday)?|fri(day)?|sat(urday)?|sun(day)?|in\s+\d+\s+(day|days|week|weeks|month|months)|next\s+(week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|this\s+(week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend)|the\s+\d+(st|nd|rd|th)|on\s+the\s+\d+|by\s+(today|tomorrow|the\s+\d+|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next\s+(week|month)|next\s+\w+|\d+|\w+\s+\d+)|until\s+|end\s+of\s+(week|month|year)|\d{4}-\d{2}-\d{2}|jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t|tember)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/i;
+const DATE_MARKERS_RU = /(?:^|[^\p{L}])(?:сегодня|завтра|вчера|послезавтра|понедельник\w*|вторник\w*|сред[ауые]|четверг\w*|пятниц[ауые]|суббот[ауые]|воскресень[еяю]|через\s+\d+|на\s+следующ[ую]\w*\s+недел\w*|к\s+\d+|к\s+понедельник\w*|к\s+вторник\w*|к\s+сред[еу]|к\s+четверг\w*|к\s+пятниц[еу]|к\s+суббот[еу]|к\s+воскресень[ю]|до\s+\d+|\d{1,2}-?го|\d{1,2}\s+числа|январ\w*|феврал\w*|март\w*|апрел\w*|мая?\b|июн\w*|июл\w*|август\w*|сентябр\w*|октябр\w*|ноябр\w*|декабр\w*|конц[еа]\s+(недели|месяца|года))/iu;
+
+function userMessageMentionsDate(userMessage) {
+  if (!userMessage || typeof userMessage !== "string") return false;
+  return DATE_MARKERS_EN.test(userMessage) || DATE_MARKERS_RU.test(userMessage);
+}
+
+// Returns true if THIS record_spend looks like a planned commitment
+// rather than today's discretionary. Conservative — only fires on
+// strong signals (commitment keyword + significant amount).
+function isCommitmentShape(state, intent, userMessage) {
+  if (!intent || intent.kind !== "record_spend") return false;
+  const p = intent.params || {};
+  // Bill-payment record_spend (billKey set) is ALREADY a commitment —
+  // no need to offer a choice.
+  if (p.billKey) return false;
+  // Has-date record_spend (backdated) is recording the past — the
+  // choice belongs to TODAY's logging only.
+  if (p.date) return false;
+  const amt = Math.round(Number(p.amountCents) || 0);
+  if (amt <= 0) return false;
+
+  // Threshold: the COMMITMENT MARKER is the strong signal; amount only
+  // gates trivial spends. Floor at $30 absolute (so a $5 "gift for mom"
+  // doesn't fire) and at half a day's pace (so users with huge daily
+  // budgets don't see the card on relatively-tiny amounts). The 0.5×
+  // multiplier handles the $200-vs-$166-pace case from the user-
+  // reported bug where 1.5× was too strict to fire on a clearly-
+  // commitment-shaped spend.
+  const MIN_ABS_CENTS = 3000;
+  if (amt < MIN_ABS_CENTS) return false;
+  let view;
+  try { view = compute(state); } catch { return false; }
+  const pace = view && Number.isFinite(view.dailyPaceCents) ? view.dailyPaceCents : 0;
+  if (pace > 0 && amt < Math.round(pace * 0.5)) return false;
+
+  // Look at note + vendor + raw user message for commitment markers.
+  const haystack = String(p.note || "") + " " + String(p.vendor || "") + " " + String(userMessage || "");
+  const strong = COMMITMENT_STRONG_EN.test(haystack) || COMMITMENT_STRONG_RU.test(haystack);
+  return !!strong;
+}
+
+// Derive a clean bill name from the user's note. Goal: a name the user
+// will recognize in the bills section (not "for friend's wedding gift").
+// Patterns (in order):
+//   1. vendor → use it
+//   2. "for [the/my/...] X [more]" → X (capitalize)
+//   3. "X for Y" (gift for mom) → "X for Y"
+//   4. Strip leading "for " then capitalize
+//   5. Take first 4 words of note, capitalize
+//   6. Fallback "Commitment"
+function deriveCommitmentName(note, vendor, lang) {
+  const isRu = lang === "ru";
+  const fallback = isRu ? "Обязательство" : "Commitment";
+  if (vendor && String(vendor).trim()) return capitalizeName(String(vendor).trim());
+  if (!note || typeof note !== "string") return fallback;
+  const cleaned = note.trim().replace(/[.!?]+$/, "");
+
+  // "for [the/my/his/her/our/their/a/an] X [more]" — strip generic
+  // determiners only. Named possessives (Friend's, mom's, sarah's)
+  // STAY in the name — "Friend's wedding" reads better than just
+  // "Wedding" because the user said WHOSE wedding.
+  const forMatch = /^for\s+(?:the\s+|a\s+|an\s+|my\s+|his\s+|her\s+|our\s+|their\s+)?(.{2,60}?)\s*$/i.exec(cleaned);
+  if (forMatch) return capitalizeName(forMatch[1]);
+  // "X for Y" (e.g. "gift for mom")
+  const xForY = /^(.{2,30})\s+for\s+(.{2,30})$/i.exec(cleaned);
+  if (xForY) return capitalizeName(xForY[1] + " for " + xForY[2]);
+  // Russian: "для X" / "на X" / "к X"
+  const ruFor = /^(?:для|на|к)\s+(.{2,60}?)\s*$/iu.exec(cleaned);
+  if (ruFor) return capitalizeName(ruFor[1]);
+
+  // Generic: take first 4 words
+  const words = cleaned.split(/\s+/).slice(0, 4).join(" ");
+  return capitalizeName(words) || fallback;
+}
+function capitalizeName(s) {
+  if (!s) return "";
+  return s.trim().replace(/\s+/g, " ").replace(/^./, c => c.toUpperCase());
+}
+
+// Build the [add_bill, record_spend(billKey)] batch for the
+// commitment path. Both share the SAME billKey so engine matches them.
+function buildCommitmentBatch(state, spendIntent, lang) {
+  const p = spendIntent.params || {};
+  const todayStr = m.today((state && state.timezone) || "UTC");
+  const billName = deriveCommitmentName(p.note, p.vendor, lang);
+  // De-dup: if user already has a bill with this name, suffix with date.
+  let finalName = billName;
+  if (state.bills) {
+    const key = m.billKey(billName);
+    if (state.bills[key]) finalName = billName + " (" + todayStr + ")";
+  }
+  const addBill = {
+    kind: "add_bill",
+    params: {
+      name: finalName,
+      amountCents: p.amountCents,
+      // Preserve foreign-currency info on the bill so display can show it.
+      originalAmount: p.originalAmount,
+      originalCurrency: p.originalCurrency,
+      dueDate: todayStr,
+      recurrence: "once",
+      category: p.category,
+    },
+  };
+  const payBill = {
+    kind: "record_spend",
+    params: Object.assign({}, p, {
+      billKey: m.billKey(finalName),
+      note: p.note || finalName,
+    }),
+  };
+  return [addBill, payBill];
+}
 
 // Backdate resolver. The AI is NON-DETERMINISTIC about emitting the
 // `date` param: same prompt + same message can yield date OR no date
@@ -344,6 +499,40 @@ async function processMessage(state, userMessage, history, options) {
   if (proposal.intent) convertOnce(proposal.intent);
   if (Array.isArray(proposal.intents)) proposal.intents.forEach(convertOnce);
 
+  // ── STRIP INVENTED dueDate ON add_bill (deterministic safety net) ──
+  // The AI prompt forbids inventing a dueDate when the user didn't say
+  // one, but the AI is non-deterministic. If the user message has NO
+  // date markers (no weekday, no "the Nth", no "in N days", no ISO),
+  // but the AI emitted a dueDate, we strip it. Validator then runs the
+  // clarify path — bot asks "by when?". This was a real user-reported
+  // bug: "200 for friends trip" → AI guessed today → bot reserved with
+  // today's date without asking.
+  //
+  // SCOPE: only `recurrence: "once"` add_bills are subject to the
+  // strip. Recurring bills (monthly/weekly/biweekly) have a naturally
+  // derivable dueDate from the cycle ("rent due the 1st" implies
+  // next 1st), so stripping there causes a false "by when?" clarify
+  // even though the AI's dueDate is correct.
+  try {
+    const stripped = [];
+    const stripDate = (intent, label) => {
+      if (!intent || intent.kind !== "add_bill" || !intent.params) return;
+      const rec = intent.params.recurrence;
+      // Only strip for one-time set-asides. Recurring bills' dates are OK.
+      if (rec && rec !== "once") return;
+      if (intent.params.dueDate && !userMessageMentionsDate(userMessage)) {
+        delete intent.params.dueDate;
+        stripped.push(label);
+      }
+    };
+    stripDate(proposal.intent, "intent");
+    if (Array.isArray(proposal.intents)) proposal.intents.forEach((it, i) => stripDate(it, "intents[" + i + "]"));
+    const debugKey = (options && options._debugUserId != null) ? options._debugUserId : null;
+    if (stripped.length > 0 && debugKey != null) {
+      recordWarning(debugKey, "ℹ stripped invented dueDate on " + stripped.length + " add_bill(s) — user message had no date marker.");
+    }
+  } catch { /* never block flow */ }
+
   // ── PROMISE-ACTION CHECK ──
   // If AI's text promises an action but no matching intent exists,
   // rewrite to an honest fallback. Better to admit confusion than ship a
@@ -389,6 +578,35 @@ async function processMessage(state, userMessage, history, options) {
         field: verdict.clarify.field,
         code: verdict.clarify.code,
       };
+    }
+    // COMMITMENT_CHOICE: only fires for valid record_spend that looks
+    // like a planned commitment. Pre-validates BOTH options so we can
+    // show two paths only when both will succeed (else fall back to
+    // regular do — no dead buttons).
+    if (verdict && verdict.ok && isCommitmentShape(state, proposal.intent, userMessage)) {
+      const commitmentBatch = buildCommitmentBatch(state, proposal.intent, lang);
+      // Validate each commitment-batch intent against the projected
+      // state. add_bill validates against current state directly;
+      // record_spend(billKey) validates against post-add_bill state.
+      const addBillVerdict = validateIntent(state, commitmentBatch[0], todayStr, lang);
+      let payBillVerdict = { ok: false };
+      if (addBillVerdict.ok) {
+        try {
+          const { applyIntent } = require("./engine");
+          const projected = applyIntent(state, commitmentBatch[0]).state;
+          payBillVerdict = validateIntent(projected, commitmentBatch[1], todayStr, lang);
+        } catch { /* fall through */ }
+      }
+      // Only offer the choice if BOTH paths are valid. Else degrade
+      // gracefully to single-option do (the regular spend).
+      if (addBillVerdict.ok && payBillVerdict.ok) {
+        return {
+          kind: "commitment_choice",
+          message: proposal.message,
+          spendIntent: proposal.intent,
+          commitmentBatch,
+        };
+      }
     }
     return {
       kind: "do",
@@ -439,4 +657,12 @@ async function processMessage(state, userMessage, history, options) {
   };
 }
 
-module.exports = { processMessage, detectSilentLie };
+module.exports = {
+  processMessage,
+  detectSilentLie,
+  // Exported for tests + diagnostic harness.
+  isCommitmentShape,
+  deriveCommitmentName,
+  buildCommitmentBatch,
+  userMessageMentionsDate,
+};

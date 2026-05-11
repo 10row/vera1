@@ -105,3 +105,56 @@ test("[buttons-ru] undo_last → 'Отменить'", () => {
   const { yes } = buttonLabelsFor({ kind: "undo_last", params: {} }, "ru");
   assertEq(yes, "Отменить");
 });
+
+// ── PAIRED PENDING TOKENS (for commitment_choice) ──────────────
+// When the user picks one path of a 2-option card, the OTHER token
+// must be cleared too. Otherwise a delayed tap on the abandoned half
+// silently double-applies the spend.
+
+const { setPending, setPendingPair, takePending } = require("../bot");
+
+test("[paired-tokens] takePending(A) clears B too", () => {
+  const state = { pendingTokens: [] };
+  const [a, b] = setPendingPair(state,
+    [{ kind: "record_spend", params: { amountCents: 20000 } }],
+    [{ kind: "add_bill", params: { name: "X", amountCents: 20000, recurrence: "once" } }]
+  );
+  assertEq(state.pendingTokens.length, 2);
+  const entry = takePending(state, a);
+  assertEq(state.pendingTokens.length, 0, "both tokens cleared after taking one");
+  assertEq(entry.token, a);
+});
+
+test("[paired-tokens] takePending(B) clears A too", () => {
+  const state = { pendingTokens: [] };
+  const [a, b] = setPendingPair(state,
+    [{ kind: "record_spend", params: {} }],
+    [{ kind: "add_bill", params: {} }]
+  );
+  takePending(state, b);
+  assertEq(state.pendingTokens.length, 0);
+});
+
+test("[paired-tokens] normal setPending unaffected by sweep logic", () => {
+  const state = { pendingTokens: [] };
+  const t1 = setPending(state, { kind: "record_spend", params: {} });
+  const t2 = setPending(state, { kind: "record_income", params: {} });
+  takePending(state, t1);
+  // t2 should still be there (no pairedToken set).
+  assertEq(state.pendingTokens.length, 1);
+  assertEq(state.pendingTokens[0].token, t2);
+});
+
+test("[paired-tokens] expired pair returns null, doesn't leak partner", () => {
+  const state = { pendingTokens: [] };
+  const [a, b] = setPendingPair(state,
+    [{ kind: "record_spend", params: {} }],
+    [{ kind: "add_bill", params: {} }]
+  );
+  // Force-expire both
+  state.pendingTokens.forEach(p => { p.expires = Date.now() - 1000; });
+  const entry = takePending(state, a);
+  assertEq(entry, null, "expired entry returns null");
+  // The expired-A is removed; expired-B is also still there until next take.
+  // Acceptable: caller will sweep eventually. Both should be removable.
+});

@@ -108,8 +108,36 @@ function setPending(state, intentOrArray) {
   return token;
 }
 
+// setPendingPair — two linked pending entries, used by commitment_choice.
+// The user picks ONE of two paths (today vs commitment). When either is
+// taken (yes/no), the OTHER is auto-cleared so a delayed tap on the
+// abandoned path doesn't double-apply.
+function setPendingPair(state, intentsA, intentsB) {
+  const tokenA = makeToken();
+  const tokenB = makeToken();
+  if (!Array.isArray(state.pendingTokens)) state.pendingTokens = [];
+  const now = Date.now();
+  state.pendingTokens = state.pendingTokens.filter(p => p && p.expires > now);
+  state.pendingTokens.push({
+    token: tokenA, intents: Array.isArray(intentsA) ? intentsA : [intentsA],
+    pairedToken: tokenB, expires: now + PENDING_TTL_MS,
+  });
+  state.pendingTokens.push({
+    token: tokenB, intents: Array.isArray(intentsB) ? intentsB : [intentsB],
+    pairedToken: tokenA, expires: now + PENDING_TTL_MS,
+  });
+  if (state.pendingTokens.length > PENDING_MAX) {
+    state.pendingTokens = state.pendingTokens.slice(-PENDING_MAX);
+  }
+  return [tokenA, tokenB];
+}
+
 // takePending pops the entry from state.pendingTokens (mutates state).
 // Returns the entry or null. Caller saves state.
+//
+// Paired-token sweep: if the entry has a `pairedToken`, the partner is
+// ALSO removed (so the abandoned half of a commitment_choice card
+// can't be tapped 30s later and silently double-apply the spend).
 function takePending(state, token) {
   if (!Array.isArray(state.pendingTokens) || state.pendingTokens.length === 0) return null;
   const idx = state.pendingTokens.findIndex(p => p && p.token === token);
@@ -120,6 +148,11 @@ function takePending(state, token) {
     return null;
   }
   state.pendingTokens.splice(idx, 1);
+  // Sweep the linked partner if present.
+  if (entry.pairedToken) {
+    const pIdx = state.pendingTokens.findIndex(p => p && p.token === entry.pairedToken);
+    if (pIdx !== -1) state.pendingTokens.splice(pIdx, 1);
+  }
   return entry;
 }
 
@@ -582,6 +615,41 @@ async function processText(prisma, ctx, telegramId, text, options) {
             { text: yesLabel, callback_data: "yes:" + token },
             { text: noLabel, callback_data: "no:" + token },
           ]],
+        },
+      });
+      return;
+    }
+
+    // ── COMMITMENT_CHOICE (big "for X" spend — 2-option card) ──
+    // The pipeline detected a record_spend that looks like a planned
+    // commitment ("$200 for friend's wedding"). Default record_spend
+    // would eat today's daily allowance, which is wrong for one-time
+    // commitments. Offer two paths:
+    //
+    //   [Spend today]                 — normal record_spend, eats daily
+    //   [Commitment (won't eat daily)] — add_bill once + bill_payment,
+    //                                    balance drops but pace stays
+    //
+    // Two paired pending tokens — picking one clears the other so a
+    // delayed tap on the abandoned path can't double-apply.
+    if (result.kind === "commitment_choice") {
+      await db.appendHistory(prisma, u.id, "assistant", result.message);
+      const [tokenSpend, tokenCommit] = setPendingPair(state, result.spendIntent, result.commitmentBatch);
+      await db.saveState(prisma, u.id, state);
+      const card = describeIntent(result.spendIntent, state);
+      const intro = result.message ? result.message + "\n\n" : "";
+      const hint = M(lang, "commitmentHint");
+      const labelSpend = M(lang, "btnCommitToday");
+      const labelCommit = M(lang, "btnCommitPlanned");
+      const labelCancel = M(lang, "btnCancel");
+      await safeReply(ctx, intro + card + "\n\n_" + m.escapeMd(hint) + "_", {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: labelSpend, callback_data: "yes:" + tokenSpend }],
+            [{ text: labelCommit, callback_data: "yes:" + tokenCommit }],
+            [{ text: labelCancel, callback_data: "no:" + tokenSpend }],
+          ],
         },
       });
       return;
@@ -1218,4 +1286,9 @@ function attach(prisma) {
   });
 }
 
-module.exports = { bot, attach, processText, processCommand, processCallbackData, buttonLabelsFor };
+module.exports = {
+  bot, attach, processText, processCommand, processCallbackData,
+  buttonLabelsFor,
+  // Exported for tests:
+  setPending, setPendingPair, takePending,
+};

@@ -118,6 +118,14 @@ const MESSAGES = {
   btnConfirm:            { en: "Confirm",                                    ru: "Подтвердить" },
   btnCancel:             { en: "Cancel",                                     ru: "Отмена" },
 
+  // ── commitment_choice — the 2-option card for big "for X" spends ──
+  // \"Today\" = eats today's daily allowance (normal record_spend).
+  // \"Commitment\" = won't eat today's daily (creates+pays a one-time
+  // bill so the math reserves before deducting; pace stays unchanged).
+  btnCommitToday:        { en: "Spend today",                                ru: "Сегодня" },
+  btnCommitPlanned:      { en: "Commitment (won't eat daily)",               ru: "Обязательство (не из дневного)" },
+  commitmentHint:        { en: "How should I count this?",                   ru: "Как это учесть?" },
+
   // ── bot ──
   miniAppNotConfigured:  { en: "Mini app not configured.",                   ru: "Mini app не настроен." },
   miniAppOpen:           { en: "Open the mini app:",                         ru: "Открыть mini app:" },
