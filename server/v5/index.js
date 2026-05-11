@@ -108,12 +108,27 @@ function v5ToV4View(state) {
   const envelopes = Object.values(state.bills || {}).map(b => {
     const beforePayday = state.payday ? m.daysBetween(b.dueDate, state.payday) >= 0 : true;
     const cycleStatus = (b.paidThisCycle || beforePayday) ? "this" : "next";
+    // Foreign-currency display string when the bill was created with a
+    // non-base currency. Mini app + chat both consume amountFormatted —
+    // this preserves the conversion phrase ("€200 ≈ $216") through.
+    const hasForeign = b.originalCurrency && Number.isFinite(b.originalAmount) && b.originalAmount > 0;
+    let amountFormatted = m.toMoney(b.amountCents, sym);
+    if (hasForeign) {
+      try {
+        const ccy = require("./currency");
+        const fromSubunits = ccy.spokenToSubunits(b.originalAmount, b.originalCurrency);
+        amountFormatted = ccy.fmt(fromSubunits, b.originalCurrency) + " ≈ " + m.toMoney(b.amountCents, sym);
+      } catch { /* fall back to base-only */ }
+    }
     return {
       key: m.billKey(b.name),
       name: b.name,
       kind: "bill",
       amountCents: b.amountCents,
-      amountFormatted: m.toMoney(b.amountCents, sym),
+      amountFormatted,
+      // Native fields for the mini app to format independently if needed.
+      originalAmount: hasForeign ? b.originalAmount : undefined,
+      originalCurrency: hasForeign ? b.originalCurrency : undefined,
       spentCents: 0,
       spentFormatted: m.toMoney(0, sym),
       dueDate: b.dueDate,

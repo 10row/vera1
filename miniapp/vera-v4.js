@@ -1045,13 +1045,30 @@ function BillCard(props) {
   var err = errState[0], setErr = errState[1];
   // tapHaptic is now file-scope (top of file).
 
+  // V5 Mark Paid: send a record_spend intent with billKey set. The engine
+  // recognizes billKey as a bill_payment — clears the obligation, debits
+  // balance, leaves pace UNCHANGED (carve-out was already in the math).
+  // Preserves originalAmount/Currency so history shows the foreign-
+  // currency phrase ("€200 ≈ $216") on the resulting transaction.
   function markPaid() {
     if (!sid || busy) return;
     setBusy(true); setErr(null);
-    fetch(API_BASE + "/api/v4/action/" + sid, {
+    var intent = {
+      kind: "record_spend",
+      params: {
+        amountCents: e.amountCents,
+        billKey: e.key,
+        note: e.name,
+      },
+    };
+    if (e.originalCurrency && typeof e.originalAmount === "number" && e.originalAmount > 0) {
+      intent.params.originalAmount = e.originalAmount;
+      intent.params.originalCurrency = e.originalCurrency;
+    }
+    fetch(API_BASE + "/api/v5/apply/" + sid, {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ intent: { kind: "pay_bill", params: { name: e.name } } }),
+      body: JSON.stringify({ intent: intent }),
     })
       .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, body: d }; }); })
       .then(function(res) {
@@ -1060,7 +1077,9 @@ function BillCard(props) {
           setShowConfirm(false);
           if (onPaid) onPaid(res.body.view);
         } else {
-          setErr((res.body && (res.body.error || res.body.reason)) || t("miniapp.bills.couldntPay"));
+          var failArr = res.body && res.body.failed;
+          var first = Array.isArray(failArr) && failArr.length ? failArr[0] : null;
+          setErr(first || (res.body && (res.body.error || res.body.reason)) || t("miniapp.bills.couldntPay"));
         }
       })
       .catch(function(e2) { setErr(e2.message); })
@@ -1118,8 +1137,11 @@ function BillCard(props) {
       ),
       h("div", { style: { fontFamily: "'Lora',serif", fontSize: 16 } }, e.amountFormatted)
     ),
-    // Action area — Mark Paid two-tap confirm, only for active bills with future-or-today dates.
-    e.daysUntilDue != null && e.daysUntilDue <= 30 && sid ? h("div", { style: { marginTop: 10, paddingTop: 10, borderTop: "1px solid " + C.border } },
+    // Action area — Mark Paid two-tap confirm. Only show on UNPAID bills
+    // (recurring or one-time). Paid bills don't need the button. The
+    // 30-day-ahead gate was removed: AAA UX means every unpaid bill is
+    // markable from the card itself, regardless of due-date proximity.
+    !e.paidThisCycle && sid ? h("div", { style: { marginTop: 10, paddingTop: 10, borderTop: "1px solid " + C.border } },
       !showConfirm
         ? h("div", {
             onClick: function() { setShowConfirm(true); setErr(null); },
@@ -1509,6 +1531,7 @@ function Dashboard(props) {
       view: v, txs: txs, heatmap: heatmap, today: today,
       bills: bills, nameMap: nameMap, sym: sym, sid: props.sid,
       onViewUpdate: props.onViewUpdate, dateMinusN: dateMinusN,
+      onOpenInput: props.onOpenInput,
     });
   } else if (tab === "pulse") {
     content = h(PulseScreen, {
@@ -1518,6 +1541,7 @@ function Dashboard(props) {
     content = h(BillsScreen, {
       view: v, bills: bills, budgets: budgets, goals: goals,
       sym: sym, sid: props.sid, onViewUpdate: props.onViewUpdate,
+      onOpenInput: props.onOpenInput,
     });
   }
 
@@ -1536,6 +1560,57 @@ function Dashboard(props) {
 // at upcoming bills (if any) + recent activity. NO long history feed
 // (that's accessible via "View all" → modal). Primary info above
 // fold; scrolling reveals detail.
+// ── ACTION CHIPS ────────────────────────────────────────────
+// Discoverability without tutorial. A row of pill-shaped chips below
+// the hero — each opens the input modal pre-seeded with a starter
+// phrase. Users learn what the bot can do by SEEING the chips, not
+// from reading a help screen.
+//
+// Tap a chip → modal opens with the phrase already typed → user
+// completes the rest → submit. ONE chip-tap, TWO chars typed for a
+// log spend. The bot's capability surface is the UI.
+function ActionChips(props) {
+  var onOpenInput = props.onOpenInput;
+  if (!onOpenInput) return null;
+  // Each chip: visible label, starter text seeded into the modal.
+  // Starter text ends with a space so the cursor lands ready-to-type.
+  var chips = [
+    { label: "+ Log spend",     prefill: "spent " },
+    { label: "+ Reserve",       prefill: "need to reserve " },
+    { label: "+ Income",        prefill: "got paid " },
+    { label: "Can I afford…?",  prefill: "can i afford " },
+  ];
+  return h("div", {
+    style: {
+      display: "flex", gap: 8, flexWrap: "wrap",
+      padding: "0 16px 4px",
+      marginTop: -6,
+    },
+  },
+    chips.map(function(c) {
+      return h("div", {
+        key: c.label,
+        onClick: function() { tapHaptic && tapHaptic(); onOpenInput(c.prefill); },
+        style: {
+          padding: "8px 14px",
+          background: C.card,
+          border: "1px solid " + C.border,
+          borderRadius: 999,
+          fontSize: 12, color: C.text,
+          cursor: "pointer", userSelect: "none",
+          whiteSpace: "nowrap",
+          transition: "transform 120ms ease, background 180ms ease",
+        },
+        onMouseDown: function(e) { e.currentTarget.style.transform = "scale(0.96)"; },
+        onMouseUp: function(e) { e.currentTarget.style.transform = "scale(1)"; },
+        onMouseLeave: function(e) { e.currentTarget.style.transform = "scale(1)"; },
+        onTouchStart: function(e) { e.currentTarget.style.transform = "scale(0.96)"; },
+        onTouchEnd: function(e) { e.currentTarget.style.transform = "scale(1)"; },
+      }, c.label);
+    })
+  );
+}
+
 function TodayScreen(props) {
   var v = props.view, txs = props.txs, heatmap = props.heatmap, today = props.today;
   var bills = props.bills || [];
@@ -1551,6 +1626,9 @@ function TodayScreen(props) {
 
   return h("div", null,
     h(Hero, { view: v, sid: sid }),
+    // Action chips — the capability discovery surface. No tutorial
+    // needed: the bot tells you what's possible by showing buttons.
+    h(ActionChips, { onOpenInput: props.onOpenInput }),
     h(FirstTimeCard, null),
     h(TodayStrip, { view: v, txs: txs, today: today, nameMap: nameMap }),
     h(Heatmap, {
@@ -1756,34 +1834,89 @@ function PulseScreen(props) {
 }
 
 // ── BILLS SCREEN ──
-// Bills (this cycle + next cycle), with their balance breakdown, then
-// budgets and goals (when those layers exist).
+// AAA lifecycle layout: three sections matching the three mental
+// phases of every commitment (unpaid one-time, recurring, paid).
+// Each bill card has a Mark Paid action so the lifecycle is tappable.
+//   1. UNPAID THIS CYCLE — one-time set-asides not yet paid. Most
+//      action-needed. Sorted by due-date ascending (most urgent first).
+//   2. RECURRING — monthly/weekly/biweekly bills. Each can be marked
+//      paid for the current cycle (engine auto-advances dueDate).
+//   3. PAID THIS CYCLE — done. Collapsed-style, no action button.
 function BillsScreen(props) {
   var v = props.view, bills = props.bills || [], budgets = props.budgets || [], goals = props.goals || [];
   var sym = props.sym, sid = props.sid;
+
+  // Three buckets
+  var recurringKinds = { monthly: 1, weekly: 1, biweekly: 1 };
+  var unpaidOnce = bills.filter(function(b) {
+    return !b.paidThisCycle && (!b.recurrence || b.recurrence === "once");
+  });
+  var recurring = bills.filter(function(b) { return recurringKinds[b.recurrence]; });
+  var paidOnce = bills.filter(function(b) {
+    return b.paidThisCycle && (!b.recurrence || b.recurrence === "once");
+  });
+
+  // Sort within buckets
+  unpaidOnce.sort(function(a, b) { return String(a.dueDate).localeCompare(String(b.dueDate)); });
+  recurring.sort(function(a, b) {
+    return (a.paidThisCycle ? 1 : 0) - (b.paidThisCycle ? 1 : 0)
+      || String(a.dueDate).localeCompare(String(b.dueDate));
+  });
+  paidOnce.sort(function(a, b) { return String(b.dueDate).localeCompare(String(a.dueDate)); });
+
   return h("div", { style: { paddingTop: 22 } },
     h(AnticipationStrip, { envelopes: bills, sym: sym }),
-    bills.length > 0 ? h("div", null,
-      h(DueBanner, { envelopes: bills, sym: sym }),
+    bills.length === 0 ? h("div", { style: { padding: "24px 16px", textAlign: "center", color: C.muted, fontSize: 13 } },
+      "No bills set up. Tell the bot in chat: \"Rent 1400 on the 1st\" — or tap + below to add one."
+    ) : null,
+    // Due banner (top of page when something is due/overdue today)
+    bills.length > 0 ? h(DueBanner, { envelopes: bills, sym: sym }) : null,
+    // SECTION 1: Unpaid one-time
+    unpaidOnce.length > 0 ? h("div", null,
       h(SectionHeader, {
-        icon: "📌",
-        title: t("miniapp.bills.label"),
-        count: bills.length,
+        icon: "⏳",
+        title: "Unpaid this cycle",
+        count: unpaidOnce.length,
         subtitle: (function() {
-          var thisAmt = v.billsThisCycleCents || 0;
-          var nextAmt = v.billsNextCycleCents || 0;
-          var pieces = [];
-          if (v.balanceShort) pieces.push(t("miniapp.bills.balanceInAccount", { amount: v.balanceShort }));
-          if (thisAmt > 0) pieces.push(t("miniapp.bills.protected", { amount: v.billsThisCycleShort }));
-          if (nextAmt > 0) pieces.push(t("miniapp.bills.allNextCycle", { amount: v.billsNextCycleShort }));
-          return pieces.length ? pieces.join(" · ") : null;
+          var total = unpaidOnce.reduce(function(acc, b) { return acc + (b.amountCents || 0); }, 0);
+          return total > 0 ? "Reserved: " + (sym + (total / 100).toFixed(0)) : null;
         })(),
       }),
       h("div", { style: { padding: "0 16px" } },
-        bills.map(function(e) { return h(BillCard, { key: e.key, env: e, sym: sym, sid: sid, onPaid: props.onViewUpdate }); }))
-    ) : h("div", { style: { padding: "24px 16px", textAlign: "center", color: C.muted, fontSize: 13 } },
-        "No bills set up. Tell the bot in chat: \"Rent 1400 on the 1st\"."
-      ),
+        unpaidOnce.map(function(e) {
+          return h(BillCard, { key: e.key, env: e, sym: sym, sid: sid, onPaid: props.onViewUpdate });
+        }))
+    ) : null,
+    // SECTION 2: Recurring
+    recurring.length > 0 ? h("div", null,
+      h(SectionHeader, {
+        icon: "🔁",
+        title: "Recurring",
+        count: recurring.length,
+        subtitle: (function() {
+          var unpaid = recurring.filter(function(b) { return !b.paidThisCycle; });
+          return unpaid.length > 0
+            ? unpaid.length + " unpaid this cycle"
+            : "All paid this cycle ✓";
+        })(),
+      }),
+      h("div", { style: { padding: "0 16px" } },
+        recurring.map(function(e) {
+          return h(BillCard, { key: e.key, env: e, sym: sym, sid: sid, onPaid: props.onViewUpdate });
+        }))
+    ) : null,
+    // SECTION 3: Paid (one-time only — recurring "paid" just sits in section 2 with a checkmark)
+    paidOnce.length > 0 ? h("div", null,
+      h(SectionHeader, {
+        icon: "✓",
+        title: "Paid this cycle",
+        count: paidOnce.length,
+      }),
+      h("div", { style: { padding: "0 16px", opacity: 0.65 } },
+        paidOnce.map(function(e) {
+          return h(BillCard, { key: e.key, env: e, sym: sym, sid: sid, onPaid: props.onViewUpdate });
+        }))
+    ) : null,
     budgets.length > 0 ? h("div", null,
       h(SectionHeader, { icon: "📊", title: t("miniapp.budgets.label"), count: budgets.length }),
       h("div", { style: { padding: "0 16px" } },
@@ -1948,6 +2081,7 @@ function App() {
       setData({ view: newView, txs: data.txs, heatmap: data.heatmap });
       loadView();
     },
+    onOpenInput: openInputWith,
   });
 
   // FAB visible only when fully set up + dashboard rendered.
@@ -1960,9 +2094,15 @@ function App() {
   // the chat (deferred for v1 standalone-prep).
   var inputModeState = useState(null);
   var inputMode = inputModeState[0], setInputMode = inputModeState[1];
+  // Pre-filled text — when an action chip is tapped on Today, the
+  // modal opens with a starter phrase already typed in (e.g. "spent ").
+  // Discoverability without tutorial: chips tell users what's possible.
+  var prefillState = useState("");
+  var prefill = prefillState[0], setPrefill = prefillState[1];
 
   function onFabPick(kind) {
     if (kind === "text") {
+      setPrefill("");
       setInputMode("text");
     } else {
       // Voice/photo — close Mini App to land in chat for now.
@@ -1972,6 +2112,11 @@ function App() {
         }
       } catch {}
     }
+  }
+
+  function openInputWith(text) {
+    setPrefill(text || "");
+    setInputMode("text");
   }
 
   return h("div", {
@@ -1984,8 +2129,9 @@ function App() {
     showFab ? h(InputFAB, { onPick: onFabPick }) : null,
     inputMode === "text" ? h(InputModal, {
       sid: sid.current,
-      onClose: function() { setInputMode(null); },
-      onApplied: function() { setInputMode(null); loadView(); },
+      initialText: prefill,
+      onClose: function() { setInputMode(null); setPrefill(""); },
+      onApplied: function() { setInputMode(null); setPrefill(""); loadView(); },
     }) : null
   );
 }
@@ -2194,7 +2340,10 @@ function InputFAB(props) {
 // multipart upload — separate ship).
 function InputModal(props) {
   var sid = props.sid;
-  var inputState = useState("");
+  // Seed initial text from prop (when opened via an action chip).
+  // Falsy → empty; the placeholder rotation handles discoverability
+  // when the input is empty.
+  var inputState = useState(props.initialText || "");
   var input = inputState[0], setInput = inputState[1];
   var loadingState = useState(false);
   var loading = loadingState[0], setLoading = loadingState[1];
@@ -2204,6 +2353,30 @@ function InputModal(props) {
   var error = errorState[0], setError = errorState[1];
   var applyingState = useState(false);
   var applying = applyingState[0], setApplying = applyingState[1];
+
+  // ── ROTATING PLACEHOLDER ─────────────────────────────────────
+  // When the input is empty, the placeholder cycles through example
+  // phrasings every 3.2 seconds. Users learn the bot's vocabulary by
+  // osmosis — no help screen needed. The examples cover all 6 major
+  // intents (spend, income, bill, set-aside, payment, afford check).
+  var placeholders = [
+    "spent 5 on coffee",
+    "rent 1400 due the 1st",
+    "i need 200 for friend's trip by friday",
+    "paid the rent",
+    "got paid 3000",
+    "can i afford 200?",
+  ];
+  var phIndexState = useState(0);
+  var phIndex = phIndexState[0], setPhIndex = phIndexState[1];
+  useEffect(function() {
+    if (input || result) return; // freeze rotation when user is typing or confirming
+    var id = setInterval(function() {
+      setPhIndex(function(i) { return (i + 1) % placeholders.length; });
+    }, 3200);
+    return function() { clearInterval(id); };
+  }, [input, result]);
+  var placeholder = "e.g. \"" + placeholders[phIndex] + "\"";
 
   // ESC closes when not actively applying.
   useEffect(function() {
@@ -2335,7 +2508,7 @@ function InputModal(props) {
         onKeyDown: function(e) {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
         },
-        placeholder: "e.g. \"$30 coffee at Lighthouse\" — or ask \"how much on food this month?\"",
+        placeholder: placeholder,
         rows: 3,
         style: {
           width: "100%", boxSizing: "border-box",

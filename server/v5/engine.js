@@ -252,6 +252,13 @@ function applyIntent(state, intent) {
         name, amountCents: amt, dueDate, recurrence,
         paidThisCycle: false,
         createdAt: Date.now(),
+        // Foreign-currency info: preserve original-currency details so the
+        // confirm card, mini app, and chat /bills can all render "€200 ≈ $216"
+        // instead of just "$216". Pipeline converts amountCents to base
+        // before calling apply; these fields keep the source visible.
+        ...(Number.isFinite(p.originalAmount) && p.originalAmount > 0 && p.originalCurrency
+            ? { originalAmount: p.originalAmount, originalCurrency: p.originalCurrency }
+            : {}),
       };
       // CYCLE EVENT: a new bill changes "obligated" → re-baseline pace.
       refreshPace(next, todayStr);
