@@ -684,3 +684,210 @@ test("[pipeline] do mode: AI numbers in confirm message NOT stripped (user-spoke
   // do mode is NOT scrubbed — AI echoing user's spoken amount is fine.
   assertEq(r.message, "Logging $30 coffee.");
 });
+
+// ── CLARIFY PATH (the ROOT FIX for buttons-on-questions) ─────────
+// User reported: typing "i need to get 200 euro budget for friend to
+// store - how much will that affect" → AI replied "reserving 200 euros
+// for your friend - how long do you need it for?" wrapped in Log it /
+// Skip buttons. The buttons were confusing because the user hadn't
+// actually supplied enough info to confirm anything.
+//
+// ROOT FIX: validator returns { clarify } for missing required fields;
+// pipeline forwards as kind:"clarify"; bot renders as plain text, NO
+// BUTTONS. These tests lock the boundary in.
+
+test("[clarify] add_bill without dueDate → kind:'clarify', NOT 'do'", async () => {
+  const s = fullySetUp();
+  const r = await processMessage(s, "200 budget for friend to store", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Reserving for friend.",
+      intent: { kind: "add_bill", params: { name: "Friend", amountCents: 20000, recurrence: "once" } },
+    }),
+  });
+  assertEq(r.kind, "clarify", "missing dueDate must surface as clarify, never 'do'");
+  assertEq(r.field, "dueDate");
+  assertEq(r.code, "clarifyBillDueDate");
+  assertTrue(typeof r.message === "string" && r.message.length > 0, "clarify must carry a question");
+});
+
+test("[clarify] add_bill without name → kind:'clarify' code clarifyBillName", async () => {
+  const s = fullySetUp();
+  const futureDate = m.addDays(m.today("UTC"), 7);
+  const r = await processMessage(s, "set aside 200 by friday", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Setting aside.",
+      intent: { kind: "add_bill", params: { amountCents: 20000, dueDate: futureDate, recurrence: "once" } },
+    }),
+  });
+  assertEq(r.kind, "clarify");
+  assertEq(r.field, "name");
+  assertEq(r.code, "clarifyBillName");
+});
+
+test("[clarify] add_bill without amount → kind:'clarify' code clarifyBillAmount", async () => {
+  const s = fullySetUp();
+  const futureDate = m.addDays(m.today("UTC"), 7);
+  const r = await processMessage(s, "save for the trip by next friday", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Got it.",
+      intent: { kind: "add_bill", params: { name: "Trip", dueDate: futureDate, recurrence: "once" } },
+    }),
+  });
+  assertEq(r.kind, "clarify");
+  assertEq(r.field, "amountCents");
+  assertEq(r.code, "clarifyBillAmount");
+});
+
+test("[clarify] complete add_bill (name + amount + dueDate) → 'do', NOT clarify", async () => {
+  const s = fullySetUp();
+  const futureDate = m.addDays(m.today("UTC"), 7);
+  const r = await processMessage(s, "reserve 200 for friend by friday", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Reserving for friend.",
+      intent: { kind: "add_bill", params: { name: "Friend", amountCents: 20000, dueDate: futureDate, recurrence: "once" } },
+    }),
+  });
+  assertEq(r.kind, "do", "complete intent must NOT trip clarify");
+  assertEq(r.verdict.ok, true);
+});
+
+test("[clarify] hard reject (dup bill) returns 'do' with ok:false — NOT clarify", async () => {
+  // Hard rejects (dup name, past date, etc.) stay on the 'do' path with
+  // verdict.ok=false. Bot renders the reason as italic text. Clarify is
+  // ONLY for missing required fields, not for structural failures.
+  let s = fullySetUp();
+  const futureDate = m.addDays(m.today("UTC"), 14);
+  s = applyIntent(s, { kind: "add_bill", params: { name: "Rent", amountCents: 100000, dueDate: futureDate, recurrence: "monthly" } }).state;
+  const r = await processMessage(s, "rent 1400 monthly", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Adding rent.",
+      intent: { kind: "add_bill", params: { name: "Rent", amountCents: 140000, dueDate: futureDate, recurrence: "monthly" } },
+    }),
+  });
+  assertEq(r.kind, "do", "dup-name is a hard reject, stays on 'do'");
+  assertEq(r.verdict.ok, false);
+  assertTrue(!r.verdict.clarify, "dup-name must NOT come back as clarify");
+});
+
+test("[clarify] localizes to Russian when state.language = 'ru'", async () => {
+  let s = fullySetUp();
+  s.language = "ru";
+  const r = await processMessage(s, "отложить 200 для друга", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Откладываю.",
+      intent: { kind: "add_bill", params: { name: "Друг", amountCents: 20000, recurrence: "once" } },
+    }),
+  });
+  assertEq(r.kind, "clarify");
+  assertTrue(/числу|числa|пятницу|когда/i.test(r.message), "Russian clarify question expected: " + r.message);
+});
+
+test("[clarify] do_batch with a clarify-needing intent → entire batch surfaces clarify", async () => {
+  // If a brain-dump includes an add_bill missing dueDate alongside valid
+  // intents, we cannot show a confirm card (one of the items is
+  // incomplete). Surface the clarify so the user supplies the missing
+  // piece — then on retry the whole batch resubmits.
+  const s = fullySetUp();
+  const r = await processMessage(s, "spent 20 on coffee + set aside 200 for friend", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Got it.",
+      intents: [
+        { kind: "record_spend", params: { amountCents: 2000, note: "coffee" } },
+        { kind: "add_bill", params: { name: "Friend", amountCents: 20000, recurrence: "once" } }, // missing dueDate
+      ],
+    }),
+  });
+  assertEq(r.kind, "clarify");
+  assertEq(r.field, "dueDate");
+});
+
+test("[clarify] do_batch with all-complete intents → 'do_batch' (not clarify)", async () => {
+  const s = fullySetUp();
+  const futureDate = m.addDays(m.today("UTC"), 7);
+  const r = await processMessage(s, "spent 20 coffee + reserve 200 for friend by friday", [], {
+    _aiCall: stub({
+      mode: "do",
+      message: "Got both.",
+      intents: [
+        { kind: "record_spend", params: { amountCents: 2000, note: "coffee" } },
+        { kind: "add_bill", params: { name: "Friend", amountCents: 20000, dueDate: futureDate, recurrence: "once" } },
+      ],
+    }),
+  });
+  assertEq(r.kind, "do_batch");
+  assertEq(r.items.length, 2);
+  assertTrue(r.items.every(i => i.verdict.ok), "all items should pass when complete");
+});
+
+// ── VALIDATOR CLARIFY SHAPE (unit-level) ────────────────────────
+// Even without the pipeline, validator's three-state output is the
+// architectural primitive. These lock in the shape.
+
+const { validateIntent } = require("../validator");
+
+test("[validator-clarify] add_bill missing name → clarify shape", () => {
+  const s = fullySetUp();
+  const v = validateIntent(s, { kind: "add_bill", params: { amountCents: 5000, dueDate: m.addDays(m.today("UTC"), 7), recurrence: "once" } }, m.today("UTC"));
+  assertEq(v.ok, false);
+  assertTrue(!!v.clarify, "must be a clarify, not a hard reject");
+  assertEq(v.clarify.code, "clarifyBillName");
+  assertEq(v.clarify.field, "name");
+});
+
+test("[validator-clarify] add_bill missing amount → clarify shape", () => {
+  const s = fullySetUp();
+  const v = validateIntent(s, { kind: "add_bill", params: { name: "Friend", dueDate: m.addDays(m.today("UTC"), 7), recurrence: "once" } }, m.today("UTC"));
+  assertEq(v.ok, false);
+  assertEq(v.clarify.code, "clarifyBillAmount");
+});
+
+test("[validator-clarify] add_bill missing dueDate → clarify shape (THE USER-REPORTED BUG)", () => {
+  const s = fullySetUp();
+  const v = validateIntent(s, { kind: "add_bill", params: { name: "Friend", amountCents: 20000, recurrence: "once" } }, m.today("UTC"));
+  assertEq(v.ok, false);
+  assertEq(v.clarify.code, "clarifyBillDueDate");
+  assertEq(v.clarify.field, "dueDate");
+});
+
+test("[validator-clarify] add_bill complete → ok:true, no clarify", () => {
+  const s = fullySetUp();
+  const v = validateIntent(s, {
+    kind: "add_bill",
+    params: { name: "Friend", amountCents: 20000, dueDate: m.addDays(m.today("UTC"), 7), recurrence: "once" },
+  }, m.today("UTC"));
+  assertEq(v.ok, true);
+  assertTrue(!v.clarify);
+});
+
+test("[validator-clarify] add_bill past date → hard reject (reason), NOT clarify", () => {
+  // Past dates are structural — the user CAN'T fix this by supplying a
+  // missing field; the field they DID supply is wrong. Hard reject.
+  const s = fullySetUp();
+  const v = validateIntent(s,
+    { kind: "add_bill", params: { name: "Friend", amountCents: 20000, dueDate: "2020-01-01", recurrence: "once" } },
+    m.today("UTC")
+  );
+  assertEq(v.ok, false);
+  assertTrue(!!v.reason, "past date is a hard reject with reason");
+  assertTrue(!v.clarify, "past date is NOT a clarify");
+});
+
+test("[validator-clarify] add_bill dup name → hard reject (reason), NOT clarify", () => {
+  let s = fullySetUp();
+  const futureDate = m.addDays(m.today("UTC"), 14);
+  s = applyIntent(s, { kind: "add_bill", params: { name: "Rent", amountCents: 100000, dueDate: futureDate, recurrence: "monthly" } }).state;
+  const v = validateIntent(s,
+    { kind: "add_bill", params: { name: "rent", amountCents: 100000, dueDate: futureDate, recurrence: "monthly" } },
+    m.today("UTC")
+  );
+  assertEq(v.ok, false);
+  assertTrue(!!v.reason);
+  assertTrue(!v.clarify);
+});

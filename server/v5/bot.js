@@ -68,7 +68,15 @@ if (process.env.BOT_TOKEN && process.env.BOT_TOKEN !== BOT_TOKEN) {
   console.warn("[v5] BOT_TOKEN had whitespace — trimmed");
 }
 const bot = BOT_TOKEN ? new Bot(BOT_TOKEN) : null;
-const openai = new OpenAI();
+// Lazy OpenAI client — only instantiated on first photo-OCR call.
+// Tests can require this module without OPENAI_API_KEY set; the photo
+// handler is the only path that touches it, and tests don't drive it.
+let _openai = null;
+function openaiClient() {
+  if (_openai) return _openai;
+  _openai = new OpenAI();
+  return _openai;
+}
 
 // ── PENDING CONFIRMATIONS ─────────────────────────
 // PERSISTED to state.pendingTokens — survives Railway redeploys.
@@ -116,14 +124,71 @@ function takePending(state, token) {
 }
 
 // ── CONFIRM CARD ──────────────────────────────────
-function confirmKeyboard(token, lang) {
-  const yes = lang === "ru" ? "Да" : "Yes";
-  const no = lang === "ru" ? "Отмена" : "Cancel";
+// confirmKeyboard — per-intent button labels.
+//
+// Old version used generic "Yes / Cancel" everywhere. That worked for
+// most cases but broke on the boundary between confirm-cards and
+// question-cards: when the AI replied with a clarifying question
+// ("how long?") the generic Yes / Cancel left users wondering whether
+// "Yes" meant "yes confirm the action" or "yes the answer to your
+// question is yes." Per-intent verbs ("Reserve", "Log it", "Update")
+// remove the ambiguity AND signal what'll happen on tap — AAA polish.
+//
+// The labels live in messages.js (EN + RU). `intent` is the validated
+// intent the confirm card represents; the function reads .kind +
+// .params.recurrence to pick the right verb (add_bill 'once' → Reserve,
+// monthly → Add bill).
+function buttonLabelsFor(intent, lang) {
+  const kind = intent && intent.kind;
+  const params = (intent && intent.params) || {};
+  const ru = lang === "ru" ? "ru" : "en";
+  // Default — generic confirm. Used only for unrecognized kinds.
+  let yesCode = "btnConfirm";
+  switch (kind) {
+    case "add_bill": {
+      // Recurrence flips the verb: 'once' commits a set-aside (Reserve),
+      // monthly/weekly/biweekly registers a recurring bill (Add bill).
+      const isOnce = !params.recurrence || params.recurrence === "once";
+      yesCode = isOnce ? "btnReserve" : "btnAddBill";
+      break;
+    }
+    case "remove_bill":         yesCode = "btnRemoveBill";    break;
+    case "record_spend":        yesCode = "btnLogSpend";      break;
+    case "record_income":       yesCode = "btnLogIncome";     break;
+    case "adjust_balance":      yesCode = "btnUpdateBalance"; break;
+    case "update_payday":       yesCode = "btnUpdatePayday";  break;
+    case "undo_last":           yesCode = "btnUndo";          break;
+    case "delete_transaction":  yesCode = "btnDelete";        break;
+    case "reset":               yesCode = "btnReset";         break;
+    default:                    yesCode = "btnConfirm";       break;
+  }
+  return { yes: M(ru, yesCode), no: M(ru, "btnCancel") };
+}
+
+function confirmKeyboard(token, lang, intent) {
+  const { yes, no } = buttonLabelsFor(intent, lang);
   return {
     reply_markup: {
       inline_keyboard: [[
         { text: yes, callback_data: "yes:" + token },
         { text: no, callback_data: "no:" + token },
+      ]],
+    },
+  };
+}
+
+// batchConfirmKeyboard — used for do_batch (multi-intent brain dumps).
+// Labels show the count ("Add all 3" / "Yes, all 3" RU) so the user
+// sees how many actions they're confirming with one tap.
+function batchConfirmKeyboard(token, lang, count) {
+  const ru = lang === "ru";
+  const yesLabel = ru ? "Да, всё (" + count + ")" : "Yes, all " + count;
+  const noLabel = M(ru ? "ru" : "en", "btnCancel");
+  return {
+    reply_markup: {
+      inline_keyboard: [[
+        { text: yesLabel, callback_data: "yes:" + token },
+        { text: noLabel,  callback_data: "no:"  + token },
       ]],
     },
   };
@@ -522,10 +587,34 @@ async function processText(prisma, ctx, telegramId, text, options) {
       return;
     }
 
+    // ── CLARIFY (missing required field — ASK user, NO BUTTONS) ──
+    // The validator returned a soft reject: the intent the AI proposed
+    // is missing a required field (dueDate, name, amount). Reply with
+    // a plain-text question and STOP — no confirm card, no token.
+    //
+    // The user's next message supplies the missing piece; AI re-parses
+    // with the new info in conversation history and emits a complete
+    // intent which then takes the normal `do` path.
+    //
+    // This fixes the user-reported bug: "200 euro budget for friend to
+    // store" → AI asked "how long do you need it for?" wrapped in Log
+    // it / Skip buttons. Now: just the question, no buttons. The
+    // mechanism (button mismatch) is gone because clarify never wears
+    // buttons by design.
+    if (result.kind === "clarify") {
+      await db.appendHistory(prisma, u.id, "assistant", result.message);
+      // Italic + no buttons — visually distinct from a confirm card.
+      await safeReply(ctx, "_" + m.escapeMd(result.message) + "_", { parse_mode: "Markdown" });
+      return;
+    }
+
     // ── DO (validated intent) ────────────────────
     if (result.kind === "do") {
       await db.appendHistory(prisma, u.id, "assistant", result.message);
       if (!result.verdict.ok) {
+        // Hard reject — show the reason, no buttons. (Clarify is handled
+        // above; anything reaching here is a structural failure: dup
+        // bill, past date, spend > 2x balance, etc.)
         await safeReply(ctx, "_" + m.escapeMd(result.verdict.reason) + "_", { parse_mode: "Markdown" });
         return;
       }
@@ -533,9 +622,12 @@ async function processText(prisma, ctx, telegramId, text, options) {
       await db.saveState(prisma, u.id, state);
       const card = describeIntent(result.intent, state);
       const intro = result.message ? result.message + "\n\n" : "";
+      // Per-intent button labels — "Reserve" on set-asides, "Add bill"
+      // on recurring, "Log it" on spends, "Update" on balance. Removes
+      // the "Yes means what?" ambiguity that the generic "Yes" carried.
       await safeReply(ctx, intro + card, {
         parse_mode: "Markdown",
-        ...confirmKeyboard(token, lang),
+        ...confirmKeyboard(token, lang, result.intent),
       });
       return;
     }
@@ -547,7 +639,7 @@ async function processText(prisma, ctx, telegramId, text, options) {
       const failItems = result.items.filter(i => !i.verdict.ok);
       if (okItems.length === 0) {
         // Nothing valid — show the rejections, no card.
-        const lines = failItems.map(i => "_" + m.escapeMd(i.verdict.reason) + "_");
+        const lines = failItems.map(i => "_" + m.escapeMd(i.verdict.reason || "") + "_");
         await safeReply(ctx, lines.join("\n"), { parse_mode: "Markdown" });
         return;
       }
@@ -558,19 +650,12 @@ async function processText(prisma, ctx, telegramId, text, options) {
       const intro = lang === "ru" ? "*Хочу добавить:*" : "*I'll add:*";
       const numbered = intents.map((i, idx) => "  " + (idx + 1) + ". " + describeIntent(i, state));
       const skippedLines = failItems.length
-        ? "\n\n" + (lang === "ru" ? "_Пропущено:_" : "_Skipped:_") + "\n" + failItems.map(i => "  • " + m.escapeMd(i.verdict.reason)).join("\n")
+        ? "\n\n" + (lang === "ru" ? "_Пропущено:_" : "_Skipped:_") + "\n" + failItems.map(i => "  • " + m.escapeMd(i.verdict.reason || "")).join("\n")
         : "";
       const message = (result.message ? result.message + "\n\n" : "") + intro + "\n" + numbered.join("\n") + skippedLines;
-      const yesLabel = lang === "ru" ? "Да, всё (" + intents.length + ")" : "Yes, all " + intents.length;
-      const noLabel = lang === "ru" ? "Отмена" : "Cancel";
       await safeReply(ctx, message, {
         parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [[
-            { text: yesLabel, callback_data: "yes:" + token },
-            { text: noLabel,  callback_data: "no:"  + token },
-          ]],
-        },
+        ...batchConfirmKeyboard(token, lang, intents.length),
       });
       return;
     }
@@ -1052,9 +1137,13 @@ function attach(prisma) {
         p.amountCents = toSubunits;
       }
 
-      const v = require("./validator").validateIntent(state, r.intent, todayStr);
+      const v = require("./validator").validateIntent(state, r.intent, todayStr, lang);
       if (!v.ok) {
-        await safeReply(ctx, "_" + m.escapeMd(v.reason) + "_", { parse_mode: "Markdown" });
+        // Photo path: a clarify here would mean the receipt OCR missed
+        // a required field (rare — receipts have amount + date + vendor).
+        // Render the question / reason as plain text either way.
+        const txt = v.clarify ? v.clarify.question : v.reason;
+        await safeReply(ctx, "_" + m.escapeMd(txt || "") + "_", { parse_mode: "Markdown" });
         return;
       }
 
@@ -1066,7 +1155,7 @@ function attach(prisma) {
       const fromPhoto = lang === "ru" ? "📸 *Из чека:*" : "📸 *From receipt:*";
       await safeReply(ctx, fromPhoto + "\n" + card, {
         parse_mode: "Markdown",
-        ...confirmKeyboard(token, lang),
+        ...confirmKeyboard(token, lang, r.intent),
       });
     } catch (e) {
       console.error("[v5 photo]", e);
@@ -1110,7 +1199,7 @@ function attach(prisma) {
       const buf = Buffer.from(await resp.arrayBuffer());
       clearTimeout(tt);
       const audio = await toFile(buf, "voice.ogg", { type: "audio/ogg" });
-      const tr = await openai.audio.transcriptions.create({ file: audio, model: "whisper-1" }, { timeout: 15000 });
+      const tr = await openaiClient().audio.transcriptions.create({ file: audio, model: "whisper-1" }, { timeout: 15000 });
       const text = (tr.text || "").slice(0, 2000);
       if (text) await processText(prisma, ctx, ctx.from.id, text);
     } catch (e) {
@@ -1129,4 +1218,4 @@ function attach(prisma) {
   });
 }
 
-module.exports = { bot, attach, processText, processCommand, processCallbackData };
+module.exports = { bot, attach, processText, processCommand, processCallbackData, buttonLabelsFor };

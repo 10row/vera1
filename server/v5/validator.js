@@ -1,7 +1,30 @@
 "use strict";
 // v5/validator.js — sanity-check an intent before showing a confirm card.
-// Returns { ok, reason } where reason is a short, conversational string
-// localized to the user's language (EN/RU).
+//
+// Returns one of THREE verdict shapes:
+//   { ok: true }                                          — proceed to confirm
+//   { ok: false, reason: "..." }                          — hard reject (error msg)
+//   { ok: false, clarify: { code, field, question } }     — soft reject (ASK user)
+//
+// HARD REJECT vs CLARIFY — the architectural distinction that fixes the
+// "buttons on a question" bug.
+//
+// HARD REJECT (reason): the intent shape is structurally invalid and
+// can't be fixed by gathering more info — duplicate bill, future date,
+// spend > 2x balance. Bot shows the reason; no buttons (nothing to
+// confirm). User must rephrase.
+//
+// CLARIFY: the intent is well-formed in shape but one required FIELD is
+// missing. The user MEANT to do this; the AI just didn't have enough
+// info to fill it in. Bot asks the question in plain text — NO BUTTONS.
+// User types the missing piece; AI re-runs the intent with the field
+// supplied.
+//
+// THE BUG THIS PREVENTS: AI emits add_bill without a dueDate. Old
+// validator rejected with "Need a due date for X" — bot showed Yes/No
+// buttons over the rejection. Tapping Yes did nothing meaningful. User
+// was confused. ROOT FIX: validator returns clarify; bot renders
+// question, no buttons. The user supplies the date and the flow resumes.
 //
 // Validator NEVER mutates state. It's the second line of defense after the
 // AI's prompt. Engine throws on bad data — validator catches it earlier
@@ -17,6 +40,13 @@ const { M } = require("./messages");
 
 function ok() { return { ok: true }; }
 function reject(reason) { return { ok: false, reason }; }
+// clarify — soft reject for a missing required field. The bot will
+// render the question as plain text (no buttons) and wait for the user
+// to supply the missing piece. `code` lets callers / tests assert which
+// field is missing without string-matching the localized question.
+function clarify(code, field, question) {
+  return { ok: false, clarify: { code, field, question } };
+}
 
 function validateIntent(state, intent, todayStr, lang) {
   // Language: explicit param > state.language > "en".
@@ -51,15 +81,25 @@ function validateIntent(state, intent, todayStr, lang) {
     case "add_bill": {
       if (!state.setup) return reject(M(L, "setupFirst"));
       const name = String(p.name || "").trim();
-      if (!name) return reject(M(L, "billNeedsName"));
+      // MISSING NAME — soft clarify ("What should I call this commitment?")
+      // not a hard reject. User HAS an intent; they just didn't name it.
+      if (!name) return clarify("clarifyBillName", "name", M(L, "clarifyBillName"));
+      // MISSING AMOUNT — soft clarify.
       const amt = Math.round(Number(p.amountCents));
-      if (!Number.isFinite(amt) || amt <= 0) return reject(M(L, "billNeedsAmount", { name }));
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return clarify("clarifyBillAmount", "amountCents", M(L, "clarifyBillAmount", { name }));
+      }
+      // MISSING DUE DATE — soft clarify. This is the most common path:
+      // user says "200 for friend to store" and the AI dutifully asks
+      // "how long do you need it for?" Before this fix that question
+      // came wrapped in Log it / Skip buttons (confusing) — now it's
+      // a plain text question, no buttons.
       const dueDate = m.normalizeDate(p.dueDate);
-      if (!dueDate) return reject(M(L, "billNeedsDueDate", { name }));
+      if (!dueDate) return clarify("clarifyBillDueDate", "dueDate", M(L, "clarifyBillDueDate"));
+      // HARD REJECTS — structurally bad shape.
       if (dueDate < todayStr) return reject(M(L, "billPastDate"));
       const recurrence = p.recurrence;
       if (recurrence && !m.RECURRENCES.includes(recurrence)) return reject(M(L, "badRecurrence"));
-      // Reject duplicate names
       const key = m.billKey(name);
       if (state.bills && state.bills[key]) return reject(M(L, "dupBillName", { name }));
       return ok();

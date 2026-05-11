@@ -7,6 +7,16 @@
 //   { kind: "do", message, intent, verdict }
 //   { kind: "do_batch", message, items: [{intent, verdict}, ...] }   // brain-dump
 //   { kind: "decision", message, simulate }     // "can I afford X"
+//   { kind: "clarify", message, field, code }   // ASK user — NO BUTTONS
+//
+// CLARIFY exists so the bot has a clean way to ask a follow-up question
+// when the AI emitted an intent but a required field (e.g. dueDate) is
+// missing. Pre-clarify, the validator hard-rejected with a reason string
+// and the bot wrapped it in Yes/No buttons — confusing because the user
+// hadn't supplied enough to confirm anything. The new path: validator
+// returns { ok:false, clarify:{...} } → pipeline forwards as
+// kind:"clarify" → bot replies in plain text. No buttons. The user types
+// the missing piece and the AI re-runs the intent.
 //
 // Pipeline NEVER mutates state. Bot applies intents after the user confirms.
 
@@ -368,6 +378,18 @@ async function processMessage(state, userMessage, history, options) {
   if (proposal.mode === "do" && proposal.intent) {
     const todayStr = m.today((state && state.timezone) || "UTC");
     const verdict = validateIntent(state, proposal.intent, todayStr, lang);
+    // CLARIFY: validator says the intent is well-formed but missing a
+    // required field. Forward as kind:"clarify" so the bot renders the
+    // question as plain text — NO confirm buttons. The user supplies
+    // the missing piece on their next turn.
+    if (verdict && !verdict.ok && verdict.clarify) {
+      return {
+        kind: "clarify",
+        message: verdict.clarify.question,
+        field: verdict.clarify.field,
+        code: verdict.clarify.code,
+      };
+    }
     return {
       kind: "do",
       message: proposal.message,
@@ -381,10 +403,23 @@ async function processMessage(state, userMessage, history, options) {
   // the bot applies them in order under one lock and reports failures).
   if (proposal.mode === "do_batch" && Array.isArray(proposal.intents) && proposal.intents.length > 0) {
     const todayStr = m.today((state && state.timezone) || "UTC");
+    // Validate each. If ANY item comes back as clarify, surface that as
+    // a single clarify reply — we can't show a confirm card while one
+    // of the batch items is missing required info. (Rare: AI usually
+    // either gives complete intents or none.)
     const items = proposal.intents.map(intent => ({
       intent,
       verdict: validateIntent(state, intent, todayStr, lang),
     }));
+    const firstClarify = items.find(i => i.verdict && !i.verdict.ok && i.verdict.clarify);
+    if (firstClarify) {
+      return {
+        kind: "clarify",
+        message: firstClarify.verdict.clarify.question,
+        field: firstClarify.verdict.clarify.field,
+        code: firstClarify.verdict.clarify.code,
+      };
+    }
     return {
       kind: "do_batch",
       message: proposal.message,
@@ -392,7 +427,12 @@ async function processMessage(state, userMessage, history, options) {
     };
   }
 
-  // talk fallback
+  // talk fallback — DEFENSIVE STRIP: the AI sometimes returns mode:"talk"
+  // but also includes stray intent / intents fields (verified via /debug
+  // ring buffer). Bot's old code didn't read them because mode said talk,
+  // but the validator never saw them either — invisible silent-lie risk.
+  // Strip them here so any future code that reads proposal.intent in
+  // talk mode (e.g. analytics, logging) doesn't get confused.
   return {
     kind: "talk",
     message: proposal.message || "…",

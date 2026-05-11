@@ -84,6 +84,40 @@ const MESSAGES = {
   silentLieFallback:     { en: "I'm not sure what to do with that — could you be more specific?",
                            ru: "Не совсем понял — можно поточнее?" },
 
+  // ── clarify (soft reject — bot asks the user, no buttons) ──
+  // Used when the AI proposed an intent but a required field is missing.
+  // These are QUESTIONS, not errors — the bot renders them as plain text
+  // and the user types a follow-up. NEVER show confirm buttons on a
+  // clarify; the user hasn't supplied enough info to confirm anything yet.
+  clarifyBillDueDate:    { en: "By when do you need it? (a date — \"Friday\", \"the 15th\", \"in 3 weeks\")",
+                           ru: "К какому числу? («в пятницу», «к 15-му», «через 3 недели»)" },
+  clarifyBillName:       { en: "What should I call this commitment?",
+                           ru: "Как назвать эту цель?" },
+  clarifyBillAmount:     { en: "How much for {name}?",
+                           ru: "Сколько на {name}?" },
+  clarifySpendAmount:    { en: "How much did you spend?",
+                           ru: "Сколько потратил?" },
+  clarifyIncomeAmount:   { en: "How much did you receive?",
+                           ru: "Сколько получил?" },
+  clarifyAdjustBalance:  { en: "What's the new balance?",
+                           ru: "Какой новый баланс?" },
+
+  // ── confirm-button labels (per-intent — \"Yes\" is ambiguous on a question) ──
+  // The generic \"Yes / Cancel\" got confused for \"Yes I want this\" vs
+  // \"Yes the answer is yes.\" Per-intent verbs are unambiguous.
+  btnReserve:            { en: "Reserve",                                    ru: "Отложить" },
+  btnAddBill:            { en: "Add bill",                                   ru: "Добавить" },
+  btnRemoveBill:         { en: "Remove",                                     ru: "Удалить" },
+  btnLogSpend:           { en: "Log it",                                     ru: "Записать" },
+  btnLogIncome:          { en: "Log income",                                 ru: "Записать доход" },
+  btnUpdateBalance:      { en: "Update",                                     ru: "Обновить" },
+  btnUpdatePayday:       { en: "Update payday",                              ru: "Обновить" },
+  btnUndo:               { en: "Undo",                                       ru: "Отменить" },
+  btnDelete:             { en: "Delete",                                     ru: "Удалить" },
+  btnReset:              { en: "Reset everything",                           ru: "Сбросить всё" },
+  btnConfirm:            { en: "Confirm",                                    ru: "Подтвердить" },
+  btnCancel:             { en: "Cancel",                                     ru: "Отмена" },
+
   // ── bot ──
   miniAppNotConfigured:  { en: "Mini app not configured.",                   ru: "Mini app не настроен." },
   miniAppOpen:           { en: "Open the mini app:",                         ru: "Открыть mini app:" },

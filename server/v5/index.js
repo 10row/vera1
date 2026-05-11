@@ -418,7 +418,12 @@ app.post("/api/v5/action/:sid", requireTelegramAuth, async (req, res) => {
       const lang = state.language || "en";
       const verdict = validateIntent(state, intent, m.today(state.timezone || "UTC"), lang);
       if (!verdict.ok) {
-        result = { ok: false, error: verdict.reason };
+        // Clarify (soft reject) and hard reject both surface here for
+        // the Mini App. Mini App renders whichever is set as the error
+        // message — a clarify question reads naturally as an error in
+        // the in-app confirm flow ("By when?" displayed inline).
+        const msg = verdict.clarify ? verdict.clarify.question : verdict.reason;
+        result = { ok: false, error: msg, clarify: verdict.clarify || undefined };
         return;
       }
       try {
@@ -477,7 +482,11 @@ app.post("/api/v5/apply/:sid", requireTelegramAuth, async (req, res) => {
       const failed = [];
       for (const it of list) {
         const verdict = validateIntent(state, it, todayStr, lang);
-        if (!verdict.ok) { failed.push({ intent: it, reason: verdict.reason }); continue; }
+        if (!verdict.ok) {
+          const reason = verdict.clarify ? verdict.clarify.question : verdict.reason;
+          failed.push({ intent: it, reason });
+          continue;
+        }
         try {
           const r = applyIntent(state, it);
           state = r.state;
