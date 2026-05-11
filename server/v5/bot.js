@@ -572,6 +572,54 @@ async function processCommand(prisma, ctx, telegramId, command, payload) {
     }
     return;
   }
+  if (command === "help") {
+    const u = await db.resolveUser(prisma, "tg_" + telegramId);
+    const state = await db.loadState(prisma, u.id);
+    const lang = state.language === "ru" ? "ru" : "en";
+    const helpText = lang === "ru"
+      ? "*SpendYes — что я умею:*\n\n" +
+        "💸 *Логировать расходы* — просто напиши:\n" +
+        "  • _\"30 на кофе\"_\n" +
+        "  • _\"500 руб такси домой\"_\n" +
+        "  • _\"вчера купил продукты на 1500\"_\n" +
+        "  • Голосовое — диктуй естественно\n" +
+        "  • Фото чека — пришли картинку\n\n" +
+        "❓ *Спрашивать про деньги:*\n" +
+        "  • _\"сколько на кофе в этом месяце?\"_\n" +
+        "  • _\"где больше всего трачу?\"_\n" +
+        "  • _\"могу ли я позволить себе 200?\"_\n\n" +
+        "📌 *Счета и зарплата:*\n" +
+        "  • _\"аренда 50000 первого числа\"_\n" +
+        "  • _\"зарплата пришла\"_\n\n" +
+        "*Команды:*\n" +
+        "  /today — текущий статус\n" +
+        "  /undo — отменить последнее\n" +
+        "  /app — открыть дашборд\n" +
+        "  /reset — сбросить всё"
+      : "*SpendYes — what I can do:*\n\n" +
+        "💸 *Log spends* — just tell me:\n" +
+        "  • _\"30 on coffee\"_\n" +
+        "  • _\"$50 dinner at Lighthouse\"_\n" +
+        "  • _\"yesterday I forgot to log groceries 80\"_\n" +
+        "  • Voice note — talk naturally\n" +
+        "  • Receipt photo — snap and send\n\n" +
+        "❓ *Ask me about your money:*\n" +
+        "  • _\"how much on coffee this month?\"_\n" +
+        "  • _\"where do I spend most?\"_\n" +
+        "  • _\"can I afford $200?\"_\n" +
+        "  • _\"am I over budget on food?\"_\n\n" +
+        "📌 *Bills and income:*\n" +
+        "  • _\"rent 1400 due the 1st\"_\n" +
+        "  • _\"paid the rent\"_\n" +
+        "  • _\"paycheck arrived\"_\n\n" +
+        "*Commands:*\n" +
+        "  /today — current status\n" +
+        "  /undo — undo last action\n" +
+        "  /app — open dashboard\n" +
+        "  /reset — wipe everything";
+    await safeReply(ctx, helpText, { parse_mode: "Markdown" });
+    return;
+  }
   if (command === "today") {
     const u = await db.resolveUser(prisma, "tg_" + telegramId);
     const state = await db.loadState(prisma, u.id);
@@ -861,6 +909,7 @@ function attach(prisma) {
   bot.command("reset", (ctx) => processCommand(prisma, ctx, ctx.from.id, "reset").catch(e => console.error("[v5 /reset]", e)));
   bot.command("app",   (ctx) => processCommand(prisma, ctx, ctx.from.id, "app").catch(e => console.error("[v5 /app]", e)));
   bot.command("debug", (ctx) => processCommand(prisma, ctx, ctx.from.id, "debug").catch(e => console.error("[v5 /debug]", e)));
+  bot.command("help",  (ctx) => processCommand(prisma, ctx, ctx.from.id, "help").catch(e => console.error("[v5 /help]", e)));
 
   bot.on("message:text", async (ctx) => {
     const text = ctx.message.text;

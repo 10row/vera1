@@ -1243,12 +1243,6 @@ function History(props) {
   var open = openState[0], setOpen = openState[1];
   var filterState = useState("all");
   var filter = filterState[0], setFilter = filterState[1];
-  // Fuzzy search across vendor + note + category + tags + context. ONE
-  // input replaces the need for taxonomy precision: type "juice" → see
-  // every juice spend regardless of category. Type "lighthouse" → see
-  // every Lighthouse visit. Type "vietnam" → see trip-tagged spends.
-  var queryState = useState("");
-  var query = queryState[0], setQuery = queryState[1];
   var nameMap = props.nameMap || {};
 
   var allTxs = (props.txs || []).filter(function(tx) {
@@ -1268,28 +1262,7 @@ function History(props) {
     return txs;
   }
 
-  // Fuzzy match: lowercase substring search across all human-readable
-  // fields. Tag arrays are flattened. Stays performant for thousands
-  // of txs (string compare in a flat array).
-  function applyQuery(txs, q) {
-    if (!q) return txs;
-    var needle = q.toLowerCase().trim();
-    if (!needle) return txs;
-    return txs.filter(function(tx) {
-      var hay = "";
-      if (tx.vendor) hay += " " + tx.vendor;
-      if (tx.note) hay += " " + tx.note;
-      if (tx.category) hay += " " + tx.category;
-      if (tx.context) hay += " " + tx.context;
-      if (tx.originalCurrency) hay += " " + tx.originalCurrency;
-      if (Array.isArray(tx.tags)) hay += " " + tx.tags.join(" ");
-      // Envelope name (bill name) — pull from nameMap if present.
-      if (tx.envelopeKey && nameMap[tx.envelopeKey]) hay += " " + nameMap[tx.envelopeKey];
-      return hay.toLowerCase().indexOf(needle) !== -1;
-    });
-  }
-
-  var filtered = applyQuery(applyFilter(allTxs), query);
+  var filtered = applyFilter(allTxs);
 
   // Group by date
   var groups = [];
@@ -1317,33 +1290,6 @@ function History(props) {
               onClick: function() { setOpen(false); },
               style: { fontSize: 11, color: C.sub, cursor: "pointer", padding: "2px 8px" },
             }, t("miniapp.history.close"))
-          ),
-          // Search bar — fuzzy match across vendor/note/category/tags/context.
-          h("div", { style: { marginBottom: 10, position: "relative" } },
-            h("input", {
-              type: "text",
-              value: query,
-              placeholder: "Search vendor, note, category…",
-              onChange: function(e) { setQuery(e.target.value); },
-              style: {
-                width: "100%", boxSizing: "border-box",
-                background: C.card, border: "1px solid " + C.border,
-                borderRadius: 10, color: C.text,
-                padding: "9px 32px 9px 12px",
-                fontSize: 13, fontFamily: "'Inter',sans-serif",
-                outline: "none",
-              },
-            }),
-            query
-              ? h("span", {
-                  onClick: function() { setQuery(""); },
-                  style: {
-                    position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                    fontSize: 14, color: C.muted, cursor: "pointer",
-                    padding: "2px 6px", lineHeight: 1,
-                  },
-                }, "×")
-              : null
           ),
           // Chips
           h("div", { style: { display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" } },
@@ -1403,7 +1349,15 @@ function Skeleton() {
     backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite", borderRadius: 12,
   };
   return h("div", { style: { padding: 20 } },
-    h("style", null, "@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } } @keyframes fabIn { 0% { opacity: 0; transform: translateY(20px) scale(0.5); } 60% { opacity: 1; } 100% { opacity: 1; transform: translateY(0) scale(1); } }"),
+    h("style", null,
+      "@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } } " +
+      "@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } " +
+      "@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } } " +
+      "@keyframes fabIn { 0% { opacity: 0; transform: translateY(20px) scale(0.5); } 60% { opacity: 1; } 100% { opacity: 1; transform: translateY(0) scale(1); } } " +
+      "@keyframes tabIn { 0% { opacity: 0; transform: scale(0.985); } 100% { opacity: 1; transform: scale(1); } } " +
+      "@keyframes modalIn { 0% { opacity: 0; transform: translateY(40px); } 100% { opacity: 1; transform: translateY(0); } } " +
+      "@keyframes pressCompress { 0% { transform: scale(1); } 50% { transform: scale(0.94); } 100% { transform: scale(1); } }"
+    ),
     h("div", { style: Object.assign({}, sh, { width: 80, height: 22, margin: "20px auto", borderRadius: 999 }) }),
     h("div", { style: Object.assign({}, sh, { width: "60%", height: 56, margin: "0 auto 8px" }) }),
     h("div", { style: Object.assign({}, sh, { width: "40%", height: 14, margin: "0 auto 24px" }) }),
@@ -1493,6 +1447,19 @@ function NotSetUpState() {
 }
 
 // ── DASHBOARD ────────────────────────────────────────────────
+// ── DASHBOARD — tab-based navigation ──
+// Three focused screens, each answers ONE question:
+//   TODAY  → "Am I OK right now?"     (Hero + TodayStrip + mini heatmap)
+//   PULSE  → "Where is my money going?" (aggregations by bucket + vendor)
+//   BILLS  → "What's coming up?"      (bills + goals)
+//
+// Each screen fits within a viewport without scroll for the primary
+// info. Scrolling reveals MORE detail (history, expanded heatmap)
+// but the critical numbers are above the fold.
+//
+// Bottom tab bar persists; FAB persists; transition between tabs has
+// spring physics (cross-fade + tiny scale) — premium feel without
+// jarring slide.
 function Dashboard(props) {
   var v = props.view;
   var sym = v.currencySymbol || "$";
@@ -1506,17 +1473,6 @@ function Dashboard(props) {
   var goals = envs.filter(function(e) { return e.kind === "goal"; });
   var nameMap = buildNameMap(envs);
 
-  // Selected heatmap day — lifted up from Heatmap so the detail panel
-  // can render as a full-width sibling BELOW the heatmap, not nested
-  // inside it. Tap a day → panel slides in below; tap same day → close.
-  var selectedDayState = useState(null);
-  var selectedDay = selectedDayState[0], setSelectedDay = selectedDayState[1];
-  function handleSelectDay(d) {
-    tapHaptic();
-    setSelectedDay(selectedDay === d ? null : d);
-  }
-
-  // dueNow appears as part of bills card sort (most urgent first), not a separate section.
   bills.sort(function(a, b) {
     var da = a.daysUntilDue == null ? 9999 : a.daysUntilDue;
     var db = b.daysUntilDue == null ? 9999 : b.daysUntilDue;
@@ -1529,13 +1485,59 @@ function Dashboard(props) {
     return dt.toISOString().slice(0, 10);
   }
 
-  // Reading order (AAA): Hero answers "can I spend?" → TodayStrip
-  // answers "how is right now?" → Heatmap shows the trend → bills/
-  // budgets/goals are actionables → History is the deep rear-view.
-  // TodayStrip used to be below the heatmap; that buried the most
-  // actionable card under historical context.
+  // Tab state lives at this level so FAB + TabBar can persist across renders.
+  var tabState = useState("today");
+  var tab = tabState[0], setTab = tabState[1];
+
+  // Each screen is its own component so re-renders stay scoped.
+  var content;
+  if (tab === "today") {
+    content = h(TodayScreen, {
+      view: v, txs: txs, heatmap: heatmap, today: today,
+      bills: bills, nameMap: nameMap, sym: sym, sid: props.sid,
+      onViewUpdate: props.onViewUpdate, dateMinusN: dateMinusN,
+    });
+  } else if (tab === "pulse") {
+    content = h(PulseScreen, {
+      view: v, txs: txs, today: today, nameMap: nameMap, sym: sym,
+    });
+  } else {
+    content = h(BillsScreen, {
+      view: v, bills: bills, budgets: budgets, goals: goals,
+      sym: sym, sid: props.sid, onViewUpdate: props.onViewUpdate,
+    });
+  }
+
   return h("div", null,
-    h(Hero, { view: v, sid: props.sid }),
+    // Animated content area — fade + tiny scale on tab change via key change.
+    h("div", {
+      key: tab, // forces remount → CSS animation triggers
+      style: { paddingBottom: 78, animation: "tabIn 280ms cubic-bezier(0.34, 1.56, 0.64, 1)" },
+    }, content),
+    h(TabBar, { active: tab, onChange: setTab })
+  );
+}
+
+// ── TODAY SCREEN ──
+// Compact "am I OK?" view. Hero + TodayStrip + mini heatmap + a peek
+// at upcoming bills (if any) + recent activity. NO long history feed
+// (that's accessible via "View all" → modal). Primary info above
+// fold; scrolling reveals detail.
+function TodayScreen(props) {
+  var v = props.view, txs = props.txs, heatmap = props.heatmap, today = props.today;
+  var bills = props.bills || [];
+  var nameMap = props.nameMap, sym = props.sym, sid = props.sid;
+  var selectedDayState = useState(null);
+  var selectedDay = selectedDayState[0], setSelectedDay = selectedDayState[1];
+  function handleSelectDay(d) { tapHaptic(); setSelectedDay(selectedDay === d ? null : d); }
+
+  // Bills due in next 7 days — quiet warning chip.
+  var soonBills = bills.filter(function(b) {
+    return !b.paidThisCycle && b.daysUntilDue != null && b.daysUntilDue >= 0 && b.daysUntilDue <= 7;
+  });
+
+  return h("div", null,
+    h(Hero, { view: v, sid: sid }),
     h(FirstTimeCard, null),
     h(TodayStrip, { view: v, txs: txs, today: today, nameMap: nameMap }),
     h(Heatmap, {
@@ -1546,6 +1548,207 @@ function Dashboard(props) {
     selectedDay
       ? h(DayDetailCard, { date: selectedDay, txs: txs, sym: sym, nameMap: nameMap, today: today })
       : null,
+    // Inline peek at upcoming bills — only when something's coming up
+    // soon. Full bill management lives in the Bills tab.
+    soonBills.length > 0 ? h("div", { style: { padding: "16px 16px 0" } },
+      h(DueBanner, { envelopes: soonBills, sym: sym })
+    ) : null,
+    h("div", {
+      style: { textAlign: "center", padding: "28px 16px 32px", color: C.muted, fontSize: 11 },
+    }, t("miniapp.footer"))
+  );
+}
+
+// ── PULSE SCREEN ──
+// "Where is my money going?" — aggregated answers, no typing.
+// Top categories (6 buckets), top vendors, week-over-week deltas.
+// Time-scope toggle at the top: Week / Month / Cycle.
+function PulseScreen(props) {
+  var v = props.view, txs = props.txs || [], today = props.today;
+  var sym = props.sym;
+
+  // Scope toggle — defaults to "month" (most useful at a glance).
+  var scopeState = useState("month");
+  var scope = scopeState[0], setScope = scopeState[1];
+
+  function dateMinusN(d, n) {
+    var dt = new Date(d + "T00:00:00Z");
+    dt.setUTCDate(dt.getUTCDate() - n);
+    return dt.toISOString().slice(0, 10);
+  }
+
+  function scopeStart() {
+    if (scope === "week") return dateMinusN(today, 6);
+    if (scope === "month") return today.slice(0, 7) + "-01";
+    // cycle: from earliest cycle event ≈ payday backwards. For simplicity
+    // use 30 days back (typical cycle).
+    return dateMinusN(today, 30);
+  }
+  var since = scopeStart();
+  var label = scope === "week" ? "This week" : scope === "month" ? "This month" : "This cycle";
+
+  // Filter txs to scope window. Only count discretionary `spend` and
+  // refunds (which subtract). Bill payments are obligation money,
+  // already reserved — excluded from spending aggregation here.
+  var spendTxs = txs.filter(function(tx) {
+    if (tx.kind !== "spend" && tx.kind !== "refund") return false;
+    return tx.date >= since;
+  });
+
+  // ── Totals ──
+  var totalCents = spendTxs.reduce(function(a, tx) {
+    if (tx.kind === "spend") return a + Math.abs(tx.amountCents);
+    if (tx.kind === "refund") return a - Math.abs(tx.amountCents);
+    return a;
+  }, 0);
+  var count = spendTxs.filter(function(tx) { return tx.kind === "spend"; }).length;
+
+  // ── Buckets ──
+  // Aggregate by category using the new 6-bucket vocab. Map legacy
+  // categories on the fly so historical data joins the new buckets.
+  var legacyMap = {
+    coffee: "food", groceries: "food", restaurant: "food",
+    delivery: "food", alcohol: "food",
+    subscription: "subscriptions", streaming: "subscriptions",
+    clothing: "personal", health: "personal", entertainment: "personal",
+    travel: "personal",
+  };
+  var byBucket = { food: 0, transport: 0, home: 0, subscriptions: 0, personal: 0, other: 0 };
+  spendTxs.forEach(function(tx) {
+    if (tx.kind !== "spend") return;
+    var c = (tx.category || "other").toLowerCase();
+    c = legacyMap[c] || c;
+    if (!(c in byBucket)) c = "other";
+    byBucket[c] += Math.abs(tx.amountCents);
+  });
+  var bucketRows = Object.keys(byBucket)
+    .map(function(name) { return { name: name, cents: byBucket[name] }; })
+    .filter(function(r) { return r.cents > 0; })
+    .sort(function(a, b) { return b.cents - a.cents; });
+
+  // ── Top vendors ──
+  var byVendor = {};
+  spendTxs.forEach(function(tx) {
+    if (tx.kind !== "spend" || !tx.vendor) return;
+    if (!byVendor[tx.vendor]) byVendor[tx.vendor] = { name: tx.vendor, cents: 0, count: 0 };
+    byVendor[tx.vendor].cents += Math.abs(tx.amountCents);
+    byVendor[tx.vendor].count++;
+  });
+  var topVendors = Object.values(byVendor)
+    .sort(function(a, b) { return b.cents - a.cents; })
+    .slice(0, 6);
+
+  // Header style helper
+  function header(text) {
+    return h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 10 } }, text);
+  }
+
+  var maxBucket = bucketRows.length ? bucketRows[0].cents : 1;
+  var maxVendor = topVendors.length ? topVendors[0].cents : 1;
+
+  return h("div", { style: { paddingTop: 22 } },
+    // Title + scope toggle
+    h("div", { style: { padding: "0 16px 16px" } },
+      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 12 } }, "Pulse"),
+      h("div", { style: { display: "flex", gap: 6, marginBottom: 16 } },
+        ["week", "month", "cycle"].map(function(s) {
+          var on = s === scope;
+          return h("div", {
+            key: s, onClick: function() { tapHaptic(); setScope(s); },
+            style: {
+              flex: 1, textAlign: "center",
+              padding: "8px 0", borderRadius: 8, fontSize: 12,
+              background: on ? C.text : C.card, color: on ? "#0F0F0F" : C.sub,
+              border: "1px solid " + (on ? C.text : C.border),
+              fontWeight: on ? 600 : 500, cursor: "pointer",
+              textTransform: "capitalize",
+              transition: "background 180ms ease, color 180ms ease",
+            },
+          }, s);
+        })
+      ),
+      // Summary line
+      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 } }, label),
+      h("div", { style: { fontFamily: "'Lora',serif", fontSize: 36, marginTop: 6, color: C.text } }, fmtMoney(totalCents, sym)),
+      h("div", { style: { fontSize: 12, color: C.muted, marginTop: 4 } },
+        count + " spend" + (count === 1 ? "" : "s")
+      )
+    ),
+    // ── Buckets ──
+    h("div", { style: { padding: "8px 16px 16px" } },
+      header("Buckets"),
+      bucketRows.length === 0
+        ? h("div", { style: { fontSize: 12, color: C.muted, padding: "8px 0" } }, "No spending yet in this window.")
+        : bucketRows.map(function(r) {
+            var pct = totalCents > 0 ? Math.round((r.cents / totalCents) * 100) : 0;
+            var barW = Math.max(2, Math.round((r.cents / maxBucket) * 100));
+            return h("div", {
+              key: r.name,
+              style: { padding: "10px 0", borderTop: "1px solid " + C.border },
+            },
+              h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } },
+                h("div", { style: { fontSize: 13, color: C.text, textTransform: "capitalize" } }, r.name),
+                h("div", { style: { fontFamily: "'Lora',serif", fontSize: 14, color: C.text } },
+                  fmtMoney(r.cents, sym),
+                  h("span", { style: { fontSize: 10, color: C.muted, marginLeft: 6 } }, "(" + pct + "%)")
+                )
+              ),
+              h("div", { style: { height: 4, background: C.border, borderRadius: 2, marginTop: 6, overflow: "hidden" } },
+                h("div", {
+                  style: {
+                    height: "100%", width: barW + "%", background: C.text,
+                    transition: "width 600ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+                  },
+                })
+              )
+            );
+          })
+    ),
+    // ── Top vendors ──
+    topVendors.length > 0 ? h("div", { style: { padding: "16px 16px" } },
+      header("Top vendors"),
+      topVendors.map(function(v) {
+        var barW = Math.max(2, Math.round((v.cents / maxVendor) * 100));
+        return h("div", {
+          key: v.name,
+          style: { padding: "10px 0", borderTop: "1px solid " + C.border },
+        },
+          h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } },
+            h("div", null,
+              h("div", { style: { fontSize: 13, color: C.text } }, v.name),
+              h("div", { style: { fontSize: 10, color: C.muted, marginTop: 2 } }, v.count + " visit" + (v.count === 1 ? "" : "s"))
+            ),
+            h("div", { style: { fontFamily: "'Lora',serif", fontSize: 14, color: C.text } }, fmtMoney(v.cents, sym))
+          ),
+          h("div", { style: { height: 4, background: C.border, borderRadius: 2, marginTop: 6, overflow: "hidden" } },
+            h("div", {
+              style: {
+                height: "100%", width: barW + "%", background: C.text,
+                transition: "width 600ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+              },
+            })
+          )
+        );
+      })
+    ) : null,
+    // Hint — bottom of Pulse, gently surfaces chat Q&A as a complement.
+    h("div", {
+      style: {
+        margin: "20px 16px 28px", padding: "14px",
+        background: C.card, border: "1px dashed " + C.border, borderRadius: 12,
+        fontSize: 12, color: C.muted, textAlign: "center", lineHeight: 1.5,
+      },
+    }, "Ask me anything in chat — \"how much on coffee last month?\" or \"my top spot?\"")
+  );
+}
+
+// ── BILLS SCREEN ──
+// Bills (this cycle + next cycle), with their balance breakdown, then
+// budgets and goals (when those layers exist).
+function BillsScreen(props) {
+  var v = props.view, bills = props.bills || [], budgets = props.budgets || [], goals = props.goals || [];
+  var sym = props.sym, sid = props.sid;
+  return h("div", { style: { paddingTop: 22 } },
     h(AnticipationStrip, { envelopes: bills, sym: sym }),
     bills.length > 0 ? h("div", null,
       h(DueBanner, { envelopes: bills, sym: sym }),
@@ -1553,30 +1756,21 @@ function Dashboard(props) {
         icon: "📌",
         title: t("miniapp.bills.label"),
         count: bills.length,
-        // Bills subtitle exposes the engine's bill-reservation math:
-        //   "$5,327 in account · $1,400 set aside · $200 next cycle"
-        // Pieces are joined with " · ". Balance always shown when bills
-        // exist (this section is the canonical home for balance now —
-        // the hero shows AVAILABLE = balance − set-aside, which is the
-        // user's true spend pool). Built piece-by-piece to skip zero
-        // pieces gracefully.
         subtitle: (function() {
           var thisAmt = v.billsThisCycleCents || 0;
           var nextAmt = v.billsNextCycleCents || 0;
           var pieces = [];
           if (v.balanceShort) pieces.push(t("miniapp.bills.balanceInAccount", { amount: v.balanceShort }));
           if (thisAmt > 0) pieces.push(t("miniapp.bills.protected", { amount: v.billsThisCycleShort }));
-          if (nextAmt > 0) {
-            // Use the explicit "next cycle" piece — re-using the
-            // allNextCycle locale would say "{amount} next cycle" too.
-            pieces.push(t("miniapp.bills.allNextCycle", { amount: v.billsNextCycleShort }));
-          }
+          if (nextAmt > 0) pieces.push(t("miniapp.bills.allNextCycle", { amount: v.billsNextCycleShort }));
           return pieces.length ? pieces.join(" · ") : null;
         })(),
       }),
       h("div", { style: { padding: "0 16px" } },
-        bills.map(function(e) { return h(BillCard, { key: e.key, env: e, sym: sym, sid: props.sid, onPaid: props.onViewUpdate }); }))
-    ) : null,
+        bills.map(function(e) { return h(BillCard, { key: e.key, env: e, sym: sym, sid: sid, onPaid: props.onViewUpdate }); }))
+    ) : h("div", { style: { padding: "24px 16px", textAlign: "center", color: C.muted, fontSize: 13 } },
+        "No bills set up. Tell the bot in chat: \"Rent 1400 on the 1st\"."
+      ),
     budgets.length > 0 ? h("div", null,
       h(SectionHeader, { icon: "📊", title: t("miniapp.budgets.label"), count: budgets.length }),
       h("div", { style: { padding: "0 16px" } },
@@ -1587,10 +1781,54 @@ function Dashboard(props) {
       h("div", { style: { padding: "0 16px" } },
         goals.map(function(e) { return h(GoalCard, { key: e.key, env: e, sym: sym }); }))
     ) : null,
-    h(History, { txs: txs, sym: sym, today: today, dateMinusN: dateMinusN, nameMap: nameMap }),
-    h("div", {
-      style: { textAlign: "center", padding: "28px 16px 32px", color: C.muted, fontSize: 11 },
-    }, t("miniapp.footer"))
+    h("div", { style: { paddingBottom: 32 } })
+  );
+}
+
+// ── TAB BAR ──
+// Bottom-pinned, 3 tabs. Premium feel: subtle backdrop blur, gentle
+// spring on tab change. Tabs are large tap targets, thumb-reachable.
+function TabBar(props) {
+  var active = props.active, onChange = props.onChange;
+  var tabs = [
+    { id: "today", label: "Today", icon: "●" },
+    { id: "pulse", label: "Pulse", icon: "◐" },
+    { id: "bills", label: "Bills", icon: "◇" },
+  ];
+  return h("div", {
+    style: {
+      position: "fixed", bottom: 0, left: 0, right: 0,
+      background: "rgba(15,15,15,0.92)",
+      backdropFilter: "blur(12px)",
+      WebkitBackdropFilter: "blur(12px)",
+      borderTop: "1px solid " + C.border,
+      display: "flex", justifyContent: "space-around",
+      padding: "8px 0 16px",
+      zIndex: 50,
+    },
+  },
+    tabs.map(function(tab) {
+      var on = tab.id === active;
+      return h("div", {
+        key: tab.id,
+        onClick: function() { if (!on) { tapHaptic(); onChange(tab.id); } },
+        style: {
+          flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
+          padding: "6px 0", cursor: "pointer",
+          color: on ? C.text : C.muted,
+          transition: "color 180ms ease",
+        },
+      },
+        h("div", {
+          style: {
+            fontSize: 16, marginBottom: 4,
+            transform: on ? "scale(1.1)" : "scale(1)",
+            transition: "transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+          },
+        }, tab.icon),
+        h("div", { style: { fontSize: 10, letterSpacing: "0.06em", fontWeight: on ? 600 : 500 } }, tab.label)
+      );
+    })
   );
 }
 
@@ -1699,33 +1937,68 @@ function App() {
     },
   });
 
-  // FAB visible only when fully set up + dashboard rendered. Avoids
-  // overlay on Skeleton / Error / NotSetUp screens.
+  // FAB visible only when fully set up + dashboard rendered.
   var showFab = data && data.view && data.view.setup;
+
+  // Input modal state — opened by FAB sub-button tap. Holds the chosen
+  // input mode (text/voice/photo) and the modal contents drive what's
+  // rendered. Text input is fully in-app: types → POST /api/v5/parse
+  // → confirm card → POST /api/v5/apply. Voice/photo fall back to
+  // the chat (deferred for v1 standalone-prep).
+  var inputModeState = useState(null);
+  var inputMode = inputModeState[0], setInputMode = inputModeState[1];
+
+  function onFabPick(kind) {
+    if (kind === "text") {
+      setInputMode("text");
+    } else {
+      // Voice/photo — close Mini App to land in chat for now.
+      try {
+        if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.close === "function") {
+          window.Telegram.WebApp.close();
+        }
+      } catch {}
+    }
+  }
+
   return h("div", {
     style: {
       display: "flex", flexDirection: "column", minHeight: "100vh",
       background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", fontSize: 14,
     },
-  }, content, showFab ? h(InputFAB, null) : null);
+  },
+    content,
+    showFab ? h(InputFAB, { onPick: onFabPick }) : null,
+    inputMode === "text" ? h(InputModal, {
+      sid: sid.current,
+      onClose: function() { setInputMode(null); },
+      onApplied: function() { setInputMode(null); loadView(); },
+    }) : null
+  );
 }
 
 // ── INPUT FAB ──────────────────────────────────────────────
-// Wolt-style floating action button. Draggable (long-press → drag,
-// snaps to edges). Tap → expands radial sub-options (voice / photo /
-// type / quick repeat). Each sub-option closes the Mini App with a
-// haptic + signals user to use Telegram chat for input.
+// Premium floating action button — the daily-habit input primitive.
 //
-// Physics: CSS transitions with spring-like cubic-bezier curves.
-// `transform` is GPU-accelerated so it stays smooth on mobile.
-// Tap targets are large (56px FAB, 48px sub-buttons) for thumb use.
+// DESIGN PRINCIPLES
+//   - SpendYes "S" mark in Lora serif (brand-tied, not generic +)
+//   - Free positioning (drag anywhere, drop where released)
+//   - Soft green-tinted shadow (alive feel, brand palette)
+//   - Press-compress on tap (tactile feedback)
+//   - Spring physics on expand (Cheng-Lou-era springy bounce)
+//   - Sub-buttons emerge with staggered fab-in animation
 //
-// Why this matters for the upcoming standalone app: the FAB IS the
-// daily-habit primitive. From any screen, 1 tap to log. Reduces
-// friction from ~5 taps (open chat → keyboard → type → send) to 2.
-function InputFAB() {
-  // Position state — bottom-right by default. Persisted to localStorage
-  // so the user's choice survives sessions.
+// Position persists across sessions via localStorage. Drops where
+// released (no edge snap — user feels in control). Clamped to viewport
+// so it can't disappear off-screen.
+//
+// Tap-vs-drag: detected via threshold (6px movement = drag, else tap).
+// Tap opens InputModal (which sends text directly to bot, no chat
+// hop needed). Drag repositions.
+function InputFAB(props) {
+  var onPick = props.onPick || function() {};
+  // Position state — bottom-right by default. Persisted to localStorage.
+  // Account for tab bar (~78px) when computing default Y.
   var initial = (function() {
     try {
       var raw = localStorage.getItem("fabPos");
@@ -1734,38 +2007,37 @@ function InputFAB() {
         if (typeof p.x === "number" && typeof p.y === "number") return p;
       }
     } catch {}
-    return { x: window.innerWidth - 80, y: window.innerHeight - 120 };
+    return { x: window.innerWidth - 76, y: window.innerHeight - 170 };
   })();
   var posState = useState(initial);
   var pos = posState[0], setPos = posState[1];
   var openState = useState(false);
   var open = openState[0], setOpen = openState[1];
+  var pressedState = useState(false);
+  var pressed = pressedState[0], setPressed = pressedState[1];
   var draggingState = useState(false);
   var dragging = draggingState[0], setDragging = draggingState[1];
 
-  // Drag refs — track start position + offset to keep finger anchored.
   var dragRef = useRef({ active: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0, moved: false });
 
-  // Persist position when it stabilizes (after a drag).
+  // Persist when position stabilizes.
   useEffect(function() {
     try { localStorage.setItem("fabPos", JSON.stringify(pos)); } catch {}
   }, [pos.x, pos.y]);
 
-  function snapToEdge(x) {
-    var midX = window.innerWidth / 2;
-    var fabSize = 56;
-    var pad = 16;
-    return x < midX ? pad : window.innerWidth - fabSize - pad;
-  }
-
-  function clampY(y) {
-    var fabSize = 56;
-    var pad = 80;
-    var maxY = window.innerHeight - fabSize - pad;
-    var minY = pad;
-    if (y < minY) return minY;
-    if (y > maxY) return maxY;
-    return y;
+  // Clamp to visible viewport with sensible insets. NO edge snap —
+  // drop where released (user feels in control). Just protect from
+  // going off-screen.
+  function clampPos(x, y) {
+    var fabSize = 60;
+    var padX = 8;
+    var padTop = 16;
+    var padBottom = 88; // above tab bar + a touch of breathing room
+    var maxX = window.innerWidth - fabSize - padX;
+    var maxY = window.innerHeight - fabSize - padBottom;
+    var clampedX = x < padX ? padX : (x > maxX ? maxX : x);
+    var clampedY = y < padTop ? padTop : (y > maxY ? maxY : y);
+    return { x: clampedX, y: clampedY };
   }
 
   function onDragStart(e) {
@@ -1776,7 +2048,7 @@ function InputFAB() {
       offsetX: touch.clientX - pos.x, offsetY: touch.clientY - pos.y,
       moved: false,
     };
-    // Don't open the panel mid-drag. Close if open.
+    setPressed(true);
     if (open) setOpen(false);
   }
 
@@ -1788,12 +2060,12 @@ function InputFAB() {
     if (dx + dy > 6) {
       dragRef.current.moved = true;
       setDragging(true);
+      setPressed(false);
     }
     if (dragRef.current.moved) {
-      setPos({
-        x: touch.clientX - dragRef.current.offsetX,
-        y: clampY(touch.clientY - dragRef.current.offsetY),
-      });
+      var rawX = touch.clientX - dragRef.current.offsetX;
+      var rawY = touch.clientY - dragRef.current.offsetY;
+      setPos(clampPos(rawX, rawY));
       e.preventDefault();
     }
   }
@@ -1801,78 +2073,77 @@ function InputFAB() {
   function onDragEnd() {
     var wasMoved = dragRef.current.moved;
     dragRef.current.active = false;
+    setPressed(false);
     if (wasMoved) {
-      // Snap to nearest edge with spring-y transition.
-      setPos(function(p) { return { x: snapToEdge(p.x), y: clampY(p.y) }; });
-      setTimeout(function() { setDragging(false); }, 220);
+      // Drop where released. No edge snap. Just clamp to viewport.
+      setPos(function(p) { return clampPos(p.x, p.y); });
+      setTimeout(function() { setDragging(false); }, 180);
     } else {
-      // Tap — toggle the radial menu.
       setDragging(false);
       tapHaptic && tapHaptic();
       setOpen(function(v) { return !v; });
     }
   }
 
-  // Sub-button action: haptic + close Mini App so the user lands in
-  // Telegram chat ready to send. We can't send a message on the
-  // user's behalf from a Mini App (security), but closing the panel
-  // and bringing them to the chat is one-tap-to-input.
-  function pickInput(_kind) {
+  function pickInput(kind) {
     tapHaptic && tapHaptic();
     setOpen(false);
-    try {
-      if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.close === "function") {
-        window.Telegram.WebApp.close();
-      }
-    } catch {}
+    onPick(kind);
   }
 
-  // Render. Three pieces:
-  //   1. Backdrop dimmer (fade in/out) — taps elsewhere close panel
-  //   2. Sub-buttons (animated radial expand)
-  //   3. Main FAB circle
-  var fabSize = 56;
-  var leftSide = pos.x < window.innerWidth / 2;
-  // Sub-buttons line up vertically above the FAB.
+  var fabSize = 60;
+  // Sub-buttons line up vertically above the FAB, anchored on the
+  // FAB's center. Each sub has a subtle tint hint of its role.
   var subs = [
-    { icon: "🎤", label: "Voice", kind: "voice" },
-    { icon: "📷", label: "Photo", kind: "photo" },
-    { icon: "✍️", label: "Type",  kind: "text" },
+    { icon: "🎤", label: "Voice", kind: "voice", tint: "rgba(79,184,136,0.18)" },
+    { icon: "📷", label: "Photo", kind: "photo", tint: "rgba(240,160,80,0.18)" },
+    { icon: "✍️", label: "Type",  kind: "text",  tint: "rgba(255,255,255,0.06)" },
   ];
+
+  // FAB visual — soft cream gradient + green-tinted shadow.
+  var fabBg = "linear-gradient(145deg, #FAF7F2 0%, #EFEAE2 100%)";
+  var fabShadow = open
+    ? "0 12px 32px rgba(79,184,136,0.35), 0 4px 12px rgba(0,0,0,0.35)"
+    : "0 8px 22px rgba(79,184,136,0.22), 0 3px 10px rgba(0,0,0,0.4)";
+  var fabTransform = pressed ? "scale(0.94)" : (open ? "rotate(-15deg) scale(1.05)" : "rotate(0deg) scale(1)");
+
   return h("div", null,
-    // Backdrop
+    // Backdrop dimmer when open
     open ? h("div", {
       onClick: function() { setOpen(false); },
       style: {
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
         zIndex: 998,
-        animation: "fadeIn 150ms ease",
+        animation: "fadeIn 200ms ease",
       },
     }) : null,
-    // Sub-buttons
+    // Sub-buttons — vertically stacked above the FAB
     open ? subs.map(function(s, i) {
-      var offset = (i + 1) * 64;
+      var offset = (i + 1) * 70;
       return h("div", {
         key: s.kind,
         onClick: function() { pickInput(s.kind); },
         style: {
           position: "fixed",
-          left: pos.x + "px",
+          left: (pos.x + (fabSize - 56) / 2) + "px",
           top: (pos.y - offset) + "px",
-          width: fabSize, height: fabSize, borderRadius: "50%",
-          background: C.card, border: "1px solid " + C.border,
+          width: 56, height: 56, borderRadius: "50%",
+          background: "linear-gradient(145deg, " + s.tint + ", rgba(23,23,23,0.94))",
+          border: "1px solid rgba(255,255,255,0.08)",
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
           fontSize: 20, color: C.text,
           zIndex: 999, cursor: "pointer",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-          animation: "fabIn " + (180 + i * 40) + "ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+          boxShadow: "0 6px 18px rgba(0,0,0,0.5)",
+          animation: "fabIn " + (220 + i * 50) + "ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
         },
       },
-        h("span", null, s.icon),
-        h("span", { style: { fontSize: 8, color: C.muted, marginTop: 2, letterSpacing: "0.04em", textTransform: "uppercase" } }, s.label)
+        h("span", { style: { lineHeight: 1 } }, s.icon),
+        h("span", { style: { fontSize: 8, color: C.muted, marginTop: 3, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 } }, s.label)
       );
     }) : null,
-    // Main FAB
+    // Main FAB — "S" mark, Lora serif, premium polish
     h("div", {
       onMouseDown: onDragStart, onMouseMove: onDragMove, onMouseUp: onDragEnd, onMouseLeave: onDragEnd,
       onTouchStart: onDragStart, onTouchMove: onDragMove, onTouchEnd: onDragEnd,
@@ -1880,17 +2151,235 @@ function InputFAB() {
         position: "fixed",
         left: pos.x + "px", top: pos.y + "px",
         width: fabSize, height: fabSize, borderRadius: "50%",
-        background: C.text, color: "#0F0F0F",
+        background: fabBg,
+        color: "#0F0F0F",
         display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 26, fontWeight: 400,
+        fontSize: 30, fontFamily: "'Lora',serif", fontWeight: 500,
         cursor: dragging ? "grabbing" : "pointer",
         zIndex: 1000,
-        boxShadow: "0 6px 16px rgba(0,0,0,0.45)",
+        boxShadow: fabShadow,
         userSelect: "none", touchAction: "none",
-        transition: dragging ? "none" : "left 220ms cubic-bezier(0.34, 1.56, 0.64, 1), top 220ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 150ms ease",
-        transform: open ? "rotate(45deg) scale(1.08)" : "rotate(0deg) scale(1)",
+        transition: dragging
+          ? "transform 80ms ease, box-shadow 200ms ease"
+          : "left 240ms cubic-bezier(0.34, 1.56, 0.64, 1), top 240ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 220ms ease",
+        transform: fabTransform,
+        letterSpacing: "-0.02em",
       },
-    }, "+")
+    }, "S")
+  );
+}
+
+// ── INPUT MODAL ──────────────────────────────────────────────
+// Premium in-app text input. User types naturally ("$30 coffee at
+// Lighthouse"), modal POSTs to /api/v5/parse, server runs the same
+// pipeline as Telegram (AI parse + currency conversion + validation),
+// returns a proposal. Modal renders a confirm card in the SAME app —
+// user taps Yes → POST /api/v5/apply → state updates → modal closes.
+//
+// This is the standalone-app primitive: no chat hop, full input cycle
+// inside the Mini App. Voice/photo are deferred (Web Speech API +
+// multipart upload — separate ship).
+function InputModal(props) {
+  var sid = props.sid;
+  var inputState = useState("");
+  var input = inputState[0], setInput = inputState[1];
+  var loadingState = useState(false);
+  var loading = loadingState[0], setLoading = loadingState[1];
+  var resultState = useState(null);
+  var result = resultState[0], setResult = resultState[1];
+  var errorState = useState("");
+  var error = errorState[0], setError = errorState[1];
+  var applyingState = useState(false);
+  var applying = applyingState[0], setApplying = applyingState[1];
+
+  // ESC closes when not actively applying.
+  useEffect(function() {
+    function onKey(e) { if (e.key === "Escape" && !applying) props.onClose(); }
+    document.addEventListener("keydown", onKey);
+    return function() { document.removeEventListener("keydown", onKey); };
+  }, [applying]);
+
+  function submit() {
+    var text = input.trim();
+    if (!text || loading) return;
+    setLoading(true); setError(""); setResult(null);
+    fetch(API_BASE + "/api/v5/parse/" + sid, {
+      method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+      body: JSON.stringify({ text: text }),
+    })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, body: d }; }); })
+      .then(function(res) {
+        if (!res.ok) { setError(res.body && res.body.error || "Something went wrong."); return; }
+        setResult(res.body);
+      })
+      .catch(function(e) { setError(e.message); })
+      .then(function() { setLoading(false); });
+  }
+
+  function applyIntent() {
+    if (!result || !result.intent || applying) return;
+    setApplying(true); setError("");
+    fetch(API_BASE + "/api/v5/apply/" + sid, {
+      method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+      body: JSON.stringify({ intent: result.intent, intents: result.intents }),
+    })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, body: d }; }); })
+      .then(function(res) {
+        if (!res.ok || !(res.body && res.body.ok)) {
+          setError((res.body && res.body.error) || "Couldn't apply.");
+          setApplying(false);
+          return;
+        }
+        tapHaptic && tapHaptic();
+        props.onApplied();
+      })
+      .catch(function(e) { setError(e.message); setApplying(false); });
+  }
+
+  // Render branches: input (initial) → loading → result (confirm) → error
+  var body;
+  if (result && (result.intent || (result.intents && result.intents.length))) {
+    // Confirm card — show the parsed intent(s) before applying
+    var intents = result.intents || [result.intent];
+    body = h("div", null,
+      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 12 } }, "Ready to log"),
+      h("div", { style: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 } },
+        intents.map(function(it, i) {
+          var p = (it && it.params) || {};
+          var desc = "";
+          if (it.kind === "record_spend") {
+            desc = "Spend ";
+            if (p.originalCurrency && p.originalAmount) {
+              desc += p.originalAmount + " " + p.originalCurrency;
+            } else if (typeof p.amountCents === "number") {
+              desc += "$" + (p.amountCents / 100).toFixed(2);
+            }
+            if (p.vendor) desc += " · " + p.vendor;
+            if (p.note && p.note !== p.vendor) desc += " — " + p.note;
+            if (p.category) desc += " #" + p.category;
+          } else if (it.kind === "record_income") {
+            desc = "Income ";
+            if (typeof p.amountCents === "number") desc += "$" + (p.amountCents / 100).toFixed(2);
+            if (p.note) desc += " · " + p.note;
+          } else if (it.kind === "add_bill") {
+            desc = "Add bill " + (p.name || "") + " · $" + ((p.amountCents || 0) / 100).toFixed(2);
+          } else {
+            desc = it.kind;
+          }
+          return h("div", {
+            key: i,
+            style: { padding: "12px 14px", background: C.card, border: "1px solid " + C.border, borderRadius: 10, fontSize: 13, color: C.text },
+          }, desc);
+        })
+      ),
+      result.message
+        ? h("div", { style: { fontSize: 11, color: C.muted, marginBottom: 16, lineHeight: 1.5 } }, result.message)
+        : null,
+      h("div", { style: { display: "flex", gap: 10 } },
+        h("button", {
+          onClick: function() { setResult(null); setInput(""); },
+          disabled: applying,
+          style: {
+            flex: 1, padding: "12px", background: "transparent", border: "1px solid " + C.border,
+            borderRadius: 10, color: C.sub, fontSize: 13, fontFamily: "'Inter',sans-serif",
+            cursor: "pointer", opacity: applying ? 0.5 : 1,
+          },
+        }, "Cancel"),
+        h("button", {
+          onClick: applyIntent,
+          disabled: applying,
+          style: {
+            flex: 2, padding: "12px", background: C.text, border: "none",
+            borderRadius: 10, color: "#0F0F0F", fontSize: 13, fontWeight: 600,
+            fontFamily: "'Inter',sans-serif",
+            cursor: applying ? "default" : "pointer",
+            opacity: applying ? 0.6 : 1,
+            transition: "opacity 180ms ease",
+          },
+        }, applying ? "Logging…" : "Yes, log it")
+      )
+    );
+  } else if (result && result.kind === "talk") {
+    // Bot replied conversationally (e.g., couldn't parse, asked a question)
+    body = h("div", null,
+      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 12 } }, "Bot says"),
+      h("div", { style: { fontSize: 14, color: C.text, marginBottom: 18, lineHeight: 1.5 } }, result.message || "Hmm, didn't catch that."),
+      h("button", {
+        onClick: function() { setResult(null); setInput(""); },
+        style: {
+          width: "100%", padding: "12px", background: C.text, border: "none",
+          borderRadius: 10, color: "#0F0F0F", fontSize: 13, fontWeight: 600, cursor: "pointer",
+        },
+      }, "Try again")
+    );
+  } else {
+    body = h("div", null,
+      h("div", { style: { fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 12 } }, "Log a spend"),
+      h("textarea", {
+        value: input,
+        autoFocus: true,
+        onChange: function(e) { setInput(e.target.value); },
+        onKeyDown: function(e) {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
+        },
+        placeholder: "e.g. \"$30 coffee at Lighthouse\" — or ask \"how much on food this month?\"",
+        rows: 3,
+        style: {
+          width: "100%", boxSizing: "border-box",
+          background: C.card, border: "1px solid " + C.border, borderRadius: 10,
+          color: C.text, padding: "12px 14px",
+          fontSize: 14, fontFamily: "'Inter',sans-serif", lineHeight: 1.5,
+          outline: "none", resize: "none",
+          marginBottom: 12,
+        },
+      }),
+      h("div", { style: { fontSize: 10, color: C.muted, marginBottom: 16, letterSpacing: "0.02em" } },
+        "Type a spend, an income, or ask a question. ⌘+Enter to submit."
+      ),
+      h("button", {
+        onClick: submit,
+        disabled: !input.trim() || loading,
+        style: {
+          width: "100%", padding: "13px", background: C.text, border: "none",
+          borderRadius: 10, color: "#0F0F0F", fontSize: 13, fontWeight: 600,
+          fontFamily: "'Inter',sans-serif",
+          cursor: !input.trim() || loading ? "default" : "pointer",
+          opacity: !input.trim() || loading ? 0.45 : 1,
+          transition: "opacity 180ms ease",
+        },
+      }, loading ? "Thinking…" : "Send")
+    );
+  }
+
+  return h("div", {
+    onClick: function(e) { if (e.target === e.currentTarget && !applying) props.onClose(); },
+    style: {
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)",
+      zIndex: 1100,
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      animation: "fadeIn 200ms ease",
+    },
+  },
+    h("div", {
+      onClick: function(e) { e.stopPropagation(); },
+      style: {
+        background: "#1a1a1a",
+        borderTopLeftRadius: 22, borderTopRightRadius: 22,
+        width: "100%", maxWidth: 520,
+        padding: "22px 22px 32px",
+        boxShadow: "0 -12px 50px rgba(0,0,0,0.6)",
+        animation: "modalIn 320ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+      },
+    },
+      // Drag handle (visual)
+      h("div", {
+        style: { width: 38, height: 4, background: "rgba(255,255,255,0.18)", borderRadius: 2, margin: "0 auto 18px" },
+      }),
+      error
+        ? h("div", { style: { padding: "10px 12px", marginBottom: 12, background: "rgba(228,86,86,0.12)", border: "1px solid rgba(228,86,86,0.3)", borderRadius: 8, fontSize: 12, color: C.red } }, error)
+        : null,
+      body
+    )
   );
 }
 

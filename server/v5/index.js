@@ -421,6 +421,70 @@ app.post("/api/v5/action/:sid", requireTelegramAuth, async (req, res) => {
   }
 });
 
+// /api/v5/parse — Mini App's in-app input. Takes raw user text, runs
+// the SAME pipeline as a Telegram message would, returns the proposal
+// (do/talk/decision) so the Mini App can render its own confirm card.
+// This is the standalone-app input primitive: no chat hop required.
+app.post("/api/v5/parse/:sid", requireTelegramAuth, async (req, res) => {
+  try {
+    const text = String(req.body && req.body.text || "").trim();
+    if (!text) return res.status(400).json({ error: "Need text." });
+    if (text.length > 2000) return res.status(400).json({ error: "Too long." });
+    const u = await db.resolveUser(prisma, req.params.sid);
+    const state = await db.loadState(prisma, u.id);
+    const { processMessage } = require("./pipeline");
+    const result = await processMessage(state, text, [], { _debugUserId: u.telegramId || u.id });
+    // Pass through whatever the pipeline returns. Mini App's InputModal
+    // knows how to render each kind (do, do_batch, talk, decision).
+    res.json(result);
+  } catch (e) {
+    console.error("[v5 parse]", e);
+    res.status(500).json({ error: "Internal" });
+  }
+});
+
+// /api/v5/apply — apply a confirmed intent (or array of intents) from
+// the Mini App. Same validate+apply path as the Telegram confirm-yes
+// callback, just exposed via HTTP. Multi-intent batches handled.
+app.post("/api/v5/apply/:sid", requireTelegramAuth, async (req, res) => {
+  try {
+    const intent = req.body && req.body.intent;
+    const intents = req.body && req.body.intents;
+    const list = Array.isArray(intents) && intents.length > 0 ? intents : (intent ? [intent] : []);
+    if (list.length === 0) return res.status(400).json({ error: "No intent provided." });
+    const u = await db.resolveUser(prisma, req.params.sid);
+    let result;
+    await db.withUserLock(u.id, async () => {
+      let state = await db.loadState(prisma, u.id);
+      const todayStr = m.today(state.timezone || "UTC");
+      const applied = [];
+      const failed = [];
+      for (const it of list) {
+        const verdict = validateIntent(state, it, todayStr);
+        if (!verdict.ok) { failed.push({ intent: it, reason: verdict.reason }); continue; }
+        try {
+          const r = applyIntent(state, it);
+          state = r.state;
+          applied.push(it);
+        } catch (e) {
+          failed.push({ intent: it, reason: e.message });
+        }
+      }
+      if (applied.length > 0) await db.saveState(prisma, u.id, state);
+      result = {
+        ok: applied.length > 0,
+        applied: applied.length,
+        failed: failed.length ? failed.map(f => f.reason) : undefined,
+        view: compute(state),
+      };
+    });
+    res.json(result);
+  } catch (e) {
+    console.error("[v5 apply]", e);
+    res.status(500).json({ error: "Internal" });
+  }
+});
+
 app.get("/api/v5/simulate/:sid", requireTelegramAuth, async (req, res) => {
   try {
     const amt = Math.round(Number(req.query.amountCents));
@@ -603,6 +667,7 @@ async function start() {
       await bot.api.setMyCommands([
         { command: "start", description: "Start or check status" },
         { command: "today", description: "Today's hero line" },
+        { command: "help",  description: "What I can do — examples" },
         { command: "undo",  description: "Undo last action" },
         { command: "app",   description: "Open the dashboard" },
         { command: "reset", description: "Wipe everything and start over" },
