@@ -380,6 +380,75 @@ function detectSilentLie(proposal, lang) {
 }
 
 
+// ── STATUS-CHECK DETECTION (deterministic, no AI) ──────────
+// The user-most-common question — "what's available today?" / "how
+// am I doing?" / "where am I at?" — has a DETERMINISTIC answer (the
+// canonical daily snapshot from state). No AI judgment needed.
+//
+// This was a real failure mode: the user asked "what's available
+// today?" and the AI quoted disposable (cycle-level) instead of
+// today's-left (daily). Wrong dimension. Bot looked dumb.
+//
+// Fix: pattern-match the most common status phrasings BEFORE the AI
+// call. Skip the AI entirely. Bot renders the snapshot from state.
+//   - Zero hallucination risk
+//   - Zero AI cost / latency
+//   - Works when AI is down
+//   - Same canonical output every time
+//
+// Patterns are TIGHT — anchored to the FULL trimmed message so we
+// don't fire on "I spent 5 today" or "what's available in the food
+// budget" (which would belong to the AI). Status questions are
+// short and lack additional context.
+//
+// Locale-aware: covers EN + RU phrasings. AI prompt has a safety
+// net (Layer 1) for phrasings the regex misses.
+const STATUS_PATTERNS_EN = [
+  /^(how('m| am) i doing|how am i looking|how do i look)$/,
+  /^(where('m| am) i (at|right now)?|where do i stand)$/,
+  /^(what'?s? (the |my )?(status|picture|number|numbers))$/,
+  /^(what'?s? available( today)?)$/,
+  /^(available today)$/,
+  /^(show me (today|the picture|my numbers|the numbers))$/,
+  /^(my (status|numbers|picture))$/,
+  /^(today'?s? (number|situation|status|picture))$/,
+  /^(today)$/,
+  /^(status)$/,
+  /^(how much (do i have|can i spend) (today|right now)?)$/,
+  /^(how am i)$/,
+  /^(check in)$/,
+  /^(give me the picture)$/,
+  /^(tell me where i'?m at)$/,
+];
+const STATUS_PATTERNS_RU = [
+  /^(как дела(?: с деньгами)?)$/,
+  /^(как я( сегодня)?)$/,
+  /^(как у меня дела)$/,
+  /^(что у меня (сегодня|сейчас))$/,
+  /^(что доступно( сегодня)?)$/,
+  /^(доступно сегодня)$/,
+  /^(сколько у меня (сегодня|сейчас))$/,
+  /^(сколько (я )?(могу )?потратить сегодня)$/,
+  /^(мо[яй] (картина|статус|числа|число))$/,
+  /^(мои числа)$/,
+  /^(мой статус)$/,
+  /^(статус)$/,
+  /^(сегодня)$/,
+  /^(где я( сейчас)?)$/,
+  /^(покажи (сегодня|мои числа|картину|статус))$/,
+  /^(моё число (сегодня)?)$/,
+];
+function isStatusQuestion(text, lang) {
+  if (!text || typeof text !== "string") return false;
+  const t = text.trim().toLowerCase().replace(/[?!.,]+$/, "").replace(/\s+/g, " ");
+  // Length gate: status questions are short. >80 chars likely something else.
+  if (t.length < 3 || t.length > 80) return false;
+  const patterns = lang === "ru"
+    ? [...STATUS_PATTERNS_RU, ...STATUS_PATTERNS_EN]
+    : [...STATUS_PATTERNS_EN, ...STATUS_PATTERNS_RU];
+  return patterns.some(rx => rx.test(t));
+}
+
 async function processMessage(state, userMessage, history, options) {
   // ── PHASE 1: deterministic onboarding while !setup ──
   if (!state || !state.setup) {
@@ -393,6 +462,13 @@ async function processMessage(state, userMessage, history, options) {
       clearDraft: !!decision.clearDraft,
       done: !!decision.done,
     };
+  }
+
+  // ── PHASE 1.5: status check — short-circuit before AI ──
+  // Most-asked question on the bot; deterministic answer; no AI call.
+  // Failsafe: works when OpenAI is down / out of quota.
+  if (isStatusQuestion(userMessage, state.language)) {
+    return { kind: "status" };
   }
 
   // ── PHASE 2: AI for everything else ──
@@ -674,4 +750,5 @@ module.exports = {
   deriveCommitmentName,
   buildCommitmentBatch,
   userMessageMentionsDate,
+  isStatusQuestion,
 };

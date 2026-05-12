@@ -182,6 +182,87 @@ function heroLineWithInsight(state, lang) {
   return insight ? base + "\n" + insight : base;
 }
 
+// ── STATUS SNAPSHOT ─────────────────────────────────────────
+// The deterministic, brand-canonical answer to "what's available
+// today?" / "how am I doing?" / "where am I?". Multi-line, full
+// picture: today's-left as headline, pace + days/runway in the
+// middle, available + balance at the bottom as reference.
+//
+// Adapts to:
+//   - Paycheck users → "12d to payday"
+//   - Contractors    → "~50d runway"
+//   - Over-state     → headline flips to deficit
+//
+// No AI involved — pure render from state. Always honest, always
+// the same shape, zero hallucination risk. Failsafe when AI is down.
+function statusSnapshot(state, lang) {
+  const v = compute(state);
+  if (!v.setup) return "";
+  const L = (lang || state.language || "en") === "ru" ? "ru" : "en";
+  const sym = state.currencySymbol || "$";
+  const irregular = state.payFrequency === "irregular";
+
+  // OVER STATE: deficit is the headline. Same shape as the mini app hero.
+  if (v.status === "over") {
+    const balShort = m.toMoney(v.balanceCents, sym);
+    return L === "ru"
+      ? "🔴 *" + m.toMoney(v.deficitCents, sym) + "* перерасход в цикле\n" +
+        "_баланс " + balShort + " · " + v.daysToPayday + " дн до зарплаты_"
+      : "🔴 *" + m.toMoney(v.deficitCents, sym) + "* over for this cycle\n" +
+        "_balance " + balShort + " · " + v.daysToPayday + "d to payday_";
+  }
+
+  // CALM / TIGHT: today's-left is the headline.
+  const todayRem = v.dailyPaceCents - v.todaySpentCents;
+  const isOverToday = todayRem < 0;
+  const dot = v.status === "tight" ? "🟡" : (isOverToday ? "🟡" : "🟢");
+  const todayRemFmt = m.toMoney(todayRem, sym);
+  const paceFmt = v.dailyPaceFormatted;
+  const balanceFmt = v.balanceFormatted;
+  const availableFmt = v.disposableFormatted;
+  const hasBills = (v.obligatedCents || 0) > 0;
+
+  // Line 1: today's-left + label
+  const headline = L === "ru"
+    ? (isOverToday
+        ? dot + " *" + todayRemFmt + "* перерасход сегодня"
+        : dot + " *" + todayRemFmt + "* на сегодня")
+    : (isOverToday
+        ? dot + " *" + todayRemFmt + "* over today"
+        : dot + " *" + todayRemFmt + "* to spend today");
+
+  // Line 2: pace + days/runway
+  let line2;
+  if (irregular) {
+    const pace = v.dailyPaceCents || 0;
+    const disp = v.disposableCents || 0;
+    const runwayDays = (pace > 0 && disp > 0) ? Math.min(365, Math.floor(disp / pace)) : 0;
+    line2 = L === "ru"
+      ? paceFmt + "/день · хватит ещё на ~" + runwayDays + "д"
+      : paceFmt + "/day · ~" + runwayDays + "d runway";
+  } else {
+    line2 = L === "ru"
+      ? paceFmt + "/день · " + v.daysToPayday + "д до зарплаты"
+      : paceFmt + "/day · " + v.daysToPayday + "d to payday";
+  }
+
+  // Line 3: reference (smallest) — available + balance. Skip the
+  // "available" piece when balance == available (no bills) so the
+  // line isn't redundant.
+  let line3;
+  if (hasBills) {
+    line3 = L === "ru"
+      ? "_" + availableFmt + " доступно · " + balanceFmt + " на счёте_"
+      : "_" + availableFmt + " available · " + balanceFmt + " in account_";
+  } else {
+    line3 = L === "ru"
+      ? "_" + balanceFmt + " на счёте_"
+      : "_" + balanceFmt + " in account_";
+  }
+
+  return headline + "\n" + line2 + "\n" + line3;
+}
+
 // One-line status for chat replies. For irregular pay we DO NOT mention
 // "days to payday" — the user explicitly told us their pay is irregular,
 // so claiming 30 days is a lie. Show balance + daily pace based on a
@@ -422,4 +503,4 @@ function simulateAddBill(state, billParams) {
   };
 }
 
-module.exports = { compute, heroLine, heroLineWithInsight, heroInsight, simulateSpend, simulateAddBill, projectPaceImpact };
+module.exports = { compute, heroLine, heroLineWithInsight, heroInsight, statusSnapshot, simulateSpend, simulateAddBill, projectPaceImpact };

@@ -7,7 +7,7 @@ const OpenAI = require("openai");
 const { toFile } = require("openai/uploads");
 const m = require("./model");
 const { applyIntent } = require("./engine");
-const { compute, heroLine, heroLineWithInsight, simulateSpend } = require("./view");
+const { compute, heroLine, heroLineWithInsight, statusSnapshot, simulateSpend } = require("./view");
 const { processMessage } = require("./pipeline");
 const { M } = require("./messages");
 const db = require("./db");
@@ -805,6 +805,29 @@ async function processText(prisma, ctx, telegramId, text, options) {
       // this user's lock. (Re-entering the lock would deadlock.)
       if (result.done && state.setup && hasBrainDumpExtras(text)) {
         runBrainDumpTail = true;
+      }
+      return;
+    }
+
+    // ── STATUS SNAPSHOT (deterministic, no AI) ───
+    // Triggered by pipeline.isStatusQuestion when the user asks "what's
+    // available today" / "how am i doing" / "give me the picture" /
+    // similar. We render directly from state — failsafe, zero AI
+    // dependency, no hallucination risk. Same shape every time.
+    // Adapts to paycheck (shows days-to-payday) vs contractor (runway)
+    // vs over-state (deficit headline).
+    if (result.kind === "status") {
+      const snap = statusSnapshot(state, lang);
+      if (snap) {
+        await db.appendHistory(prisma, u.id, "assistant", snap);
+        await safeReply(ctx, snap, { parse_mode: "Markdown" });
+      } else {
+        // Pre-setup safety: shouldn't happen since pipeline guards on
+        // state.setup, but render a quiet nudge if it does.
+        await safeReply(ctx, lang === "ru"
+          ? "_Сначала настроим — какой баланс?_"
+          : "_Set up first — what's your balance?_",
+          { parse_mode: "Markdown" });
       }
       return;
     }
