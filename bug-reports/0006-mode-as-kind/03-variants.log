@@ -1,0 +1,119 @@
+{
+  "seed": "i just got a coffee and breakfast at plantiful 760thb",
+  "expected": [],
+  "count": 10,
+  "passed": 10,
+  "results": [
+    {
+      "variant": "Got coffee & breakfast at Plantiful, cost me 760 THB.",
+      "intents": [
+        "record_spend"
+      ],
+      "missing": [],
+      "extra": [
+        "record_spend"
+      ],
+      "pass": true
+    },
+    {
+      "variant": "I just had breakfast and coffee at Plantiful for 760 baht.",
+      "intents": [
+        "record_spend"
+      ],
+      "missing": [],
+      "extra": [
+        "record_spend"
+      ],
+      "pass": true
+    },
+    {
+      "variant": "Breakfast and coffee at Plantiful was 760 thb, just saying.",
+      "intents": [
+        "record_spend"
+      ],
+      "missing": [],
+      "extra": [
+        "record_spend"
+      ],
+      "pass": true
+    },
+    {
+      "variant": "So I grabbed a coffee and breakfast at this place Plantiful, it was 760 thaibht.",
+      "intents": [
+        "record_spend"
+      ],
+      "missing": [],
+      "extra": [
+        "record_spend"
+      ],
+      "pass": true
+    },
+    {
+      "variant": "Just spent 760 baht on breakfast and a coffee at Plantiful!",
+      "intents": [
+        "record_spend"
+      ],
+      "missing": [],
+      "extra": [
+        "record_spend"
+      ],
+      "pass": true
+    },
+    {
+      "variant": "Just a heads up, I got a coffee & breakfast this morning for 760 THB at Plantiful.",
+      "intents": [
+        "record_spend"
+      ],
+      "missing": [],
+      "extra": [
+        "record_spend"
+      ],
+      "pass": true
+    },
+    {
+      "variant": "Hey, had some breakfast with coffee at Plantiful, total was 760 baht.",
+      "intents": [
+        "record_spend"
+      ],
+      "missing": [],
+      "extra": [
+        "record_spend"
+      ],
+      "pass": true
+    },
+    {
+      "variant": "Ugh, just paid 760 for coffee and brekky at Plantiful.",
+      "intents": [
+        "record_spend"
+      ],
+      "missing": [],
+      "extra": [
+        "record_spend"
+      ],
+      "pass": true
+    },
+    {
+      "variant": "I spent 760 THB on coffee n breakfast today at Plantiful, not bad!",
+      "intents": [
+        "record_spend"
+      ],
+      "missing": [],
+      "extra": [
+        "record_spend"
+      ],
+      "pass": true
+    },
+    {
+      "variant": "Yo, just wanted to let you know I spent 760 baht on coffee & brekkie at Plantiful.",
+      "intents": [
+        "record_spend"
+      ],
+      "missing": [],
+      "extra": [
+        "record_spend"
+      ],
+      "pass": true
+    }
+  ],
+  "timestamp": "2026-05-12T02:55:44.190Z"
+}

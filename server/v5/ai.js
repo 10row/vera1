@@ -111,6 +111,21 @@ function buildSystemPrompt(state) {
     '   { "mode":"do",   "message":"reply text", "intents":[ {"kind":"...","params":{...}}, ... ] }              (brain-dump: 2-5 actions)',
     '   { "mode":"talk", "message":"reply text" }',
     '   { "mode":"ask_simulate", "message":"reply text", "amountCents":N, "note":"...", "vendor":"...", "category":"..." }',
+    "",
+    "★★★ SHAPE RULE — DO NOT COLLAPSE THE ENVELOPE ★★★",
+    "The `mode` field is ONE OF: \"do\" | \"talk\" | \"ask_simulate\". ONLY those values.",
+    "It is NEVER an intent kind. NEVER use `mode:\"record_spend\"` / `mode:\"add_bill\"` /",
+    "`mode:\"record_income\"` / `mode:\"adjust_balance\"` / etc. — those are intent KINDS,",
+    "they go inside `intent.kind`, NOT in `mode`.",
+    "",
+    "WRONG (collapses envelope):",
+    '   { "mode":"record_spend", "params":{"amountCents":2500,"note":"coffee"} }',
+    "RIGHT (envelope preserved):",
+    '   { "mode":"do", "message":"Logging coffee.", "intent":{"kind":"record_spend","params":{"amountCents":2500,"note":"coffee"}} }',
+    "",
+    "If you have an intent to emit: ALWAYS use `mode:\"do\"` and put the kind inside `intent.kind`.",
+    "If you just want to chat / answer a question: `mode:\"talk\"`.",
+    "If the user asked \"can I afford X?\": `mode:\"ask_simulate\"`.",
     "3. NEVER calculate. Quote numbers from STATE / DNA SUMMARY only. Don't add daily pace + days; that's the bot's job.",
     "4. EXTRACT EVERY ACTION the user mentions. If they brain-dump multiple things in one message (income + bill + budget) — including long voice notes with 8-10 figures — emit them all as an `intents` array (up to 10 items). Bot will show one combined confirm card with a single 'Yes, all N' button. NEVER drop intents on the floor — that's the worst failure mode. Prefer extracting all 9 over guessing which 5 are 'most important.'",
     "5. Keep replies SHORT — 1-2 sentences. No paragraphs.",
@@ -778,6 +793,57 @@ async function parseProposal(state, userMessage, history, options) {
 
   const message = typeof parsed.message === "string" ? parsed.message : "";
 
+  // ─── DEFENSIVE COERCION: mode-as-kind flub ───
+  // gpt-4o-mini occasionally collapses the envelope and puts the
+  // INTENT KIND into the `mode` field, like:
+  //   { mode: "record_spend", params: {...} }
+  // instead of the canonical:
+  //   { mode: "do", intent: { kind: "record_spend", params: {...} } }
+  //
+  // This is the same family as the dropped-params-wrapper bug we
+  // already defend against in normalizeIntent. We coerce ONLY when
+  // parsed.mode is a member of INTENT_KINDS (allow-list) and there
+  // isn't already a parsed.intent / parsed.intents (no conflict).
+  //
+  // Logged as a warning so /debug surfaces these — visible to us,
+  // doesn't silently hide the AI flub.
+  //
+  // Bug-report 0006-mode-as-kind. User-reported on a foreign-currency
+  // spend (760 THB → "Hmm, didn't catch that...").
+  if (
+    typeof parsed.mode === "string" &&
+    m.INTENT_KINDS.includes(parsed.mode) &&
+    !parsed.intent &&
+    !Array.isArray(parsed.intents)
+  ) {
+    const coercedKind = parsed.mode;
+    const coercedParams = (parsed.params && typeof parsed.params === "object" && !Array.isArray(parsed.params))
+      ? parsed.params
+      : (() => {
+          // No params block — lift non-envelope fields. Same defensive
+          // pattern as normalizeIntent.
+          const lifted = {};
+          for (const key of Object.keys(parsed)) {
+            if (key === "mode" || key === "message" || key === "kind") continue;
+            lifted[key] = parsed[key];
+          }
+          return lifted;
+        })();
+    if (opts._debugUserId != null) {
+      try {
+        require("./ai-debug").recordWarning(
+          opts._debugUserId,
+          "⚠ ai_shape_coerced: mode='" + coercedKind + "' → mode='do', intent.kind='" + coercedKind + "'"
+        );
+      } catch {}
+    }
+    parsed.mode = "do";
+    parsed.intent = { kind: coercedKind, params: coercedParams };
+    // Don't leave the lifted fields at top-level — confusing in
+    // downstream logs.
+    delete parsed.params;
+  }
+
   // ask_simulate: read-only "can I afford X" path.
   // Preserve note + vendor + category if the AI captured them — so if
   // the user taps [Log it] afterwards, the resulting record_spend
@@ -843,8 +909,8 @@ async function parseProposal(state, userMessage, history, options) {
   // retry.
   const ru = state.language === "ru";
   const fallback = ru
-    ? "Хм, не понял. Скажи иначе — например \"потратил 25 на кофе\" или \"удали кошку\"."
-    : "Hmm, didn't catch that. Try again — e.g. \"spent 25 on coffee\" or \"delete the cat\".";
+    ? "Хм, не понял. Скажи иначе — например *\"потратил 25 на кофе\"*, *\"добавь аренду 1200 1-го\"* или *\"отмени последнее\"*."
+    : "Hmm, didn't catch that. Try again — e.g. *\"spent 25 on coffee\"*, *\"add rent 1200 on the 1st\"*, or *\"undo last\"*.";
   return {
     mode: "talk",
     message: message && message.trim() && message.trim() !== "…" ? message : fallback,

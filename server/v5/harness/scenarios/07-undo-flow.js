@@ -6,8 +6,11 @@ module.exports = {
   steps: [
     { type: "text", text: "5000 paid the 25th" },
     { type: "text", text: "spent 80 on groceries" },
-    { type: "tap", match: /yes/i },
-    { type: "tap", match: /undo/i },
+    { type: "tap", match: /yes|log/i },
+    // Post-confirm card shows a text hint "_if this was a mistake,
+    // type /undo_" rather than an inline button (linear/wise/mercury
+    // tier — quiet UI, action via command). The scenario follows.
+    { type: "command", command: "undo" },
     { type: "command", command: "today" },
   ],
   expect: {

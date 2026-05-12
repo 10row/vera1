@@ -1,0 +1,45 @@
+{
+  "symptom": "i just got a coffee and breakfast at plantiful 760thb",
+  "lang": "en",
+  "setupSeeded": true,
+  "emittedIntents": [
+    {
+      "kind": "setup_account",
+      "params": {
+        "balanceCents": 50000,
+        "payday": "2026-06-11",
+        "payFrequency": "monthly"
+      }
+    }
+  ],
+  "finalState": {
+    "setup": true,
+    "balanceCents": 50000,
+    "bills": [],
+    "transactionCount": 1
+  },
+  "transcript": [
+    {
+      "ts": 1778554268644,
+      "dir": "→",
+      "kind": "text",
+      "text": "i just got a coffee and breakfast at plantiful 760thb",
+      "message_id": 1
+    },
+    {
+      "dir": "·",
+      "kind": "ai_raw",
+      "text": "{ \"mode\":\"record_spend\", \"params\":{\"amountCents\":0, \"originalAmount\":760, \"originalCurrency\":\"THB\", \"note\":\"coffee and breakfast at Plantiful\", \"category\":\"food\", \"vendor\":\"Plantiful\"} }"
+    },
+    {
+      "ts": 1778554272874,
+      "dir": "←",
+      "kind": "reply",
+      "text": "Hmm, didn't catch that. Try again — e.g. \"spent 25 on coffee\" or \"delete the cat\".",
+      "message_id": 2,
+      "parse_mode": "Markdown",
+      "inline_keyboard": null
+    }
+  ],
+  "timestamp": "2026-05-12T02:51:12.877Z"
+}
