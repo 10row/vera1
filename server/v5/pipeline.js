@@ -260,6 +260,200 @@ function userMentionsPastTime(text) {
   return r ? r.label : null;
 }
 
+// ── FORWARD-DATE RESOLVER ────────────────────────────────────
+// Sibling to resolveBackdateFromText. Used by the pendingDraft
+// mechanism: when the validator clarifies a missing dueDate and the
+// user replies "tomorrow" / "next friday" / "in 3 days" / "the 15th",
+// we resolve the phrase deterministically and merge into the pending
+// intent. No AI round-trip, failsafe.
+//
+// PRECISION OVER RECALL: only fires on unambiguous markers. Same
+// principle as the backdate resolver.
+const FORWARD_DATE_RESOLVERS = [
+  // MORE SPECIFIC FIRST: "day after tomorrow" must match before
+  // "tomorrow" (which would otherwise greedily catch the substring).
+  // English — day after tomorrow → today + 2
+  { rx: /\bday after tomorrow\b/i, offset: 2, label: "day after tomorrow" },
+  // English — tomorrow → today + 1
+  { rx: /^tomorrow$|\btomorrow\b/i, offset: 1, label: "tomorrow" },
+  // English — in N days
+  { rx: /\bin\s+(\d+)\s+days?\b/i, offsetFromMatch: m => parseInt(m[1], 10), label: "in N days" },
+  // English — in N weeks → today + N*7
+  { rx: /\bin\s+(\d+)\s+weeks?\b/i, offsetFromMatch: m => parseInt(m[1], 10) * 7, label: "in N weeks" },
+  // English — next week → today + 7
+  { rx: /\bnext\s+week\b/i, offset: 7, label: "next week" },
+  // English — next weekday → next occurrence of weekday after today
+  { rx: /\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i,
+    offsetFromMatch: (mm, todayStr) => offsetForNextWeekday(mm[1], todayStr), label: "next weekday" },
+  // English — bare weekday → next occurrence (including today only if explicit "this")
+  { rx: /\b(this\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+    offsetFromMatch: (mm, todayStr) => offsetForNextWeekday(mm[2], todayStr), label: "weekday" },
+  // English — "the 15th" / "the 1st" / "on the Nth"
+  { rx: /\b(?:on\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)?\b/i,
+    offsetFromMatch: (mm, todayStr) => offsetForDayOfMonth(parseInt(mm[1], 10), todayStr), label: "day of month" },
+  // Russian — завтра → today + 1
+  { rx: /(?:^|[^\p{L}])завтра(?=[^\p{L}]|$)/iu, offset: 1, label: "завтра" },
+  // Russian — послезавтра → today + 2
+  { rx: /(?:^|[^\p{L}])послезавтра(?=[^\p{L}]|$)/iu, offset: 2, label: "послезавтра" },
+  // Russian — через N дней / через неделю
+  { rx: /через\s+(\d+)\s+(?:дней|дня|день)/iu, offsetFromMatch: m => parseInt(m[1], 10), label: "через N дней" },
+  { rx: /через\s+неделю/iu, offset: 7, label: "через неделю" },
+  { rx: /через\s+(\d+)\s+недел[ьи]/iu, offsetFromMatch: m => parseInt(m[1], 10) * 7, label: "через N недель" },
+  // Russian — в понедельник / во вторник etc.
+  { rx: /\bв(?:о)?\s+(понедельник|вторник|сред[уy]|четверг|пятниц[уy]|суббот[уy]|воскресенье)\b/iu,
+    offsetFromMatch: (mm, todayStr) => offsetForNextWeekday(mapRuWeekday(mm[1]), todayStr), label: "RU weekday" },
+];
+
+const RU_WEEKDAYS = {
+  "понедельник": "monday", "вторник": "tuesday", "среду": "wednesday", "среды": "wednesday",
+  "четверг": "thursday", "пятницу": "friday", "пятницы": "friday",
+  "субботу": "saturday", "субботы": "saturday", "воскресенье": "sunday",
+};
+function mapRuWeekday(name) {
+  return RU_WEEKDAYS[name.toLowerCase()] || name;
+}
+function offsetForNextWeekday(name, todayStr) {
+  const target = WEEKDAY_INDEX[String(name || "").toLowerCase()];
+  if (target == null) return 0;
+  const today = new Date(todayStr + "T00:00:00Z");
+  const cur = today.getUTCDay();
+  // "next X" = next occurrence STRICTLY AFTER today. Same-day → 7 days forward.
+  let diff = target - cur;
+  if (diff <= 0) diff += 7;
+  return diff;
+}
+function offsetForDayOfMonth(day, todayStr) {
+  if (!Number.isInteger(day) || day < 1 || day > 31) return -1; // invalid
+  const today = new Date(todayStr + "T00:00:00Z");
+  const curDay = today.getUTCDate();
+  // "the 15th" in current month if not yet passed; else next month.
+  let target = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), day));
+  if (curDay >= day) {
+    target = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, day));
+  }
+  const todayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  return Math.round((target.getTime() - todayMs) / 86400000);
+}
+
+// resolveForwardDateFromText — returns { date, label } or null.
+function resolveForwardDateFromText(text, todayStr) {
+  if (!text || !todayStr) return null;
+  // ISO date passes through if valid + in future / today.
+  const iso = m.normalizeDate(String(text).trim());
+  if (iso && iso >= todayStr) return { date: iso, label: "iso" };
+  for (const r of FORWARD_DATE_RESOLVERS) {
+    const match = r.rx.exec(text);
+    if (!match) continue;
+    let offset;
+    if (typeof r.offset === "number") offset = r.offset;
+    else if (typeof r.offsetFromMatch === "function") offset = r.offsetFromMatch(match, todayStr);
+    if (!Number.isFinite(offset) || offset < 0) continue; // must be today or future
+    return { date: m.addDays(todayStr, offset), label: r.label };
+  }
+  return null;
+}
+
+// ── PENDING DRAFT — clarify-state across turns ────────────────
+// When validator emits a clarify ("when's it due?"), the pipeline now
+// persists the partial intent on state.pendingDraft. On the next turn,
+// PHASE 1.7 of processMessage tries to deterministically resolve the
+// missing field from the user's reply. If resolved, we merge and
+// re-validate — bypassing the AI entirely. If not resolved within the
+// expiry window or 3 turns, we give up and route normally.
+//
+// Bug-report: dry-cleaning loop (2026-05-13). User said "dry cleaning
+// 3150 thb tomorrow", AI dropped the date, bot asked "when?", user
+// said "tomorrow", AI couldn't reconstruct the bill from history,
+// asked again. The loop is fundamental — every clarify path had it.
+const PENDING_DRAFT_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const PENDING_DRAFT_MAX_TURNS = 3;
+
+function makePendingDraft(intent, missingField, now) {
+  const ts = (typeof now === "number" ? now : Date.now());
+  return {
+    intent,
+    missingField,
+    ts,
+    expiresAt: ts + PENDING_DRAFT_TTL_MS,
+    turnCount: 0,
+  };
+}
+
+// resolvePendingField — given a missing field name and the user's raw
+// reply, return the resolved value or null. Strict resolvers; ambiguous
+// inputs → null (fall through to AI).
+function resolvePendingField(field, text, state) {
+  const todayStr = m.today((state && state.timezone) || "UTC");
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return null;
+
+  if (field === "dueDate" || field === "expectedDate") {
+    const r = resolveForwardDateFromText(trimmed, todayStr);
+    return r ? r.date : null;
+  }
+  if (field === "amountCents") {
+    // Bare number "3150" or "3150 thb" or "$50" → cents. Use the
+    // currency parser if available; else simple float match.
+    try {
+      const ccy = require("./currency");
+      // parseAmount can handle "3150", "3150 thb", "$50", etc.
+      const parsed = ccy.parseAmount ? ccy.parseAmount(trimmed, (state && state.currency) || "USD") : null;
+      if (parsed && Number.isFinite(parsed.amountCents) && parsed.amountCents > 0) {
+        return parsed.amountCents;
+      }
+    } catch { /* fall through */ }
+    // Fallback: simple "<number>" parse, assume base currency dollars.
+    const numMatch = trimmed.match(/^[$€£¥₽฿]?\s*(\d+(?:[.,]\d{1,2})?)\s*$/);
+    if (numMatch) {
+      const dollars = parseFloat(numMatch[1].replace(",", "."));
+      if (Number.isFinite(dollars) && dollars > 0) {
+        return Math.round(dollars * 100);
+      }
+    }
+    return null;
+  }
+  if (field === "recurrence") {
+    const t2 = trimmed.toLowerCase();
+    if (/^(once|one[- ]?time|just once|разово|один раз|однократно)$/.test(t2)) return "once";
+    if (/^(monthly|every month|ежемесячно|каждый месяц)$/.test(t2)) return "monthly";
+    if (/^(weekly|every week|еженедельно|каждую неделю)$/.test(t2)) return "weekly";
+    if (/^(biweekly|every two weeks|every other week|раз в две недели|каждые две недели)$/.test(t2)) return "biweekly";
+    return null;
+  }
+  if (field === "name") {
+    // Reject pure numbers, very short / very long, "yes"/"no", commands.
+    if (/^\/|^(yes|no|ok|да|нет|сброс|cancel|stop)$/i.test(trimmed)) return null;
+    if (/^\d+(\.\d+)?$/.test(trimmed)) return null;
+    if (trimmed.length < 2 || trimmed.length > 60) return null;
+    return trimmed;
+  }
+  return null;
+}
+
+// tryResolvePending — examine state.pendingDraft against userMessage.
+// Returns:
+//   { resolved: { intent, missingField } } — pendingDraft was matched + merged
+//   { expired: true } — pendingDraft was too old or hit turn limit
+//   { miss: true } — pendingDraft alive but didn't match this turn
+//   null — no pendingDraft at all
+function tryResolvePending(state, userMessage, now) {
+  const pd = state && state.pendingDraft;
+  if (!pd || !pd.intent || !pd.missingField) return null;
+  const nowMs = (typeof now === "number" ? now : Date.now());
+  if (pd.expiresAt && nowMs >= pd.expiresAt) return { expired: true };
+  if (pd.turnCount != null && pd.turnCount >= PENDING_DRAFT_MAX_TURNS) return { expired: true };
+
+  const resolvedValue = resolvePendingField(pd.missingField, userMessage, state);
+  if (resolvedValue == null) return { miss: true };
+
+  // Merge into intent.params under the missing field name.
+  const mergedIntent = {
+    kind: pd.intent.kind,
+    params: Object.assign({}, pd.intent.params || {}, { [pd.missingField]: resolvedValue }),
+  };
+  return { resolved: { intent: mergedIntent, missingField: pd.missingField, resolvedValue } };
+}
+
 // ── PROMISE-ACTION CONSISTENCY ────────────────────────────────
 // THE silent-lie failure mode: AI's text says "I'll adjust your balance"
 // but no adjust_balance intent is emitted. Bot ships the promise, nothing
@@ -464,9 +658,66 @@ async function processMessage(state, userMessage, history, options) {
     };
   }
 
-  // ── PHASE 1.5: status check — short-circuit before AI ──
+  // ── PHASE 1.5: pending-draft resolution (clarify across turns) ──
+  // MUST run BEFORE the status check because date words like "today" /
+  // "tomorrow" would otherwise be caught as status questions. The user
+  // is actively answering a clarify, so resolution takes priority.
+  //
+  // If a previous turn emitted a clarify ("when's it due?"), state has
+  // a pendingDraft with the partial intent + missing field. Try to
+  // resolve the user's reply deterministically. On hit → merge →
+  // validate → emit result (NO AI call). On miss → fall through;
+  // increment turnCount or expire.
+  //
+  // Bug-report 0007: dry-cleaning loop. User said "tomorrow" repeatedly
+  // and the bot kept asking for a date because the AI couldn't
+  // reconstruct the bill from history. This fixes the root for ALL
+  // clarify paths (dueDate, amountCents, recurrence, name).
+  if (state.pendingDraft) {
+    const lang = state.language === "ru" ? "ru" : "en";
+    const resolution = tryResolvePending(state, userMessage, Date.now());
+    if (resolution && resolution.resolved) {
+      // Successful merge — clear pendingDraft and emit result.
+      state.pendingDraft = null;
+      const mergedIntent = resolution.resolved.intent;
+      const todayStr = m.today((state && state.timezone) || "UTC");
+      const verdict = validateIntent(state, mergedIntent, todayStr, lang);
+      if (verdict && !verdict.ok && verdict.clarify) {
+        // Still missing something else — set a fresh pendingDraft for the new field.
+        state.pendingDraft = makePendingDraft(mergedIntent, verdict.clarify.field, Date.now());
+        return {
+          kind: "clarify",
+          message: verdict.clarify.question,
+          field: verdict.clarify.field,
+          code: verdict.clarify.code,
+        };
+      }
+      return {
+        kind: "do",
+        message: verdict && verdict.ok
+          ? (lang === "ru" ? "Понял — подтверди:" : "Got it — confirm:")
+          : (lang === "ru" ? "Хм, не получилось:" : "Hmm, couldn't apply:"),
+        intent: mergedIntent,
+        verdict,
+      };
+    }
+    if (resolution && resolution.expired) {
+      // Too old / too many tries — clear it and fall through to normal AI.
+      state.pendingDraft = null;
+    } else if (resolution && resolution.miss) {
+      // Alive, didn't match — increment turn count, KEEP pendingDraft.
+      state.pendingDraft = Object.assign({}, state.pendingDraft, {
+        turnCount: (state.pendingDraft.turnCount || 0) + 1,
+      });
+      // Fall through to AI; user might be answering with extra context.
+    }
+  }
+
+  // ── PHASE 1.6: status check — short-circuit before AI ──
   // Most-asked question on the bot; deterministic answer; no AI call.
-  // Failsafe: works when OpenAI is down / out of quota.
+  // Failsafe: works when OpenAI is down / out of quota. Runs AFTER
+  // pendingDraft resolution so date words like "today" can complete a
+  // clarify before being interpreted as a status question.
   if (isStatusQuestion(userMessage, state.language)) {
     return { kind: "status" };
   }
@@ -656,7 +907,13 @@ async function processMessage(state, userMessage, history, options) {
     // required field. Forward as kind:"clarify" so the bot renders the
     // question as plain text — NO confirm buttons. The user supplies
     // the missing piece on their next turn.
+    //
+    // PERSIST pendingDraft: carry the partial intent + missing field
+    // across turns so PHASE 1.7 can deterministically resolve the next
+    // user reply ("tomorrow") without going back through the AI. Fixes
+    // the dry-cleaning loop bug at the architectural level.
     if (verdict && !verdict.ok && verdict.clarify) {
+      state.pendingDraft = makePendingDraft(proposal.intent, verdict.clarify.field, Date.now());
       return {
         kind: "clarify",
         message: verdict.clarify.question,
@@ -664,6 +921,8 @@ async function processMessage(state, userMessage, history, options) {
         code: verdict.clarify.code,
       };
     }
+    // Successful validation → user is no longer in a clarify flow.
+    state.pendingDraft = null;
     // COMMITMENT_CHOICE: only fires for valid record_spend that looks
     // like a planned commitment. Pre-validates BOTH options so we can
     // show two paths only when both will succeed (else fall back to
@@ -716,6 +975,12 @@ async function processMessage(state, userMessage, history, options) {
     }));
     const firstClarify = items.find(i => i.verdict && !i.verdict.ok && i.verdict.clarify);
     if (firstClarify) {
+      // PERSIST pendingDraft for the FIRST clarify only. After that
+      // batch item is resolved, the next turn re-runs the AI which
+      // re-emits the (now-larger) batch — including the resolved
+      // field. Multi-clarify within one batch isn't common enough to
+      // warrant per-item queues.
+      state.pendingDraft = makePendingDraft(firstClarify.intent, firstClarify.verdict.clarify.field, Date.now());
       return {
         kind: "clarify",
         message: firstClarify.verdict.clarify.question,
@@ -723,6 +988,7 @@ async function processMessage(state, userMessage, history, options) {
         code: firstClarify.verdict.clarify.code,
       };
     }
+    state.pendingDraft = null;
     return {
       kind: "do_batch",
       message: proposal.message,
@@ -751,4 +1017,8 @@ module.exports = {
   buildCommitmentBatch,
   userMessageMentionsDate,
   isStatusQuestion,
+  resolveForwardDateFromText,
+  resolvePendingField,
+  tryResolvePending,
+  makePendingDraft,
 };

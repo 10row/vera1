@@ -181,6 +181,7 @@ module.exports = {
   "miniapp.bills.due.overdue": "overdue",
   "miniapp.bills.due.inDays": "in {days} days",
   "miniapp.bills.due.noDate": "no date",
+  "miniapp.bills.due.paid": "paid",
   "miniapp.bills.markPaid": "✓ Mark paid",
   "miniapp.bills.confirmPay": "Pay {amount}?",
   "miniapp.bills.yesPaid": "Yes, paid",

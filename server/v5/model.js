@@ -233,6 +233,14 @@ function createFreshState() {
     transactions: [],   // { id, ts, kind, amountCents, note, billKey?, date }
     events: [],         // audit log: { id, ts, intent, prevBalance, newBalance, undid? }
     onboardingDraft: null, // { balanceCents? } during the deterministic flow
+    // Pending clarify draft — carries a partial intent across turns when
+    // the validator emits a clarify (e.g. add_bill missing dueDate). On
+    // the next turn, the pipeline tries to deterministically resolve the
+    // missing field from the user's reply and merge it back into the
+    // intent. Prevents the "AI must reconstruct full intent from chat
+    // history" failure mode (the dry-cleaning-loop bug).
+    //   shape: { intent, missingField, ts, expiresAt, turnCount }
+    pendingDraft: null,
     // Pending confirm tokens. Persisted with state so they survive
     // Railway redeploys (previously in-memory Map → restarted = wiped =
     // every in-flight confirm became "That confirm has expired"). Each

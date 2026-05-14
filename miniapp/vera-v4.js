@@ -230,12 +230,30 @@ function isRecent(ts, now) {
 }
 
 // Pretty due-date label, localized.
-function dueDateLabel(daysUntilDue) {
-  if (daysUntilDue == null) return t("miniapp.bills.due.noDate");
-  if (daysUntilDue < 0) return t("miniapp.bills.due.overdue");
-  if (daysUntilDue === 0) return t("miniapp.bills.due.today");
-  if (daysUntilDue === 1) return t("miniapp.bills.due.tomorrow");
-  return t("miniapp.bills.due.inDays", { days: daysUntilDue });
+//
+// SOURCE OF TRUTH: env.uiStatus computed in server/v5/index.js
+// computeBillUiStatus(). DO NOT reach into raw daysUntilDue — that
+// ignores paidThisCycle and led to the "paid bill still shows overdue"
+// bug. The status field collapses (paidThisCycle, daysUntilDue,
+// cycleStatus) into a single authoritative answer.
+function dueDateLabel(env) {
+  if (!env) return "";
+  var s = env.uiStatus;
+  if (s === "paid") return t("miniapp.bills.due.paid") || "paid";
+  if (s === "overdue") return t("miniapp.bills.due.overdue");
+  if (s === "due_today") return t("miniapp.bills.due.today");
+  if (s === "due_tomorrow") return t("miniapp.bills.due.tomorrow");
+  if (s === "next_cycle") {
+    // Quiet text — next-cycle bills show a separate chip in BillCard.
+    return env.daysUntilDue != null
+      ? t("miniapp.bills.due.inDays", { days: env.daysUntilDue })
+      : "";
+  }
+  // due_soon / upcoming → "in N days"
+  if (env.daysUntilDue != null && env.daysUntilDue >= 0) {
+    return t("miniapp.bills.due.inDays", { days: env.daysUntilDue });
+  }
+  return t("miniapp.bills.due.noDate");
 }
 
 // Format an arrival-date ISO string into "by Jul 15" style — bare date,
@@ -1010,14 +1028,19 @@ function FirstTimeCard(props) {
 
 // ── ANTICIPATION STRIP ─────────────────────────────────────
 // Above Today, shows the next 1-2 imminent obligations: "Coming up · X tomorrow · $1,000"
+//
+// FILTER: uiStatus ∈ {due_today, due_tomorrow, due_soon} ONLY.
+// A paid bill is uiStatus === "paid" — NEVER appears here even if its
+// raw daysUntilDue is still ≤ 7. (This was the dry-cleaning ghost-bill
+// bug: paid one-time bills kept showing in "coming up" because the
+// filter checked daysUntilDue alone.)
 function AnticipationStrip(props) {
   var bills = (props.envelopes || []).filter(function(e) {
-    return e.kind === "bill" && e.daysUntilDue != null
-      && e.daysUntilDue >= 0 && e.daysUntilDue <= 7
-      && e.amountCents > 0;
+    return e.kind === "bill" && e.amountCents > 0
+      && (e.uiStatus === "due_today" || e.uiStatus === "due_tomorrow" || e.uiStatus === "due_soon");
   });
   if (bills.length === 0) return null;
-  bills.sort(function(a, b) { return a.daysUntilDue - b.daysUntilDue; });
+  bills.sort(function(a, b) { return (a.daysUntilDue || 0) - (b.daysUntilDue || 0); });
   var top = bills.slice(0, 2);
   var sym = props.sym || "$";
 
@@ -1033,13 +1056,14 @@ function AnticipationStrip(props) {
         style: { fontSize: 10, color: C.sub, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 },
       }, t("miniapp.comingUp")),
       top.map(function(e) {
+        var isUrgent = (e.uiStatus === "due_today" || e.uiStatus === "due_tomorrow");
         return h("div", {
           key: e.key,
           style: { fontSize: 12, color: C.text, display: "inline-flex", gap: 6 },
         },
           h("span", { style: { color: C.text } }, e.name),
           h("span", { style: { color: C.muted } }, "·"),
-          h("span", { style: { color: e.daysUntilDue <= 1 ? C.amber : C.text } }, dueDateLabel(e.daysUntilDue)),
+          h("span", { style: { color: isUrgent ? C.amber : C.text } }, dueDateLabel(e)),
           h("span", { style: { color: C.muted } }, "·"),
           h("span", { style: { fontFamily: "'Lora',serif" } }, fmtMoney(e.amountCents, sym))
         );
@@ -1050,17 +1074,24 @@ function AnticipationStrip(props) {
 
 // ── DUE-NOW BANNER ─────────────────────────────────────────
 // Above Bills, only when something is overdue / today / tomorrow. Loud.
+//
+// FILTER: uiStatus ∈ {overdue, due_today, due_tomorrow} ONLY.
+// Paid bills never trigger the banner regardless of dueDate. The
+// canonical uiStatus collapses the (paidThisCycle, daysUntilDue) pair
+// into one authoritative value — no foot-gun recomputation.
 function DueBanner(props) {
   var bills = (props.envelopes || []).filter(function(e) {
-    return e.kind === "bill" && e.daysUntilDue != null && e.daysUntilDue <= 1;
+    return e.kind === "bill"
+      && (e.uiStatus === "overdue" || e.uiStatus === "due_today" || e.uiStatus === "due_tomorrow");
   });
   if (bills.length === 0) return null;
-  bills.sort(function(a, b) { return a.daysUntilDue - b.daysUntilDue; });
+  bills.sort(function(a, b) { return (a.daysUntilDue || 0) - (b.daysUntilDue || 0); });
   var first = bills[0];
-  var col = first.daysUntilDue < 0 ? C.red : C.amber;
-  var soft = first.daysUntilDue < 0 ? C.redSoft : C.amberSoft;
-  var icon = first.daysUntilDue < 0 ? "⚠️" : "⏰";
-  var label = dueDateLabel(first.daysUntilDue);
+  var isOverdue = first.uiStatus === "overdue";
+  var col = isOverdue ? C.red : C.amber;
+  var soft = isOverdue ? C.redSoft : C.amberSoft;
+  var icon = isOverdue ? "⚠️" : "⏰";
+  var label = dueDateLabel(first);
   var sym = props.sym || "$";
 
   return h("div", { style: { padding: "8px 16px 0" } },
@@ -1109,13 +1140,15 @@ function BillCard(props) {
   var sym = props.sym;
   var sid = props.sid;
   var onPaid = props.onPaid;
+  // Color comes from canonical uiStatus — no manual recompute. A paid
+  // bill ALWAYS renders calm (muted / green check) regardless of its
+  // stale dueDate.
   var col = C.text;
-  if (e.daysUntilDue != null) {
-    if (e.daysUntilDue < 0) col = C.red;
-    else if (e.daysUntilDue <= 1) col = C.amber;
-    else if (e.daysUntilDue <= 7) col = C.amber;
-  }
-  var label = dueDateLabel(e.daysUntilDue);
+  if (e.uiStatus === "paid") col = C.muted;
+  else if (e.uiStatus === "overdue") col = C.red;
+  else if (e.uiStatus === "due_today" || e.uiStatus === "due_tomorrow" || e.uiStatus === "due_soon") col = C.amber;
+  else if (e.uiStatus === "next_cycle") col = C.muted;
+  var label = dueDateLabel(e);
 
   // Two-tap confirm: tap shows confirm chip, second tap fires the action.
   var confirmState = useState(false);
@@ -1204,10 +1237,9 @@ function BillCard(props) {
                 },
               }, "one-time"),
           // "next cycle" chip — quiet pill marking bills due AFTER payday.
-          // The next paycheck handles them, so they're NOT in this cycle's
-          // engine reservation. Helps user understand why the daily pace
-          // doesn't reserve for them yet.
-          e.cycleStatus === "next" && !e.paidThisCycle ? h("span", {
+          // Drives off canonical uiStatus so paid bills never show the
+          // chip (uiStatus would be "paid", not "next_cycle").
+          e.uiStatus === "next_cycle" ? h("span", {
             style: {
               fontSize: 9, color: C.muted, padding: "2px 7px", borderRadius: 999,
               background: C.cardHi, fontWeight: 500, textTransform: "uppercase",
@@ -1647,9 +1679,11 @@ function TodayScreen(props) {
   var selectedDay = selectedDayState[0], setSelectedDay = selectedDayState[1];
   function handleSelectDay(d) { tapHaptic(); setSelectedDay(selectedDay === d ? null : d); }
 
-  // Bills due in next 7 days — quiet warning chip.
+  // Bills due in next 7 days — quiet warning chip. Read canonical
+  // uiStatus to avoid the foot-gun pattern (paid bills slipping through
+  // a daysUntilDue-only filter).
   var soonBills = bills.filter(function(b) {
-    return !b.paidThisCycle && b.daysUntilDue != null && b.daysUntilDue >= 0 && b.daysUntilDue <= 7;
+    return b.uiStatus === "due_today" || b.uiStatus === "due_tomorrow" || b.uiStatus === "due_soon";
   });
 
   return h("div", null,

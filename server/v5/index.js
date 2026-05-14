@@ -9,7 +9,7 @@ const { execSync } = require("child_process");
 
 const prisma = require("../db/client");
 const m = require("./model");
-const { compute, simulateSpend, heroLine, projectPaceImpact } = require("./view");
+const { compute, simulateSpend, heroLine, projectPaceImpact, computeBillUiStatus } = require("./view");
 const { applyIntent } = require("./engine");
 const { validateIntent } = require("./validator");
 const { M } = require("./messages");
@@ -168,6 +168,10 @@ app.get("/api/v5/metrics", function(_req, res) {
 });
 // Expose for other modules.
 module.exports.countEvent = countEvent;
+// Exported for tests + harness — the canonical bill UI status helper.
+module.exports.computeBillUiStatus = (b, daysUntilDue, cycleStatus) => computeBillUiStatus(b, daysUntilDue, cycleStatus);
+// Exported for harness/tests — full state-to-view translator.
+module.exports.v5ToV4View = (state) => v5ToV4View(state);
 
 // ── STATIC ────────────────────────────────────────
 app.use("/miniapp", express.static(path.join(__dirname, "../../miniapp")));
@@ -217,6 +221,7 @@ function v5ToV4View(state) {
         amountFormatted = ccy.fmt(fromSubunits, b.originalCurrency) + " ≈ " + m.toMoney(b.amountCents, sym);
       } catch { /* fall back to base-only */ }
     }
+    const daysUntilDue = m.daysBetween(todayStr, b.dueDate);
     return {
       key: m.billKey(b.name),
       name: b.name,
@@ -229,11 +234,13 @@ function v5ToV4View(state) {
       spentCents: 0,
       spentFormatted: m.toMoney(0, sym),
       dueDate: b.dueDate,
-      daysUntilDue: m.daysBetween(todayStr, b.dueDate),
+      daysUntilDue,
       recurrence: b.recurrence,
       paidThisCycle: !!b.paidThisCycle,
-      isDue: m.daysBetween(todayStr, b.dueDate) <= 1 && !b.paidThisCycle,
       cycleStatus,
+      // CANONICAL urgency field — every UI consumer reads this and ONLY
+      // this. See computeBillUiStatus above for status table.
+      uiStatus: computeBillUiStatus(b, daysUntilDue, cycleStatus),
       createdAt: b.createdAt,
     };
   });

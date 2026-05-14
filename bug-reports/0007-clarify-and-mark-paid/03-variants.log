@@ -1,0 +1,101 @@
+{
+  "seed": "dry cleaning to pay tomorrow morning its 3150 thb",
+  "expected": [
+    "add_bill"
+  ],
+  "count": 10,
+  "passed": 0,
+  "results": [
+    {
+      "variant": "just a quick heads up, I gotta pay for dry cleaning tomorrow morning, it's 3150 thb.",
+      "intents": [],
+      "missing": [
+        "add_bill"
+      ],
+      "extra": [],
+      "pass": false
+    },
+    {
+      "variant": "hey, so tomorrow morning I need to pay 3150 thb for dry cleaning.",
+      "intents": [],
+      "missing": [
+        "add_bill"
+      ],
+      "extra": [],
+      "pass": false
+    },
+    {
+      "variant": "don't forget, 3150 thb for dry cleaning is due tomorrow morning.",
+      "intents": [],
+      "missing": [
+        "add_bill"
+      ],
+      "extra": [],
+      "pass": false
+    },
+    {
+      "variant": "um, I'm paying for dry cleaning tomorrow morning, that’ll be, like, 3150 thb.",
+      "intents": [],
+      "missing": [
+        "add_bill"
+      ],
+      "extra": [],
+      "pass": false
+    },
+    {
+      "variant": "so, the dry cleaning payment is 3150 thb, and it's due tomorrow morning.",
+      "intents": [],
+      "missing": [
+        "add_bill"
+      ],
+      "extra": [],
+      "pass": false
+    },
+    {
+      "variant": "tomorrow morning, I have to pay 3150 thb for the dry cleaning service.",
+      "intents": [],
+      "missing": [
+        "add_bill"
+      ],
+      "extra": [],
+      "pass": false
+    },
+    {
+      "variant": "I'll need to make a payment of 3150 thb for dry cleaning tomorrow morning, okay?",
+      "intents": [],
+      "missing": [
+        "add_bill"
+      ],
+      "extra": [],
+      "pass": false
+    },
+    {
+      "variant": "dw, paying the dry cleaning bill of 3150 thb, it's for tomorrow morning.",
+      "intents": [],
+      "missing": [
+        "add_bill"
+      ],
+      "extra": [],
+      "pass": false
+    },
+    {
+      "variant": "hey, just a reminder, I have that dry cleaning to pay tomorrow morning; it's 3150 baht.",
+      "intents": [],
+      "missing": [
+        "add_bill"
+      ],
+      "extra": [],
+      "pass": false
+    },
+    {
+      "variant": "need to remember that there's a dry cleaning cost of 3150 thb to settle by tomorrow morning.",
+      "intents": [],
+      "missing": [
+        "add_bill"
+      ],
+      "extra": [],
+      "pass": false
+    }
+  ],
+  "timestamp": "2026-05-14T03:56:25.158Z"
+}

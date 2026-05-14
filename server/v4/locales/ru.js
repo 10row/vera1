@@ -177,6 +177,7 @@ module.exports = {
   "miniapp.bills.due.overdue": "просрочено",
   "miniapp.bills.due.inDays": "через {days} дн.",
   "miniapp.bills.due.noDate": "без даты",
+  "miniapp.bills.due.paid": "оплачено",
   "miniapp.bills.markPaid": "✓ Оплачено",
   "miniapp.bills.confirmPay": "Оплатить {amount}?",
   "miniapp.bills.yesPaid": "Да, оплачено",

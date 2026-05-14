@@ -503,4 +503,35 @@ function simulateAddBill(state, billParams) {
   };
 }
 
-module.exports = { compute, heroLine, heroLineWithInsight, heroInsight, statusSnapshot, simulateSpend, simulateAddBill, projectPaceImpact };
+// ── BILL UI STATUS — single source of truth for urgency ─────────
+// One canonical answer to "what should the UI show for this bill?".
+// Every mini app consumer reads this and ONLY this. Foot-gun-proof:
+// no consumer can recompute from (paidThisCycle, daysUntilDue,
+// cycleStatus) on its own and forget one of the inputs.
+//
+// Status table (highest urgency first):
+//   "paid"         — paidThisCycle=true (wins over EVERYTHING)
+//   "overdue"      — !paid && daysUntilDue < 0
+//   "due_today"    — !paid && daysUntilDue === 0
+//   "due_tomorrow" — !paid && daysUntilDue === 1
+//   "due_soon"     — !paid && 2 ≤ daysUntilDue ≤ 7 && cycle="this"
+//   "next_cycle"   — !paid && cycle="next"
+//   "upcoming"     — everything else (!paid, this cycle, ≥8 days out)
+//
+// Mini app filters (canonical):
+//   DueBanner       → {overdue, due_today, due_tomorrow}
+//   AnticipationStrip → {due_today, due_tomorrow, due_soon}
+//   Paid section    → {paid}
+//   Next cycle chip → {next_cycle}
+function computeBillUiStatus(b, daysUntilDue, cycleStatus) {
+  if (b && b.paidThisCycle) return "paid";
+  if (cycleStatus === "next") return "next_cycle";
+  if (daysUntilDue == null) return "upcoming";
+  if (daysUntilDue < 0) return "overdue";
+  if (daysUntilDue === 0) return "due_today";
+  if (daysUntilDue === 1) return "due_tomorrow";
+  if (daysUntilDue >= 2 && daysUntilDue <= 7) return "due_soon";
+  return "upcoming";
+}
+
+module.exports = { compute, heroLine, heroLineWithInsight, heroInsight, statusSnapshot, simulateSpend, simulateAddBill, projectPaceImpact, computeBillUiStatus };

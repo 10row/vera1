@@ -959,6 +959,11 @@ async function processText(prisma, ctx, telegramId, text, options) {
     // buttons by design.
     if (result.kind === "clarify") {
       await db.appendHistory(prisma, u.id, "assistant", result.message);
+      // CRITICAL: persist state.pendingDraft (set by pipeline) so the
+      // NEXT turn can deterministically resolve the user's reply. Without
+      // saving, pendingDraft is lost between turns and we're back to the
+      // dry-cleaning loop (every clarify reply goes to AI cold).
+      await db.saveState(prisma, u.id, state);
       // Italic + no buttons — visually distinct from a confirm card.
       await safeReply(ctx, "_" + m.escapeMd(result.message) + "_", { parse_mode: "Markdown" });
       return;
